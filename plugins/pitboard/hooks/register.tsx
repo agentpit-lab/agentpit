@@ -41,6 +41,7 @@ const weekSamples = atom({ plugin: 'pitboard', key: 'weekSamples' } as const, []
 const ctxSamples = atom({ plugin: 'pitboard', key: 'ctxSamples' } as const, [] as number[])
 const detail = atom({ plugin: 'pitboard', key: 'detail' } as const, null as string | null)
 const advisorPick = atom({ plugin: 'pitboard', key: 'advisorPick' } as const, null as { value: string | null; before?: string | null } | null)
+const paneOpen = atom({ plugin: 'pitboard', key: 'paneOpen' } as const, false)
 
 const toLimit = (l: StatusLimit): StatusLimit => ({ kind: l.kind, percentUsed: l.percentUsed, resetsAt: l.resetsAt })
 
@@ -411,6 +412,14 @@ async function refreshTranscript($: EngineInterface) {
 
 const PANE = 'pitboard'
 
+// The engine places a pane at any width only while the person's command or press is behind the
+// call, so in a press this must run first, before any await; the atom follows the result.
+async function openPane($: EngineInterface) {
+  const opened = await $.ui.open({ id: PANE, title: 'pitboard', closeOnEscape: true })
+  if (opened.isPlaced) await update($, paneOpen, () => true)
+  return opened
+}
+
 // A given time keeps the caller off nowMs, so it is not redrawn every second.
 async function currentView($: EngineInterface, at?: number) {
   const [m, c, mt, tick, sc, fl, fs, cs, ws] = await Promise.all([
@@ -432,6 +441,14 @@ export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     const result = await next(e)
     await $.command.register({ name: 'pitboard', description: 'Open every status reading, with what it means, in a pane' })
+    // A module reload keeps the engine's panes but starts the atom over. A host that cannot list
+    // panes must not stop the row from starting.
+    try {
+      const panes = await $.ui.panes()
+      await update($, paneOpen, () => panes.some(p => p.id === PANE && p.isPlaced))
+    } catch {
+      // The atom keeps its value: closed, unless this module placed the pane.
+    }
     await restoreSamples($)
     await refreshMeta($)
     // The shared file first: the session's own reading can be a turn old at start and would
@@ -444,8 +461,8 @@ export const register: Register = on => {
     $.clock.every(1000, () => {
       void $.clock.now().then(async t => {
         await update($, nowMs, () => t)
-        const [view, minute, open] = await Promise.all([currentView($, t), currentView($, t - (t % 60_000)), read($, detail)])
-        const key = desktopKey(view, open, minute)
+        const [view, minute, open, pane] = await Promise.all([currentView($, t), currentView($, t - (t % 60_000)), read($, detail), read($, paneOpen)])
+        const key = desktopKey(view, open, minute, pane)
         if (key === shown) return
         shown = key
         await update($, desktopNow, () => t)
@@ -491,8 +508,8 @@ export const register: Register = on => {
   })
 
   on('command.run', { command: 'pitboard' }, async $ => {
-    await $.ui.open({ id: PANE, title: 'Status' })
-    return { text: 'Status pane opened.' }
+    await openPane($)
+    return { text: 'pitboard pane opened.' }
   })
 
   on('session.measure', async ($, e, next) => {
@@ -600,7 +617,7 @@ export const register: Register = on => {
     // Only desktop draws here; the terminal row lives under the prompt, in the hint line's site,
     // and the other surfaces have the pane.
     if (e.surface !== 'desktop') return next(e)
-    const [at, open] = await Promise.all([read($, desktopNow), read($, detail)])
+    const [at, open, pane] = await Promise.all([read($, desktopNow), read($, detail), read($, paneOpen)])
     const view = await currentView($, at || (await $.clock.now()))
     return drawDesktop(
       $.ui.resolve(e) as Els,
@@ -610,10 +627,11 @@ export const register: Register = on => {
         void update($, detail, current => (current === key ? null : key))
       },
       e.props.bodyColumns,
+      pane,
     )
   })
 
-  // Terminal: the row above the engine's own hint line (modes, shortcuts), which stays.
+  // Terminal: the row under the engine's own mode and hint line, which the terminal keeps above it.
   on('ui.render', { component: 'PromptHint' }, async ($, e, next) => {
     if (e.surface !== 'terminal') return next(e)
     const [engine, view, open] = await Promise.all([next(e), currentView($), read($, detail)])
@@ -621,12 +639,50 @@ export const register: Register = on => {
     const { Box } = els
     return (
       <Box flexDirection="column">
-        {drawTerminal(els, view, open, key => {
-          void update($, detail, current => (current === key ? null : key))
-        })}
+        {drawTerminal(
+          els,
+          view,
+          open,
+          key => {
+            void update($, detail, current => (current === key ? null : key))
+          },
+          () => {
+            void openPane($)
+          },
+        )}
         {engine}
       </Box>
     )
+  })
+
+  // Desktop raises no PromptHint, so the footer under the input, between the mode selector and the
+  // model, is the one site there a plugin can reach; the row itself stays above the input.
+  on('ui.render', { component: 'SessionMode' }, async ($, e, next) => {
+    if (e.surface !== 'desktop') return next(e)
+    const engine = await next(e)
+    const { Box, Button } = $.ui.resolve(e) as Els
+    if (!Button) return engine
+    return (
+      <Box flexDirection="row" alignItems="center" columnGap={1}>
+        {engine}
+        <Button
+          key="pane"
+          label="pitboard"
+          dimColor
+          onPress={() => {
+            void openPane($)
+          }}
+        />
+      </Box>
+    )
+  })
+
+  // The person's close mark or Escape, or a plugin's close. An unload runs no hook of this module;
+  // the reloaded module reads the panes at its session start.
+  on('ui.close', async ($, e, next) => {
+    const result = await next(e)
+    if (e.id === PANE) await update($, paneOpen, () => false)
+    return result
   })
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {

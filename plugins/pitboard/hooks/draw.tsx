@@ -201,7 +201,7 @@ const NATIVE_CELLS_PER_CHAR = 1.15
 const HOVER_FRAME = { backgroundColor: '#8080801f' }
 
 
-export function drawDesktop(els: Els, v: View, open: string | null, toggle: (key: string) => void, columns = Infinity) {
+export function drawDesktop(els: Els, v: View, open: string | null, toggle: (key: string) => void, columns = Infinity, isPaneOpen = false) {
   const { Box, Button, Svg, Text } = els
   const { gauges, info, advisor, advisorOn } = readings(v)
   const style = limitStyle(v, columns)
@@ -270,7 +270,8 @@ export function drawDesktop(els: Els, v: View, open: string | null, toggle: (key
   )
   // Only the opened reading has a card, revealed by the surface's hover popover (the only element
   // desktop frames and lets past the band's edge): one card at most, pointing at its reading.
-  const popover = (card: Card) => nativeCard(card)
+  // The open pane holds every card already; a card over the row would only repeat it.
+  const popover = (card: Card) => (isPaneOpen ? null : nativeCard(card))
   // The card in desktop's own Box and Text: its font at its size, laid out by desktop, so nothing is
   // scaled. A title, one reading to a line with the value right-aligned, a limit's bar, and advice.
   const toneOf = (tone?: Tone) => (tone === 'on' ? DESKTOP_ON : tone && tone !== 'calm' ? DESKTOP_LEVEL[tone] : undefined)
@@ -375,9 +376,13 @@ const gaugeCells = (pct: number) => (EIGHTHS[Math.round(Math.max(0, Math.min(100
 const ICON_CELLS = { hot: '🔥', cold: '❄ ' }
 const shownValue = (g: Gauge) => g.level !== 'calm' && g.value !== null && !g.icon
 
+// The pane button beside ⓘ, drawn as plainly as the row's other names.
+const PANE_BUTTON = 'pitboard'
+
 // The terminal row's width in cells, from the same pieces drawTerminal draws, so the rule above spans
-// the row alone. Gaps: 1 inside a reading, 1 + · + 1 between readings, 1 + │ + 1 between groups; ⓘ
-// takes 2, and the rule runs 1 past it so ⓘ sits as far from its end as from the │ before it.
+// the row alone. Gaps: 1 inside a reading, 1 + · + 1 between readings, 1 + │ + 1 between groups; the
+// last part is ⓘ (2), a gap and the pane button, and the rule runs 1 past it so the button sits as far
+// from its end as ⓘ from the │ before it.
 export function terminalCells(v: View): number {
   const { gauges, advisorOn } = readings(v)
   const readingWidth = (g: Gauge) =>
@@ -391,10 +396,10 @@ export function terminalCells(v: View): number {
     const adv = advisorView(advisorOn)
     groupWidths.push(['Advisor', adv.name ?? 'off', ...(adv.isInactive ? ['(inactive)'] : [])].reduce((sum, w, i) => sum + w.length + (i > 0 ? 1 : 0), 0))
   }
-  return [...groupWidths, 2].reduce((sum, w, i) => sum + w + (i > 0 ? 3 : 0), 0) + 1
+  return [...groupWidths, 2 + 1 + PANE_BUTTON.length].reduce((sum, w, i) => sum + w + (i > 0 ? 3 : 0), 0) + 1
 }
 
-export function drawTerminal(els: Els, v: View, open: string | null, toggle: (key: string) => void) {
+export function drawTerminal(els: Els, v: View, open: string | null, toggle: (key: string) => void, openPane: () => void = () => {}) {
   const { Box, Button, Text } = els
   const { gauges, info, advisor, advisorOn } = readings(v)
   const m = v.meta
@@ -524,7 +529,10 @@ export function drawTerminal(els: Els, v: View, open: string | null, toggle: (ke
           // The terminal counts ⓘ as one cell but Cascadia Mono draws it wider; the trailing space
           // widens the button so its hover highlight covers the whole glyph.
           <Box key="info" flexDirection="column" flexShrink={0}>
-            {name('info', 'ⓘ ')}
+            <Box flexDirection="row" columnGap={1}>
+              {name('info', 'ⓘ ')}
+              {Button ? <Button key="pane" label={PANE_BUTTON} plain dimColor onPress={() => openPane()} /> : <Text dimColor>{PANE_BUTTON}</Text>}
+            </Box>
             {pointer('info', 0)}
           </Box>,
         ].flatMap((part, i) => [...(i > 0 ? [<Text key={`rule-${i}`} color={RULE}>│</Text>] : []), part])}

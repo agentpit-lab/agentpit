@@ -3,9 +3,9 @@ name: cache-watch
 description: >
   Keep this session's one-hour prompt cache alive while the operator is away: on, off, status and
   config of cache-watch for the current session. While it is on and the session is idle, the session
-  wakes a few minutes before its cache expires, keeps it, posts one line and a push, and stops after a
-  set number of wakes without a reply. Use when the operator asks to keep, watch or hold the cache of
-  this session, to stop doing that, or to see which sessions are watched.
+  wakes a few minutes before its cache expires, keeps it, sends one line as a push, and stops after a
+  set number of wakes without a reply or at a compaction. Use when the operator asks to keep, watch
+  or hold the cache of this session, to stop doing that, or to see which sessions are watched.
 argument-hint: "on [--lead MIN] [--max N] | off | status | config [--lead MIN] [--max N]"
 allowed-tools:
   - Bash(paceline cache-watch *)
@@ -27,8 +27,10 @@ Pass `--lead` and `--max` only when the operator gave them. If `paceline` is not
 Then tell the operator, in one or two lines and in their language, what the command printed:
 
 - `on` succeeded: watching is on, the cache expiry and the next wake time; the session wakes only
-  while idle; any message from them resets the count; replying `stop` turns it off. A push reaches
-  the phone only with Remote Control on and "Push when Claude decides" enabled in `/config`.
+  while idle; any message from them resets the count; replying `stop` turns it off, and so does a
+  compaction (`status` then shows `off (compacted)`). Each wake shows its line once, as a push, or
+  as a reply where the push tool is missing; the push reaches the phone only with Remote Control on
+  and "Push when Claude decides" enabled in `/config`.
 - `on` printed `not started`: the reason as printed. Cache-watch keeps only one-hour cache entries,
   and only the main thread's entries count.
 - `off`, `status`, `config`: the printed lines, unchanged in substance.
@@ -38,5 +40,5 @@ Each wake is one turn: a cache read of the whole context, counted against the fi
 
 Limits: cache-watch keeps only one-hour cache entries and only the main thread's cache, so a resumed
 subagent whose cache expired starts cold; a five-minute main thread is refused even when its
-subagents write one-hour entries; it does nothing in `claude -p` runs. The plugin's
+subagents write one-hour entries; a compaction turns it off; it does nothing in `claude -p` runs. The plugin's
 `docs/limitations.md` lists every limit.

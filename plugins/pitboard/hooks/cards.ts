@@ -540,8 +540,8 @@ export function advisorView(advisorOn: string | null) {
 // minute, the 5-minute window does not redraw every second. A pie moves in 2% steps, about a pixel.
 // `cards`: the view the hidden cards are keyed on, taken at the start of the minute. Their rates and
 // times move every few seconds, and a redraw while a card is up keeps desktop from seeing the
-// pointer leave, so cards stuck open.
-export function desktopKey(v: View, open: string | null, cards?: View): string {
+// pointer leave, so cards stuck open. While the pane is open the row draws no cards, so they key nothing.
+export function desktopKey(v: View, open: string | null, cards?: View, isPaneOpen = false): string {
   const c = v.cache
   const coarse: View =
     c.state === 'warm' && c.level === 'calm' && c.leftMs !== null
@@ -556,9 +556,8 @@ export function desktopKey(v: View, open: string | null, cards?: View): string {
     shown.advisorOn,
     v.meta !== null,
     open,
-    hidden.gauges.map(g => cardFor(hidden.gauges, hidden.info, g.key) ?? g.card),
-    hidden.info,
-    hidden.advisor,
+    isPaneOpen,
+    ...(isPaneOpen ? [] : [hidden.gauges.map(g => cardFor(hidden.gauges, hidden.info, g.key) ?? g.card), hidden.info, hidden.advisor]),
   ])
 }
 // Desktop lays the row out in cells of about 8 px; its proportional text runs about 0.9 cell a

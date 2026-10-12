@@ -4,8 +4,10 @@
 The operator turns watching on for one session (`on`). After every turn of a watched session the
 `Stop` hook waits in the background until a few minutes before the cache would expire, then exits 2,
 which wakes the session (an `asyncRewake` hook). The woken turn is itself a request, so it keeps the
-cache for another hour; it posts one short line and a push, and ends. A prompt from the operator
-resets the count of wakes; after `max` wakes in a row without one, watching stops.
+cache for another hour; it sends one short line as a push, and ends. A prompt from the operator
+resets the count of wakes; after `max` wakes in a row without one, watching stops. A compaction
+turns watching off: the waiter's cache anchor predates the compacted context, so a wake would keep
+nothing.
 
 CLI (through bin/paceline):
     paceline cache-watch on --session ID --data-dir DIR [--lead MIN] [--max N]
@@ -13,7 +15,7 @@ CLI (through bin/paceline):
     paceline cache-watch status --data-dir DIR
     paceline cache-watch config --data-dir DIR [--lead MIN] [--max N]
 Hooks (through hooks/hooks.json; the data dir comes from CLAUDE_PLUGIN_DATA):
-    cache_watch.py hook stop|prompt|session-end
+    cache_watch.py hook stop|prompt|compact|session-end
 
 Stdlib only, Python 3.9+. A hook never fails the session: any error exits 0, and a cache state it
 cannot read never wakes it.
@@ -159,10 +161,12 @@ def wake_text(state, session, data_dir, expires):
     line += " · last wake, keeping stops now" if state["wakes"] >= state["max"] else " · reply stop to stop keeping it"
     return (
         f"paceline {WAKE_MARK} to keep its prompt cache. This turn already kept it. Do only this:\n"
-        f"1. Reply to the operator with this one line, in the operator's language: \"{line}\"\n"
-        "2. Send the same line as a push with the PushNotification tool. If that tool is deferred, load it "
-        "with ToolSearch first; if it does not exist in this session, skip the push.\n"
-        "3. Run no other tool, and end the turn.\n"
+        f"1. Send this one line, in the operator's language, as a push with the PushNotification tool: \"{line}\". "
+        "If that tool is deferred, load it with ToolSearch first.\n"
+        "2. End the turn without replying: the push is the line's only copy, even when its result says "
+        "not sent. Run no other tool.\n"
+        "Only if the PushNotification tool does not exist in this session, reply with the line instead "
+        "and end the turn.\n"
         "If the operator later replies stop, run this and confirm in one line: "
         f"paceline cache-watch off --session {session} --data-dir \"{data}\" < /dev/null"
     )
@@ -235,6 +239,16 @@ def hook_prompt(data_dir, payload):
     return 0
 
 
+def hook_compact(data_dir, payload):
+    session = payload.get("session_id")
+    state = load_state(data_dir, session) if session else None
+    if not state or not state.get("on"):
+        return 0
+    state.update(on=False, stopped_reason="compact", generation=uuid.uuid4().hex)
+    save_state(data_dir, session, state)
+    return 0
+
+
 def hook_session_end(data_dir, payload):
     session = payload.get("session_id")
     if session:
@@ -245,7 +259,7 @@ def hook_session_end(data_dir, payload):
     return 0
 
 
-HOOKS = {"stop": hook_stop, "prompt": hook_prompt, "session-end": hook_session_end}
+HOOKS = {"stop": hook_stop, "prompt": hook_prompt, "compact": hook_compact, "session-end": hook_session_end}
 
 
 def run_hook(name):
@@ -272,6 +286,7 @@ def _describe(session, state):
             "operator": "operator",
             "ttl-5m": "five-minute cache",
             "no-reply": f"no reply after {state.get('max')} wakes",
+            "compact": "compacted",
         }
         head = f"off ({reasons.get(state.get('stopped_reason'), state.get('stopped_reason') or 'unknown')})"
     parts = [session, head, f"lead {state.get('lead')} min", f"wakes {state.get('wakes', 0)}/{state.get('max')}"]

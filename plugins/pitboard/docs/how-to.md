@@ -68,13 +68,15 @@ The five-hour and weekly limits are bars. Each model-scoped limit is a pie. The 
 group between the context and the cache while an advisor is set. `ⓘ` ends the row.
 
 1. Point at a reading. pitboard shades it and shows its card: the reading's name, one row per
-   value, a bar for a limit, and advice when the reading needs a decision.
+   value, a bar for a limit, and advice when the reading needs a decision. While the `pitboard` pane
+   is open, the row shows no cards, since the pane holds every one; the shading stays.
 2. Read a limit's bar. The fill is the share used. The tick marks where an even pace to the reset
    would stand now, which is the share of the window gone. A fill past the tick spends faster than
    the window allows.
 3. Read the colours: grey needs nothing, amber is worth a glance, red changes what to do next. See
    [Levels](reference.md#levels) for the thresholds.
-4. For the explanations behind a card, run `/pitboard`; see
+4. For the explanations behind a card, click `pitboard` in the footer under the prompt, between the
+   mode and the model name, or run `/pitboard`; see
    [Open every card with /pitboard](#open-every-card-with-pitboard).
 
 The bars change with the window's width. pitboard keeps the row on one line where it can:
@@ -91,16 +93,17 @@ a card stays up, see [A Desktop card stays open](troubleshooting.md#a-desktop-ca
 
 **When you need it:** your terminal is too narrow for the whole row.
 
-In the CLI the row sits under the prompt, above Claude Code's own hint line, with a short rule above
+In the CLI the row sits under the prompt, below Claude Code's own mode and hint line, with a short rule above
 it. Each reading is its name and a two-cell gauge. A number appears only once the reading leaves calm,
 which keeps the row short while nothing needs you.
 
-1. Let the row wrap. It breaks between groups: context, cache, limits, and `ⓘ`. A group stays whole.
+1. Let the row wrap. It breaks between groups: context, cache, limits, and `ⓘ` with `pitboard`. A
+   group stays whole.
 2. To read one reading's values, click its name, or press Enter while the name has focus. Its card
    opens as one line under the row, with `▲` under the name. The `ⓘ` card takes a second line from
    `Claude Code` on.
-3. A detail line that is wider than the terminal is cut at its end. To read every value, run
-   `/pitboard`.
+3. A detail line that is wider than the terminal is cut at its end. To read every value, click
+   `pitboard` at the end of the row, or run `/pitboard`.
 
 **How to tell it worked:** the groups stack on separate lines, and a click on a name opens its line.
 A second click on the same name closes it.
@@ -116,7 +119,9 @@ narrow terminal, or the readings in the Claude mobile app, which has no row.
    /pitboard
    ```
 
-2. Read the pane, titled **Status**, from the top:
+   Or click `pitboard`: in the CLI at the end of the row, beside `ⓘ`; in Desktop in the footer under
+   the prompt, between the mode and the model name. The mobile app has the command only.
+2. Read the pane, titled **pitboard**, from the top:
    - **Needs attention**, only while something needs a decision: each warning with its advice, the
      most urgent first.
    - Every card in the row's order, with all its rows and its explanations. The advisor's card
@@ -124,7 +129,10 @@ narrow terminal, or the readings in the Claude mobile app, which has no row.
    - Under `5h limit` and `Week`, a bar with the used share and the even-pace tick. The `5h limit`
      bar also shows, paler, where the current pace leads by the reset.
 
-**How to tell it worked:** Claude Code answers `Status pane opened.` and the pane shows the cards.
+3. Close the pane with its close mark or Escape. Another click on `pitboard` leaves it open.
+
+**How to tell it worked:** the pane shows the cards; after `/pitboard`, Claude Code also answers
+`pitboard pane opened.`
 
 The getting-started page draws the pane in the CLI and in Desktop:
 see [Getting started, step 3](https://agentpit-lab.github.io/agentpit/plugins/pitboard/docs/getting-started.html#install).

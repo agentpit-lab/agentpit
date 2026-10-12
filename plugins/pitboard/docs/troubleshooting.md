@@ -13,10 +13,11 @@ running when you installed pitboard has no row.
 
 1. Run `claude --version` and compare with 2.1.287.
 2. Run `/plugin` and look for `pitboard` among the installed, enabled plugins.
-3. Run `/pitboard`. If Claude Code answers `Status pane opened.`, the plugin runs.
+3. Run `/pitboard`. If Claude Code answers `pitboard pane opened.`, the plugin runs.
 
 **Fix:** update Claude Code, install or enable the plugin, and start a new session. In the CLI the row
-sits under the prompt, above the hint line; in Desktop, above the prompt.
+sits under the prompt, below the mode and hint line; in Desktop, above the prompt, since Desktop offers a plugin
+no place under it. See [Where the row sits](explanation.md#where-the-row-sits).
 
 ## The Branch row is missing
 
@@ -77,8 +78,18 @@ second, so a card opened then can stay up.
 
 **Check:** look at the cache reading. A countdown in `mm:ss` means the row redraws every second.
 
-**Fix:** pitboard cannot close a Desktop card itself. To read the same values without hovering, run
-`/pitboard`.
+**Fix:** pitboard cannot close a Desktop card itself. To read the same values without hovering, click
+`pitboard` in the footer under the prompt, or run `/pitboard`.
+
+## A Desktop reading shows no card
+
+**Cause:** the `pitboard` pane is open. The pane holds every card, so while it is open the row shows
+none; the shading under the pointer stays.
+
+**Check:** look for the `pitboard` side pane at the right of the conversation.
+
+**Fix:** read the card in the pane, or close the pane with its close mark or Escape; the cards come
+back at once.
 
 ## Weekday names are in the wrong language
 

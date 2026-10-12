@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.1.6 - 2026-10-12
+
+### Added
+
+- A `pitboard` button opens the `/pitboard` pane: beside ⓘ in the CLI row, and on Desktop in the
+  footer under the input, between the mode and the model. A click opens it at any terminal width.
+
+### Changed
+
+- The pane is titled `pitboard`, and `/pitboard` replies `pitboard pane opened.`
+- While the pane is open, the Desktop row shows no hover cards: the pane already holds every card.
+- The docs say where the row sits on each surface and why: in the CLI under Claude Code's own mode
+  and hint line; on Desktop above the input, since Desktop offers a plugin no site under it.
+
 ## 0.1.5 - 2026-10-12
 
 ### Added

@@ -64,6 +64,8 @@ declare module 'claude-code' {
       detail: string | null
       // The advisor /advisor set in this session; null until it runs.
       advisorPick: { value: string | null; before?: string | null } | null
+      // True while the /pitboard pane is placed: the desktop row then leaves its cards to the pane.
+      paneOpen: boolean
     }
   }
 }

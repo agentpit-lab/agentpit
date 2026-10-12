@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.2.4 - 2026-10-12
+
+### Fixed
+
+- A compaction, manual or automatic, turns cache-watch off for the session (`status` shows
+  `off (compacted)`): a wake armed before it would have kept nothing, since the compacted context
+  starts a new cache.
+- A wake shows its line once, as a push; it replies with the line only where the push tool is
+  missing. It used to post both a reply and a push of the same line.
+
 ## 0.2.3 - 2026-10-12
 
 ### Added

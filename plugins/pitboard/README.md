@@ -24,11 +24,12 @@ Requirements:
 
 ## First run
 
-Start a new session; the row loads at session start. In the CLI it sits under the prompt, above the
-hint line. In Desktop it sits above the prompt, and pointing at a reading shows its card. In both,
-`/pitboard` opens a pane with every card and its explanations. In the CLI and the pane the row draws
-in Claude Code's theme colours, so it reads on a light theme as on a dark one; Desktop keeps its own
-fixed colours. pitboard writes no file and has no settings.
+Start a new session; the row loads at session start. In the CLI it sits under the prompt, below
+Claude Code's own mode and hint line. In Desktop it sits above the prompt, and pointing at a reading shows its card. In both,
+`/pitboard`, or a click on `pitboard`, opens a pane with every card and its explanations: the button
+ends the row in the CLI and sits in the footer under the prompt in Desktop. In the CLI and the pane
+the row draws in Claude Code's theme colours, so it reads on a light theme as on a dark one; Desktop
+keeps its own fixed colours. pitboard writes no file and has no settings.
 
 ## Contents
 

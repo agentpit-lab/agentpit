@@ -53,7 +53,8 @@ account and is not in the table.
 ### The row
 
 The row has three groups of readings, context, cache, and limits, parted by `│` in the CLI and by a
-thin rule in Desktop. Readings of one group are parted by a dot. `ⓘ` closes the row.
+thin rule in Desktop. Readings of one group are parted by a dot. `ⓘ` closes the row; in the CLI a
+`pitboard` button follows it.
 
 | Reading | CLI | Desktop |
 |---|---|---|
@@ -65,6 +66,7 @@ thin rule in Desktop. Readings of one group are parted by a dot. `ⓘ` closes th
 | Advisor | Its own group between `Ctx` and `Cache`, only while an advisor is set; a click opens its line; also in the `ⓘ` line | Its own group between `Ctx` and `Cache`, only while an advisor is set |
 | Branch | In the `ⓘ` line | In the session card |
 | `ⓘ` | Opens the session line | Shows the session card |
+| `pitboard` | A button beside `ⓘ`; opens the `/pitboard` pane | A button in the footer under the prompt, between the mode and the model name, outside the row; opens the `/pitboard` pane |
 
 A CLI gauge is two cells of a block that rises in eighths over a grey track, in the level's colour
 once the reading leaves calm. A Desktop pie or bar fills in the same colours.
@@ -118,7 +120,9 @@ the fullest style that fits the window:
 - A row reads `n/a` while its number is unknown, for example `Pace` before it has enough readings.
 
 The Desktop card shows the rows, the bar of a limit, and advice when the reading needs a decision.
-The `/pitboard` pane shows every card in the row's order with its explanations; see
+While the `/pitboard` pane is open, the Desktop row shows no cards.
+The `/pitboard` pane, which either `pitboard` button also opens, shows every card in the row's order
+with its explanations; see
 [Open every card with /pitboard](how-to.md#open-every-card-with-pitboard), and the pane itself in the
 CLI and in Desktop in [Getting started, step 3](https://agentpit-lab.github.io/agentpit/plugins/pitboard/docs/getting-started.html#install).
 

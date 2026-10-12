@@ -116,13 +116,16 @@ turn writes the whole context to the cache again.
    for the session; subagent TTL settings do not change the decision.
 2. Leave the session idle. After every turn, a `Stop` hook waits in the background and wakes the
    session `lead` minutes (5 by default) before the cache would expire. The woken turn keeps the
-   cache for another hour. The agent posts one line, such as
-   `Cache kept until 15:30 · wake 1 of 5 · reply stop to stop keeping it`, sends it as a push
-   notification when the session has Remote Control on and "Push when Claude decides" enabled in
-   `/config`, and ends the turn. Wakes come every `60 - lead` minutes.
+   cache for another hour. The agent sends one line, such as
+   `Cache kept until 15:30 · wake 1 of 5 · reply stop to stop keeping it`, as a push notification
+   and ends the turn without a reply, so the line shows once. The push reaches your phone when the
+   session has Remote Control on and "Push when Claude decides" enabled in `/config`. Only a session
+   without the push tool gets the line as a reply instead. Wakes come every `60 - lead` minutes.
 3. Any message you send in the session resets the count. After `max` wakes (5 by default) in a row
    without a message from you, watching stops. To stop earlier, reply `stop` or run
-   `/paceline:cache-watch off`. Ending the session also stops it.
+   `/paceline:cache-watch off`. Ending the session also stops it, and so does a compaction, manual
+   or automatic: the compacted context starts a new cache, so a wake would keep nothing. `status`
+   then shows `off (compacted)`; run `on` again to watch the compacted session.
 
 What it cannot do:
 
@@ -141,7 +144,7 @@ What it cannot do:
 - Without Remote Control and "Push when Claude decides", no push reaches your phone. See
   [the push](limitations.md#the-push-reaches-a-phone-only-with-remote-control).
 
-Each wake is one full-context turn: a cache read of the whole context plus a one-line reply, counted
+Each wake is one full-context turn: a cache read of the whole context plus a one-line push, counted
 against your five-hour limit. With the defaults, that is at most five turns per absence; see
 [each wake is a full-context turn](limitations.md#each-wake-is-a-full-context-turn). To change
 the defaults, run `/paceline:cache-watch config --lead 10 --max 3`; to change them for one session,

@@ -36,6 +36,20 @@ flowchart LR
 session readings at once. The limits stay, because they belong to the account. Subagents' requests and
 compactions leave the row alone; it describes the main conversation.
 
+## Where the row sits
+
+The row sits where each surface lets a plugin draw:
+
+- In the CLI, under the prompt input, below Claude Code's own mode and hint line. `ⓘ` and a `pitboard` button
+  end it.
+- In Desktop, above the prompt input. Desktop offers a plugin no place under the input: it does not
+  draw the hint line that holds the CLI row. Its footer under the input, between the mode selector and
+  the model name, has room for a short label only, and holds a `pitboard` button.
+
+Either `pitboard` button opens the same pane as `/pitboard`. Claude Code counts the click as your
+request, so the pane opens in a terminal of any width; a pane a plugin opens on its own waits for 144
+columns.
+
 ## How fresh the numbers are
 
 | Event | What pitboard refreshes |

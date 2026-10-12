@@ -152,7 +152,7 @@ again. `/paceline:cache-watch status` shows the session as `on` with the cache `
 
 ### Each wake is a full-context turn
 
-Each wake is one turn: a cache read of the whole context plus a one-line reply, counted against your
+Each wake is one turn: a cache read of the whole context plus a one-line push, counted against your
 five-hour limit.
 
 **What you see:** at most `max` (5) such turns per absence, with the default settings.
@@ -167,7 +167,7 @@ Control on and "Push when Claude decides" enabled in `/config`.
 
 **What you see:** without them, no push on your phone.
 
-**What still works:** the line is still posted in the session.
+**What still works:** without the push tool, the wake posts the line in the session as a reply instead.
 
 ### cache-watch stops itself when the main thread switches to five-minute entries
 

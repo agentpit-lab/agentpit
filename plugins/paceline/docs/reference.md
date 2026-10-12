@@ -194,8 +194,9 @@ depends on it.
   itself, and `status` shows the session as `off (five-minute cache)`. See
   [limitations](limitations.md#cache-watch).
 - `paceline cache-watch off --session ID --data-dir DIR` stops watching a session.
-- `paceline cache-watch status --data-dir DIR` lists every watched session: on or off and why, the
-  wakes so far, the cache expiry, and the next wake. It removes the state of sessions whose
+- `paceline cache-watch status --data-dir DIR` lists every watched session: on or off and why
+  (`operator`, `five-minute cache`, `no reply after N wakes`, `compacted`), the wakes so far, the
+  cache expiry, and the next wake. It removes the state of sessions whose
   transcript has not changed for 24 hours.
 - `paceline cache-watch config --data-dir DIR [--lead MIN] [--max N]` shows or changes the defaults:
   `lead` is 5 minutes (1 to 30), and `max` is 5 wakes (1 to 20). `--lead` and `--max` on `on` apply
@@ -525,6 +526,7 @@ holds `<state>/limits.lock`, so writers take turns. paceline needs no status lin
 | Module: `session.start` timer | At session start, then every 10 seconds while the session is open | usage-watch. Reads its switch; while it is on and 125 seconds have passed, asks Claude Code for the account's usage. |
 | `Stop`: `cache_watch.py hook stop` | After every turn | Waits for the next wake of a watched session; returns at once for any other session. |
 | `UserPromptSubmit`: `cache_watch.py hook prompt` | Every prompt | Resets the wake count of a watched session. |
+| `PreCompact`, `SessionStart` (`compact`): `cache_watch.py hook compact` | Before and after a compaction, manual or automatic | Turns a watched session off with the reason `compacted`, which also ends its waiting `Stop` hook. |
 | `SessionEnd`: `cache_watch.py hook session-end` | Session end | Removes the session's cache-watch state. |
 | `SessionStart`: `context_watch.py hook session-start` | Session start | Removes old snapshots while context-watch is on. |
 | `Stop`, `SessionStart` (`startup`, `resume`, `clear`): `limits_merge.py` | After every turn, at session start | Merges the inbox in the background. Always on. |
