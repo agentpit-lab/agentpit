@@ -25,6 +25,7 @@ from pathlib import Path
 # rate-limits.json, shared with the hooks.
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import limits_file  # noqa: E402
+import localzone  # noqa: E402
 from limits_file import (  # noqa: E402
     FUTURE_SLACK, RECORD_META, bucket_at, is_bucket, parse_iso, safe_iso,
 )
@@ -45,6 +46,7 @@ EXIT_STOP = 11
 PROFILE_DEFAULTS = {
     "version": 1,
     "timezone": "UTC",
+    "timezone_confirmed": False,
     "day_hours": [8, 22],
     "night_hours": [0, 8],
     "weekday_weight": 1.0,
@@ -167,6 +169,21 @@ def load_zone(key, force_builtin=False):
     if key in ("UTC", "Etc/UTC"):
         return UTC
     raise PaceError(f"time zone {key} unavailable: install tzdata or use a CET/EET zone")
+
+
+def detect_zone():
+    """The machine's zone and whether load_zone can use it here: (None, False) when nothing is found."""
+    try:
+        name = localzone.detect()
+    except Exception:  # noqa: BLE001 - a detector failure means nothing was detected
+        return None, False
+    if not name:
+        return None, False
+    try:
+        load_zone(name)
+    except Exception:  # noqa: BLE001 - zoneinfo can fail in more ways than PaceError
+        return name, False
+    return name, True
 
 
 def local_dt(day, hour, tz):
@@ -303,6 +320,9 @@ class Store:
                 raw = read_json(path, None)
                 if raw is None:
                     raw = json.loads(json.dumps(PROFILE_DEFAULTS))
+                    zone, usable = detect_zone()
+                    if zone and usable:
+                        raw["timezone"], raw["timezone_confirmed"] = zone, True
                     self.dirty.add(key)
                 if migrate_profile(raw):
                     self.dirty.add(key)
@@ -1388,6 +1408,13 @@ def cmd_status(ctx):
         store = Store(ctx.sd)
         housekeeping(store, ctx.now)
         store.save()
+    line, calc = status_report(ctx, store)
+    emit(ctx.args, line, calc)
+    return EXIT_OK
+
+
+def status_report(ctx, store):
+    """The `paceline status` line and its full result."""
     calc = ctx.calc(store)
     rec = recommend(calc, store["profile"])
     tz = load_zone(store["profile"]["timezone"])
@@ -1401,8 +1428,7 @@ def cmd_status(ctx):
         extras.append("forecast leaves >10% unused: propose leftover tasks")
     calc.update(recommendation=rec, unconfirmed_tomorrow=[p["id"] for p in tomorrow], suggest_leftover_tasks=suggest,
                 active_reservations=len(store["registry"]["reservations"]), pace_on=limits_file.pace_enabled(ctx.sd))
-    emit(ctx.args, status_line(calc, rec, extras), calc)
-    return EXIT_OK
+    return status_line(calc, rec, extras), calc
 
 
 def cmd_auto(ctx):
@@ -1974,10 +2000,131 @@ def cmd_calibrate(ctx):
     return EXIT_OK
 
 
+PROFILE_INTERNAL_KEYS = ("version", "plans", "next_plan_id", "timezone_confirmed")
+PROFILE_PERCENT_KEYS = {k for k in PROFILE_DEFAULTS if k.endswith("_pct")} | {
+    "five_hour_threshold_day", "five_hour_threshold_night", "five_hour_hard_stop"}
+
+
+def _is_number(value):
+    return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
+
+
+def _is_whole(value):
+    return _is_number(value) and float(value).is_integer()
+
+
+def parse_profile_value(text):
+    """A `profile set` value: JSON when it parses, else the text itself."""
+    try:
+        return json.loads(text)
+    except ValueError:
+        return text
+
+
+def check_profile_value(key, value):
+    """The value `profile set` stores for key, or PaceError with the reason it is refused."""
+    if key not in PROFILE_DEFAULTS:
+        raise PaceError(f"unknown key {key}; `paceline profile` lists the keys")
+    if key in PROFILE_INTERNAL_KEYS:
+        raise PaceError(f"{key} is set by paceline itself")
+    default = PROFILE_DEFAULTS[key]
+    if key == "timezone":
+        if not isinstance(value, str) or not value.strip():
+            raise PaceError("timezone must be the name of a time zone, for example Europe/Madrid")
+        load_zone(value)
+        return value
+    if key in ("day_hours", "night_hours"):
+        if (isinstance(value, list) and len(value) == 2 and all(_is_whole(h) for h in value)
+                and 0 <= value[0] < value[1] <= 24):
+            return [int(h) for h in value]
+        raise PaceError(f"{key} must be two whole hours [start, end] with 0 <= start < end <= 24")
+    if key == "reserve_decay_start":
+        if (isinstance(value, dict) and set(value) == {"weekday", "hour"}
+                and _is_whole(value["weekday"]) and 0 <= value["weekday"] <= 6
+                and _is_whole(value["hour"]) and 0 <= value["hour"] <= 23):
+            return {"weekday": int(value["weekday"]), "hour": int(value["hour"])}
+        raise PaceError('reserve_decay_start must be {"weekday": W, "hour": H} with a weekday 0-6 and an hour '
+                        "0-23 (Monday is 0)")
+    if key in ("models", "routine_models"):
+        if isinstance(value, list) and value and all(isinstance(m, str) and m.strip() for m in value):
+            return value
+        raise PaceError(f'{key} must be a list of model names, for example ["opus", "sonnet"]')
+    if value is None and default is None:
+        return None
+    if not _is_number(value):
+        raise PaceError(f"{key} must be a number" + (" or null" if default is None else ""))
+    if isinstance(default, int) and not _is_whole(value):
+        raise PaceError(f"{key} must be a whole number")
+    if key in PROFILE_PERCENT_KEYS and not 0 <= value <= 100:
+        raise PaceError(f"{key} must lie in 0-100")
+    if value < 0:
+        raise PaceError(f"{key} must not be negative")
+    return int(value) if isinstance(default, int) else value
+
+
+def timezone_hint(profile, detected, usable):
+    """What to tell the owner while the profile counts in UTC and this machine is in another zone."""
+    if profile.get("timezone") != "UTC" or profile.get("timezone_confirmed") or not detected or detected == "UTC":
+        return None
+    command = f"`paceline profile set timezone {detected}`"
+    if usable:
+        return (f"This machine is in {detected}, but the pace profile counts in UTC. Run {command} to count in "
+                "this machine's zone, or `paceline profile set timezone UTC` to keep UTC.")
+    return (f"This machine is in {detected}, but the pace profile counts in UTC, and Python here has no time zone "
+            f"data for {detected}. Run `python -m pip install tzdata` first, then {command}.")
+
+
+def profile_check(ctx, profile):
+    detected, usable = detect_zone()
+    confirmed = bool(profile.get("timezone_confirmed"))
+    hint = timezone_hint(profile, detected, usable)
+    result = {"timezone": profile.get("timezone"), "confirmed": confirmed, "detected": detected,
+              "usable": usable, "hint": hint}
+    if hint:
+        line = hint
+    else:
+        line = (f"timezone {profile.get('timezone')} ({'confirmed' if confirmed else 'not confirmed'}); detected "
+                + (f"{detected}" + ("" if usable else " (no time zone data for it here)") if detected else "nothing"))
+    emit(ctx.args, line, result)
+    return EXIT_OK
+
+
+def profile_set(ctx):
+    key, value = ctx.args.key, parse_profile_value(ctx.args.value)
+    with locked(ctx.sd):
+        store = Store(ctx.sd)
+        try:
+            new = check_profile_value(key, value)
+        except PaceError as error:
+            print(f"paceline: {error}; nothing changed", file=sys.stderr)
+            return EXIT_USAGE
+        profile = store["profile"]
+        old = profile[key]
+        profile[key] = new
+        if key == "timezone":
+            profile["timezone_confirmed"] = True
+        store.touch("profile")
+        store.save()
+    change = f"{key}: {json.dumps(old, ensure_ascii=False)} -> {json.dumps(new, ensure_ascii=False)}"
+    payload = {"key": key, "old": old, "new": new, "status_line": None, "status": None}
+    try:
+        line, calc = status_report(ctx, store)
+        payload.update(status_line=line, status=calc)
+    except PaceError as error:
+        line = f"status unavailable: {error}"
+    emit(ctx.args, f"{change}\n{line}", payload)
+    return EXIT_OK
+
+
 def cmd_profile(ctx):
+    action = getattr(ctx.args, "profile_cmd", None) or "show"
+    if action == "set":
+        return profile_set(ctx)
     with locked(ctx.sd):
         store = Store(ctx.sd)
         store.save()
+    if action == "check":
+        return profile_check(ctx, store["profile"])
     profile = {k: v for k, v in store["profile"].items() if k != "plans"}
     emit(ctx.args, json.dumps(profile, ensure_ascii=False), profile)
     return EXIT_OK
@@ -2265,7 +2412,14 @@ def build_parser():
     sub.add_parser("auto", parents=[common], help="autonomous parameters for the next queue item").add_argument(
         "--start-run", action="store_true", help="begin a new night run: fix tonight's allowance and baseline")
     sub.add_parser("calibrate", parents=[common], help="propose parameter corrections from history")
-    sub.add_parser("profile", parents=[common], help="print the profile (creates it with defaults)")
+    prof = sub.add_parser("profile", parents=[common],
+                          help="print, change or check the profile (creates it with the detected time zone)")
+    prsub = prof.add_subparsers(dest="profile_cmd")
+    prsub.add_parser("show", parents=[common], help="print the profile (the default)")
+    p = prsub.add_parser("set", parents=[common], help="change one key, with checks")
+    p.add_argument("key")
+    p.add_argument("value", help="JSON when it parses, else text, for example Europe/Madrid or '[8, 24]'")
+    prsub.add_parser("check", parents=[common], help="the time zone against this machine's, with a hint")
     doctor = sub.add_parser("doctor", parents=[common], help="diagnose pace on this machine; read-only without --live")
     doctor.add_argument("--live", action="store_true", help="also run one merge under the normal lock")
     doctor.add_argument("--bundle", metavar="PATH", help="write the report, the debug log and the state to a zip")

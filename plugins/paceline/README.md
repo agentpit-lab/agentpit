@@ -215,7 +215,7 @@ multiplies it (by 2 by default).
 | `paceline reserve acquire\|renew\|release\|release-session\|prune\|list\|reconcile` | The reservation registry. Hooks reserve for subagents; reserve by hand for gates and queue items. |
 | `paceline queue [--pool] add\|list\|report\|approve\|clear-done\|start\|done\|defer\|fail\|retry\|remove` | The night queue, or with `--pool` the leftover pool. |
 | `paceline calibrate` | Propose profile corrections from at least 14 days of history. Nothing is applied. |
-| `paceline profile` | Print the profile. |
+| `paceline profile [show\|set KEY VALUE\|check]` | Print the profile (`show`, the default), change one key with checks (`set`), or compare its time zone with this machine's (`check`). See [Pace settings](#pace-settings). |
 | `paceline merge [--verbose]` | Merge the inbox into the limits file now. |
 | `paceline doctor [--live] [--bundle PATH] [--json]` | Diagnose paceline on this machine. `--live` also runs one merge; `--bundle` writes the report, the debug log, and the state to a zip. |
 
@@ -253,8 +253,27 @@ A night queue runs while you sleep, so the machine must not sleep or reboot unde
 ## Pace settings
 
 The profile is `<state>/pace-profile.json`. The first `paceline` command creates it with the
-defaults below. `paceline profile` only prints it: edit the file by hand. Keys missing from the
-file are filled with their defaults when it is read.
+defaults below, except `timezone`: a new profile takes this machine's time zone when Python can
+use it here, and records that choice as confirmed. The zone comes from `TZ` when it holds a zone
+name, then on Windows from ICU (Windows 10 1903 and later), on macOS and Linux from the target of
+`/etc/localtime` or from `/etc/timezone`. When nothing is detected, or Python here has no time zone
+data for the detected zone, the profile keeps `UTC`. An existing profile keeps its zone. Keys missing
+from the file are filled with their defaults when it is read.
+
+- `paceline profile` prints the profile.
+- `paceline profile set KEY VALUE` changes one key. `VALUE` is read as JSON when it parses, else
+  as text: `paceline profile set timezone America/New_York`,
+  `paceline profile set day_hours '[8, 24]'`. The value must have the key's type and range: percentages in 0-100, counts and sizes
+  not negative, hours as `[start, end]` with `0 <= start < end <= 24`, and a time zone Python can
+  use here. A refused value exits 2 with the reason on stderr and changes nothing. On success it
+  prints `KEY: OLD -> NEW` and the `paceline status` line. `version`, `plans`, `next_plan_id`, and
+  `timezone_confirmed` are kept by paceline and cannot be set.
+- `paceline profile check` compares the profile's zone with this machine's. While the profile
+  counts in `UTC`, `timezone_confirmed` is false, and another zone is detected, it prints a hint
+  with the `profile set timezone` command to run, and the pace `SessionStart` hook passes that
+  hint on once per session. `paceline profile set timezone UTC` keeps UTC and silences the hint.
+
+Editing the file by hand still works; the checks of `profile set` do not apply to a hand edit.
 
 Set these first: `timezone`, `day_hours`, `night_hours`, `models`, and the memory floor
 (`min_free_commit_mb` and `commit_reserve_mb`).
@@ -262,7 +281,8 @@ Set these first: `timezone`, `day_hours`, `night_hours`, `models`, and the memor
 | Key | Default | Meaning |
 |---|---|---|
 | `version` | `1` | Profile format version. |
-| `timezone` | `"UTC"` | IANA zone for every wall-clock rule, for example `"America/New_York"`. |
+| `timezone` | `"UTC"` | IANA zone for every wall-clock rule, for example `"America/New_York"`. A new profile takes the detected zone. |
+| `timezone_confirmed` | `false` | Set by paceline: true once the zone was detected for a new profile or set with `paceline profile set timezone`. While it is false and the zone is `UTC`, `paceline profile check` hints at the detected zone. |
 | `day_hours` | `[8, 22]` | Day hours, start inclusive, end exclusive. |
 | `night_hours` | `[0, 8]` | Night hours for the queue. |
 | `weekday_weight`, `weekend_weight` | `1.0`, `1.0` | Relative weight of a weekday and a weekend day hour. |
@@ -424,6 +444,7 @@ writers take turns. paceline needs no status line plugin.
 | `PACELINE_USAGE_FILE` | Read the usage record from this file instead. For tests. |
 | `PACELINE_FREE_COMMIT_MB` | Override the measured free memory. For tests. |
 | `PACELINE_SCRIPT` | Path to `pace.py` for the hooks. For tests. |
+| `TZ` | A zone name such as `Europe/Madrid` (not a POSIX rule such as `CET-1CEST`) is the first source of the time zone a new pace profile takes. |
 | `CLAUDE_CONFIG_DIR`, `CLAUDE_SESSION_ID`, `CLAUDE_PLUGIN_DATA`, `CLAUDE_PROJECT_DIR` | Claude Code's own; read as Claude Code sets them. |
 
 ## Footprint
@@ -439,7 +460,7 @@ writers take turns. paceline needs no status line plugin.
 | `SessionEnd`: `cache_watch.py hook session-end` | Session end | Removes the session's cache-watch state. |
 | `SessionStart`: `context_watch.py hook session-start` | Session start | Removes old snapshots while context-watch is on. |
 | `Stop`, `SessionStart` (`startup`, `resume`, `clear`): `limits_merge.py` | After every turn, at session start | Asynchronous merge of the inbox. Always on. |
-| `PreToolUse` (`Agent`, `Workflow`), `SubagentStart`, `SubagentStop`, `SessionStart` (`startup`, `resume`), `SessionEnd`: pace hooks | As named | Exit at once, with no output, while pace is off. |
+| `PreToolUse` (`Agent`, `Workflow`), `SubagentStart`, `SubagentStop`, `SessionStart` (`startup`, `resume`), `SessionEnd`: pace hooks | As named | Exit at once, with no output, while pace is off. While pace is on, the `SessionStart` hook adds unconfirmed plans, the leftover-pool suggestion, and a time zone hint while the profile counts in UTC and this machine is in another zone. |
 
 While a function is off, its hooks still start one Python process per matching event.
 Uninstalling the plugin removes `${CLAUDE_PLUGIN_DATA}`. `<state>` and the project snapshots stay

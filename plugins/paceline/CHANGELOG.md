@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.2.0 - 2026-10-12
+
+### Added
+
+- A new pace profile takes this machine's time zone: from `TZ`, on Windows from ICU (Windows 10
+  1903 and later), on macOS and Linux from `/etc/localtime` or `/etc/timezone`. It keeps `UTC`
+  when nothing is detected or Python here has no time zone data for the zone. An existing profile
+  keeps its zone and gains the key `timezone_confirmed`, false.
+- `paceline profile check`: the profile's zone against this machine's, with a hint while the
+  profile counts in UTC and the machine is in another zone. While pace is on, the `SessionStart`
+  hook passes the hint on.
+- `paceline profile set KEY VALUE`: changes one profile key after checking its type and range,
+  then prints the change and the `paceline status` line. A refused value exits 2 and changes
+  nothing. `paceline profile show` is the former `paceline profile`, still the default.
+
 ## 0.1.1 - 2026-10-12
 
 ### Fixed

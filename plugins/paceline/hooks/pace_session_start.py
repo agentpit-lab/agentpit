@@ -3,6 +3,7 @@
 
 - Plans that start tomorrow and are not confirmed yet.
 - The leftover-pool suggestion, when the forecast leaves part of the weekly limit unused.
+- A time zone hint, while the profile counts in UTC and this machine is in another zone.
 
 Does nothing while pace is off (`paceline on` turns it on). Silent when nothing applies; never
 blocks startup, since every pace.py call has a timeout and any failure is skipped.
@@ -91,6 +92,11 @@ def leftover_lines():
             "pool to the owner; on approval run `paceline queue --pool approve`."]
 
 
+def timezone_lines():
+    hint = pace_json("profile", "check").get("hint")
+    return [f"Pace: {hint} Tell the owner once."] if hint else []
+
+
 def main():
     on = pace_on()
     # Drained even while pace is off: an unread pipe can block the writer.
@@ -102,7 +108,7 @@ def main():
         return 0
     trace("hook.session_start")
     lines = []
-    for source in (plan_lines, leftover_lines):
+    for source in (plan_lines, leftover_lines, timezone_lines):
         try:
             lines += source()
         except Exception as error:  # noqa: BLE001 - a hook must never fail the session

@@ -1,12 +1,13 @@
 ---
 name: pace
 description: >
-  Turn pace on or off, or show its status or a diagnosis. Pace turns the five-hour and weekly
-  limits into a per-hour budget; while it is on, its hooks put a pace line before every Agent and
-  Workflow launch, ask for confirmation at a hard limit, hold a reservation for each subagent and
-  remind at session start of unconfirmed plans. Use when the operator asks to turn pace on or off,
-  to see the budget, or to check why pace misbehaves.
-argument-hint: "on | off | status | doctor"
+  Turn pace on or off, show its status, a diagnosis or its profile, or change a profile setting.
+  Pace turns the five-hour and weekly limits into a per-hour budget; while it is on, its hooks put
+  a pace line before every Agent and Workflow launch, ask for confirmation at a hard limit, hold a
+  reservation for each subagent and remind at session start of unconfirmed plans. Use when the
+  operator asks to turn pace on or off, to see the budget, to change a pace setting such as the
+  time zone or the day hours, or to check why pace misbehaves.
+argument-hint: "on | off | status | doctor | profile | profile set KEY VALUE"
 allowed-tools:
   - Bash(paceline *)
 ---
@@ -20,6 +21,8 @@ one command through the Bash tool:
 - `off`: `paceline off < /dev/null`
 - `status`: `paceline status < /dev/null`
 - `doctor`: `paceline doctor < /dev/null`
+- `profile`: `paceline profile < /dev/null`
+- `profile set KEY VALUE`: `paceline profile set KEY 'VALUE' < /dev/null` (VALUE in single quotes, as JSON for a list or a number, for example `'[8, 24]'`)
 
 If `paceline` is not found, run `python "${CLAUDE_PLUGIN_ROOT}/scripts/paceline.py"` with the same
 arguments.
@@ -30,3 +33,5 @@ Then tell the operator, in one or two lines, what the command printed:
 - `status`: the budget per hour, the recommended agents and model, and any warning, as printed.
 - `doctor`: the probes that are not `ok`, with their hints; `paceline doctor --json` shows the
   evidence.
+- `profile`: the keys the operator asked about, as printed.
+- `profile set`: the change and the new budget line as printed, or the refusal and its reason.
