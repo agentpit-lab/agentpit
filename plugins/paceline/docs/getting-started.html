@@ -33,10 +33,20 @@
 
   /* The specimen surfaces: a terminal and the Desktop app, each in its own theme. */
   --term-bg: #fbfbf9;
-  --term-fg: #2f312d;
+  --term-fg: #000000;
   --term-line: #dcdcd6;
-  --term-subtle: #ebebe6;
-  --term-inactive: #a3a59f;
+  /* Claude Code's theme keys as its light and dark themes resolve them: the terminal row draws in
+     these keys, so a specimen shows the colours a reader's own terminal would. */
+  --term-text: #000000;
+  --term-inactive: #666666;
+  --term-subtle: #afafaf;
+  --term-warning: #966c1e;
+  --term-error: #ab2b3f;
+  --term-success: #2c7a39;
+  --term-planMode: #006666;
+  --term-suggestion: #5769f7;
+  --term-autoAccept: #8700ff;
+  --term-bashBorder: #ff0087;
   --desk-bg: #ffffff;
   --desk-fg: #2b2b29;
   --desk-line: #e4e4df;
@@ -84,10 +94,18 @@
     --desk-fg: #e6e5df;
     --desk-line: #33342f;
     --term-bg: #15181b;
-    --term-fg: #cdcfc9;
+    --term-fg: #ffffff;
     --term-line: #2c3136;
-    --term-subtle: #262a2e;
-    --term-inactive: #5b5f63;
+    --term-text: #ffffff;
+    --term-inactive: #999999;
+    --term-subtle: #505050;
+    --term-warning: #ffc107;
+    --term-error: #ff6b80;
+    --term-success: #4eba65;
+    --term-planMode: #48968c;
+    --term-suggestion: #b1b9f9;
+    --term-autoAccept: #af87ff;
+    --term-bashBorder: #fd5db1;
     color-scheme: dark;
   }
 }
@@ -109,10 +127,18 @@
   --desk-fg: #e6e5df;
   --desk-line: #33342f;
   --term-bg: #15181b;
-  --term-fg: #cdcfc9;
+  --term-fg: #ffffff;
   --term-line: #2c3136;
-  --term-subtle: #262a2e;
-  --term-inactive: #5b5f63;
+  --term-text: #ffffff;
+  --term-inactive: #999999;
+  --term-subtle: #505050;
+  --term-warning: #ffc107;
+  --term-error: #ff6b80;
+  --term-success: #4eba65;
+  --term-planMode: #48968c;
+  --term-suggestion: #b1b9f9;
+  --term-autoAccept: #af87ff;
+  --term-bashBorder: #fd5db1;
   color-scheme: dark;
 }
 

@@ -168,10 +168,19 @@ the `/pitboard` pane.
 | None (grey) | Nothing to do. Good values stay grey too. |
 | Amber | Watch: worth a glance. |
 | Red | Act: changes what to do next. |
-| Blue | A cold cache: lost, and no longer urgent. |
+| Blue (teal in the terminal) | A cold cache: lost, and no longer urgent. |
 | Green | A state that is on and fine: auto-compact on. |
 
 Model and effort colours name the model and the effort level.
+
+The terminal row, its detail line and the `/pitboard` pane draw in Claude Code's theme colours, so
+they follow a light or a dark theme: values in the theme's `text`, names, separators and rules in
+`inactive`, watch in `warning`, act in `error`, a cold cache in `planMode` (teal), and auto-compact on
+in `success`. Model names take a theme colour by hue: Opus `autoAccept`, Sonnet `suggestion`, Fable
+`bashBorder`, Haiku `success`; so do effort levels: low `warning`, medium `success`, high
+`suggestion`, xhigh `autoAccept`, max `error`. Every text colour reaches a 4.5:1 contrast on Claude
+Code's light and dark themes, except on the light theme Sonnet and effort high (`suggestion`, 4.4:1)
+and Fable (`bashBorder`, 3.7:1). The Desktop row and cards keep their own fixed colours.
 
 The five-hour limit turns red when its Pace is above its Budget. Budget is the pace that lasts exactly
 to the reset, so a higher Pace reaches 100% before the reset: the same condition as Runs out. The row

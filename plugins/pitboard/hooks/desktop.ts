@@ -12,7 +12,8 @@ export type Piece = { source: string; width: number; height: number; alt: string
 //   yellow       watch: worth a glance, not a problem (a pace over budget, a week ahead of even pace).
 //   red          act: changes what to do next (a limit that runs out before its reset, context near
 //                compaction, a week more than a day ahead of even pace).
-//   blue         a cold cache: lost, not urgent, kept apart from the limit warnings.
+//   blue         a cold cache: lost, not urgent, kept apart from the limit warnings. The terminal
+//                draws it in the theme's teal (planMode), its nearest cool key.
 //   green        a state that is on and fine (auto-compact on). Never "a good value".
 // Model and effort colours in the info card name the model; they are identity, not state.
 // Watch and act share one colour in both themes, so the native Text beside a gauge (which cannot

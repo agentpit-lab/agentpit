@@ -1,4 +1,4 @@
-import { advisorView, alerts, BAR, cardFor, COLD, DIM, dim, displayModel, EFFORT_COLORS, type Gauge, GROUPS, LABEL, label, LEVEL, limitStyle, listOrder, modelColor, ON, type Part, readings, type Row, RULE, t, VALUE } from './cards'
+import { advisorView, alerts, BAR, CALM_FILL, cardFor, COLD, desktopModelColor, DIM, dim, displayModel, EFFORT_COLORS, type Gauge, GROUPS, LABEL, label, LEVEL, limitStyle, listOrder, modelColor, ON, type Part, readings, type Row, RULE, t, TRACK, VALUE } from './cards'
 import { barSvg, cacheIconSvg, type Card, type CardBar, DESKTOP_COLD, DESKTOP_LEVEL, DESKTOP_ON, pieSvg, ruleSvg, type Tone, wideBarSvg } from './desktop'
 import type { View } from './view'
 
@@ -70,14 +70,17 @@ function drawRow(els: Els, row: Row, isRemote: boolean, key: string) {
   )
 }
 
-// The wide bar in cells: used in the level's colour, the projection dim, the even-pace tick as ┃.
+// The wide bar in cells: used in the level's colour, the projection dim, the rest on the gauges'
+// track, the even-pace tick as ┃. A calm share takes the value colour, since the calm grey is the
+// projection's.
 function wideCells(Text: Ctor, b: CardBar, cells: number) {
   const at = (pct: number) => Math.round((Math.max(0, Math.min(100, pct)) / 100) * cells)
   const used = at(b.used)
   const projected = Math.max(used, b.projected !== undefined ? at(b.projected) : used)
   const tick = b.tick === null ? -1 : Math.min(cells - 1, at(b.tick))
+  const usedColor = b.level === 'calm' ? VALUE : LEVEL[b.level]
   return Array.from({ length: cells }, (_, i) => (
-    <Text key={String(i)} color={i === tick ? VALUE : i < used ? LEVEL[b.level] : i < projected ? DIM : RULE}>
+    <Text key={String(i)} color={i === tick ? VALUE : i < used ? usedColor : i < projected ? DIM : TRACK}>
       {i === tick ? '┃' : i < projected ? '━' : '─'}
     </Text>
   ))
@@ -323,7 +326,7 @@ export function drawDesktop(els: Els, v: View, open: string | null, toggle: (key
     <Box key="group-advisor" position="relative" flexDirection="row" alignItems="center" columnGap={1} paddingX={1} flexShrink={0} hover={HOVER_FRAME}>
       <Text dimColor>Advisor</Text>
       {adv.name ? (
-        <Text color={modelColor(adv.name)} dimColor={adv.isInactive}>
+        <Text color={desktopModelColor(adv.name)} dimColor={adv.isInactive}>
           {adv.name}
         </Text>
       ) : (
@@ -367,11 +370,6 @@ export function drawDesktop(els: Els, v: View, open: string | null, toggle: (key
 // colour past a threshold; a click (or Enter under the focus) on a name opens its detail as one
 // line under the row.
 const EIGHTHS = [' ', '▁', '▂', '▃', '▄', '▅', '▆', '▇', '█']
-// Theme keys, so the gauge follows a light or dark terminal: the track is the theme's subtle
-// grey (light rgb(175,175,175), dark rgb(80,80,80)) and a calm fill its inactive grey (light
-// rgb(102,102,102), dark rgb(153,153,153)), which stands out from the track on either.
-const TRACK = 'subtle'
-const CALM_FILL = 'inactive'
 const gaugeCells = (pct: number) => (EIGHTHS[Math.round(Math.max(0, Math.min(100, pct)) / 12.5)] ?? ' ').repeat(2)
 // The cache icons, two cells like a gauge: the flame is a wide glyph, the snowflake a narrow one.
 const ICON_CELLS = { hot: '🔥', cold: '❄ ' }

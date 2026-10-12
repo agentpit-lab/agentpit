@@ -2,29 +2,57 @@ import type { StatusMeta } from '../types'
 import type { Card, CardBar, Tone } from './desktop'
 import type { CacheView, Level, View } from './view'
 
-export const LABEL = '#85877f'
-export const VALUE = '#cdcfc9'
-export const DIM = '#6e706b'
-export const RULE = '#4a4a4a'
-export const LEVEL: Record<Level, string> = { calm: '#a9aba5', watch: '#e0b000', act: '#f05a4f' }
+// The terminal and the pane draw in theme keys: the engine resolves each against the person's
+// theme, light or dark, and a mod cannot read which one is active to pick a colour itself.
+export const LABEL = 'inactive'
+export const VALUE = 'text'
+export const DIM = 'inactive'
+export const RULE = 'inactive'
+export const LEVEL: Record<Level, string> = { calm: 'inactive', watch: 'warning', act: 'error' }
 // The terminal's counterparts of DESKTOP_COLD and DESKTOP_ON.
-export const COLD = '#5fd7ff'
-export const ON = '#5faf5f'
+export const COLD = 'planMode'
+export const ON = 'success'
+// A gauge's track and its calm fill: the fill stands out from the track on either theme.
+export const TRACK = 'subtle'
+export const CALM_FILL = 'inactive'
 // Marks a context reading whose auto-compact is on; nothing marks it off.
 const AUTO_MARK = '↻'
+// Model and effort keys are picked by hue: they name a model or a level, never a state, so one may
+// share its key with a state.
 const MODEL_COLORS: [RegExp, string][] = [
+  [/opus/i, 'autoAccept'],
+  [/sonnet/i, 'suggestion'],
+  [/fable/i, 'bashBorder'],
+  [/haiku/i, 'success'],
+]
+export const EFFORT_COLORS: Record<string, string> = {
+  low: 'warning',
+  medium: 'success',
+  high: 'suggestion',
+  xhigh: 'autoAccept',
+  max: 'error',
+}
+// The desktop row keeps fixed hex, as DESKTOP_* do, so its advisor name keeps these.
+const DESKTOP_MODEL_COLORS: [RegExp, string][] = [
   [/opus/i, '#d787ff'],
   [/sonnet/i, '#5fafff'],
   [/fable/i, '#ff87d7'],
   [/haiku/i, '#87d7af'],
 ]
-export const EFFORT_COLORS: Record<string, string> = {
-  low: '#ffc107',
-  medium: '#4eba65',
-  high: '#b1b9f9',
-  xhigh: '#d0b4ff',
-  max: '#eb5f57',
-}
+// Every colour the terminal and the pane draw with, read-only, for tests.
+export const TERMINAL_PALETTE = Object.freeze({
+  value: VALUE,
+  label: LABEL,
+  dim: DIM,
+  rule: RULE,
+  track: TRACK,
+  calmFill: CALM_FILL,
+  level: Object.freeze({ ...LEVEL }),
+  cold: COLD,
+  on: ON,
+  model: Object.freeze({ ...Object.fromEntries(MODEL_COLORS.map(([re, c]) => [re.source, c])), other: VALUE }),
+  effort: Object.freeze({ ...EFFORT_COLORS }),
+})
 const FAMILIES: Record<string, string> = { opus: 'Opus', sonnet: 'Sonnet', haiku: 'Haiku', fable: 'Fable' }
 const RANKS: [RegExp, number][] = [
   [/mythos-5|fable-5|\bfable\b/, 5],
@@ -55,7 +83,8 @@ export const displayModel = (id: string) => {
 // advisor_rank from the model catalog: the advisor only activates when its rank is at least the
 // main model's; an unknown rank means active.
 const rankOf = (model: string) => RANKS.find(([re]) => re.test(model.toLowerCase().replace(/\./g, '-')))?.[1]
-export const modelColor = (name: string) => MODEL_COLORS.find(([re]) => re.test(name))?.[1] ?? '#ffffff'
+export const modelColor = (name: string) => MODEL_COLORS.find(([re]) => re.test(name))?.[1] ?? VALUE
+export const desktopModelColor = (name: string) => DESKTOP_MODEL_COLORS.find(([re]) => re.test(name))?.[1] ?? '#ffffff'
 
 const kilo = (n: number) =>
   n >= 1_000_000 ? `${Number((n / 1_000_000).toFixed(1))}M` : n >= 1000 ? `${Math.round(n / 1000)}k` : String(n)

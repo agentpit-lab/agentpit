@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.3 - 2026-10-12
+
+- The terminal row, its detail line and the `/pitboard` pane draw in Claude Code's theme colours, so
+  they read on a light theme as on a dark one: values in the theme's text colour, names and rules in
+  its grey, watch, act, a cold cache and auto-compact in its warning, error, teal and success colours.
+  Model and effort names take theme colours by hue. Desktop's row and cards do not change.
+- The documentation pages draw the terminal in the same theme colours, light or dark with the page.
+
 ## 0.1.2 - 2026-10-12
 
 ### Added

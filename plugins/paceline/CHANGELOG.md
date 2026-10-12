@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.2 - 2026-10-12
+
+- The documentation pages draw the terminal in Claude Code's theme colours, light or dark with the
+  page, as pitboard's terminal row does.
+
 ## 0.2.1 - 2026-10-12
 
 ### Added

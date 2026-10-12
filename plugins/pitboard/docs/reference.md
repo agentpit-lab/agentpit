@@ -150,7 +150,7 @@ one-hour and a five-minute TTL.
 - The weekly limit and each model-scoped limit use the same levels, from the percentage used only.
 - The cache levels follow from the TTL: watch below the lesser of 15 minutes and half the TTL, act
   below the lesser of 5 minutes and a fifth of the TTL. The countdown ends 5 seconds before the TTL.
-- An expired cache is blue, apart from the levels.
+- An expired cache is blue in Desktop and teal in the terminal, apart from the levels.
 - `Hit` and the session card have no levels.
 
 Inside the cards, some rows have colours of their own:

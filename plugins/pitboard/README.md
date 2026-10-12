@@ -26,8 +26,9 @@ Requirements:
 
 Start a new session; the row loads at session start. In the CLI it sits under the prompt, above the
 hint line. In Desktop it sits above the prompt, and pointing at a reading shows its card. In both,
-`/pitboard` opens a pane with every card and its explanations. pitboard writes no file and has no
-settings.
+`/pitboard` opens a pane with every card and its explanations. In the CLI and the pane the row draws
+in Claude Code's theme colours, so it reads on a light theme as on a dark one; Desktop keeps its own
+fixed colours. pitboard writes no file and has no settings.
 
 ## Contents
 
