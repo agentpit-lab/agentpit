@@ -33,7 +33,8 @@ To get a newer release, run `/plugin marketplace update agentpit`.
 
 ## For agents
 
-Documentation site: <https://agentpit-lab.github.io/agentpit/>.
+Read the Markdown files below. The HTML pages under `docs/` and on the documentation site are
+interactive pages for people.
 
 Each plugin lives in `plugins/<name>/`: `README.md`, `CHANGELOG.md`, `docs/`, and its code
 (`.claude-plugin/`, `hooks/`, `types/`; paceline also `bin/`, `scripts/`, `skills/`, `templates/`).
@@ -46,7 +47,7 @@ Each plugin lives in `plugins/<name>/`: `README.md`, `CHANGELOG.md`, `docs/`, an
 | How a number is computed | `docs/explanation.md` |
 | How to do a task | `docs/how-to.md` |
 | What a symptom means | `docs/troubleshooting.md` |
-| Whether pace fits a user (paceline only) | `docs/getting-started.html#fit` |
+| Whether pace fits a user (paceline only) | `docs/explanation.md#who-pace-is-for` |
 
 Commands and skills:
 
