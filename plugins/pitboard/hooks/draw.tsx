@@ -965,9 +965,28 @@ const gaugeCells = (pct: number) => (EIGHTHS[Math.round(Math.max(0, Math.min(100
 const ICON_CELLS = { hot: '🔥', cold: '❄ ' }
 const shownValue = (g: Gauge) => g.level !== 'calm' && g.value !== null && !g.icon
 
+// The terminal row's width in cells, from the same pieces drawTerminal draws, so the rule above spans
+// the row alone. Gaps: 1 inside a reading, 1 + · + 1 between readings, 1 + │ + 1 between groups; ⓘ
+// takes 2, and the rule runs 1 past it so ⓘ sits as far from its end as from the │ before it.
+export function terminalCells(v: View): number {
+  const { gauges, advisorOn } = readings(v)
+  const readingWidth = (g: Gauge) =>
+    [g.label.length, g.pct !== null || g.icon ? 2 : null, shownValue(g) && g.value ? g.value.length : null, g.mark ? 1 : null, g.extra?.length ?? null]
+      .filter((n): n is number => n !== null)
+      .reduce((sum, n, i) => sum + n + (i > 0 ? 1 : 0), 0)
+  const groups = GROUPS.map(id => gauges.filter(g => g.group === id)).filter(gs => gs.length)
+  // Readings within a group: gap, dot, gap.
+  const groupWidths = groups.map(gs => gs.reduce((sum, g, i) => sum + readingWidth(g) + (i > 0 ? 3 : 0), 0))
+  if (v.meta?.advisor) {
+    const adv = advisorView(advisorOn)
+    groupWidths.push(['Advisor', adv.name ?? 'off', ...(adv.isInactive ? ['(inactive)'] : [])].reduce((sum, w, i) => sum + w.length + (i > 0 ? 1 : 0), 0))
+  }
+  return [...groupWidths, 2].reduce((sum, w, i) => sum + w + (i > 0 ? 3 : 0), 0) + 1
+}
+
 export function drawTerminal(els: Els, v: View, open: string | null, toggle: (key: string) => void) {
   const { Box, Button, Text } = els
-  const { gauges, info, advisorOn } = readings(v)
+  const { gauges, info, advisor, advisorOn } = readings(v)
   const m = v.meta
   const model = m ? displayModel(m.model) : null
   const name = (key: string, label: string) =>
@@ -1007,8 +1026,8 @@ export function drawTerminal(els: Els, v: View, open: string | null, toggle: (ke
     </Box>
   )
   const groups = GROUPS.map(id => gauges.filter(g => g.group === id)).filter(gs => gs.length)
-  // Model, effort and advisor are needed rarely, so they live in the ⓘ line; there each takes its
-  // own colour, the advisor its model's.
+  // Model and effort are needed rarely, so they live in the ⓘ line; the advisor shows in the row
+  // while one is set, and in ⓘ always. In ⓘ each takes its own colour, the advisor its model's.
   const { name: advisorName, isInactive } = advisorView(advisorOn)
   const isInfoOf = (key: string) => key === 'info' && m !== null && model !== null
   const infoColor = (key: string, label: string): { color?: string; dimColor?: boolean } => {
@@ -1022,6 +1041,27 @@ export function drawTerminal(els: Els, v: View, open: string | null, toggle: (ke
       {gs.flatMap((g, i) => [...(i > 0 ? [<Text key={`dot-${g.key}`} color={RULE}>·</Text>] : []), reading(g)])}
     </Box>
   ))
+  // Shown only while an advisor is set: off is the usual state and stays in ⓘ.
+  if (m?.advisor) {
+    parts.splice(
+      groups[0]?.[0]?.group === 'context' ? 1 : 0,
+      0,
+      <Box key="group-advisor" flexDirection="column" flexShrink={0}>
+        <Box flexDirection="row" columnGap={1}>
+          {name('advisor', 'Advisor')}
+          {advisorName ? (
+            <Text color={modelColor(advisorName)} dimColor={isInactive}>
+              {advisorName}
+            </Text>
+          ) : (
+            <Text dimColor>off</Text>
+          )}
+          {isInactive ? <Text dimColor>(inactive)</Text> : null}
+        </Box>
+        {pointer('advisor', Math.floor(('Advisor'.length - 1) / 2))}
+      </Box>,
+    )
+  }
   // The session card runs long: from Claude Code on it takes a second line.
   const detailLines = (card: Card) => {
     // A line has no columns to hold open, so the desktop card's empty cells go.
@@ -1029,18 +1069,9 @@ export function drawTerminal(els: Els, v: View, open: string | null, toggle: (ke
     const at = rows.findIndex(([label]) => label === 'Claude Code')
     return at > 0 ? [{ rows: rows.slice(0, at) }, { rows: rows.slice(at) }] : [{ rows }]
   }
-  // The row's width in cells, from the same pieces the row draws, so the rule above spans the row
-  // alone. Gaps: 1 inside a reading, 1 + · + 1 between readings, 1 + │ + 1 between groups; ⓘ takes 2, and
-  // the rule runs 1 past it so ⓘ sits as far from its end as from the │ before it.
-  const readingWidth = (g: Gauge) =>
-    [g.label.length, g.pct !== null || g.icon ? 2 : null, shownValue(g) && g.value ? g.value.length : null, g.mark ? 1 : null, g.extra?.length ?? null]
-      .filter((n): n is number => n !== null)
-      .reduce((sum, n, i) => sum + n + (i > 0 ? 1 : 0), 0)
-  // Readings within a group: gap, dot, gap.
-  const groupWidths = groups.map(gs => gs.reduce((sum, g, i) => sum + readingWidth(g) + (i > 0 ? 3 : 0), 0))
-  const rowWidth = [...groupWidths, 2].reduce((sum, w, i) => sum + w + (i > 0 ? 3 : 0), 0) + 1
   const detail = (key: string) => {
-    const card = cardFor(gauges, info, key)
+    // The advisor's card exists whenever meta does; with no advisor set its line has no label to hang from.
+    const card = key === 'advisor' ? (m?.advisor ? advisor : undefined) : cardFor(gauges, info, key)
     if (!card) return null
     const titleColor = isInfoOf(key) && model ? modelColor(model) : undefined
     return (
@@ -1075,7 +1106,7 @@ export function drawTerminal(els: Els, v: View, open: string | null, toggle: (ke
     <Box flexDirection="column" paddingLeft={1}>
       {/* A rule parts the row from the engine's mode line above; a Box has no top-only border. */}
       <Box key="rule" height={1} marginTop={1} overflow="hidden">
-        <Text color={RULE}>{'─'.repeat(rowWidth)}</Text>
+        <Text color={RULE}>{'─'.repeat(terminalCells(v))}</Text>
       </Box>
       <Box flexDirection="row" flexWrap="wrap" columnGap={1}>
         {[

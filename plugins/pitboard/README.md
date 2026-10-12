@@ -27,15 +27,17 @@ included.
 **CLI:** one row above the prompt's hint line, parted from it by a short rule.
 
 ```
- Ctx ▂▂ 82% ↻ │ Cache ▅▅ · Hit 100% │ 5h ▃▃ · 7d ▇▇ 92% · Fable ▂▂ │ ⓘ
+ Ctx ▂▂ 82% ↻ │ Advisor Fable │ Cache ▅▅ · Hit 100% │ 5h ▃▃ · 7d ▇▇ 92% · Fable ▂▂ │ ⓘ
 ```
 
 Each reading is its name, a two-cell gauge that rises in eighths over a grey track, and a number only
 once the reading needs a look. Readings of one group are parted by a dot, groups by `│`. `↻` after the
-context means auto-compact is on; nothing marks it off. The cache gauge fills as its time to live runs
-out; a flame replaces it while a reply runs, a snowflake once the cache has expired. A click (or Enter
-under the focus) on a name opens its readings as one line under the row, with a `▲` under the opened
-name, and a line of advice under them when the reading needs a decision; a second click closes it.
+context means auto-compact is on; nothing marks it off. `Advisor` shows only while an advisor is set:
+its name in its model's colour, dimmed with `(inactive)` when it ranks below the main model. The cache
+gauge fills as its time to live runs out; a flame replaces it while a reply runs, a snowflake once the
+cache has expired. A click (or Enter under the focus) on a name, `Advisor` included, opens its readings
+as one line under the row, with a `▲` under the opened name, and a line of advice under them when the
+reading needs a decision; a second click closes it.
 
 **Desktop:** the same row above the prompt, the context and cache as pies the size of Desktop's own
 context ring, `5h` and `7d` as bars, the model-scoped limits as pies, the advisor only while one is

@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.1 - 2026-10-12
+
+- The CLI row shows the advisor between the context and the cache while one is set, as Desktop does:
+  its model in the model's colour, dimmed with `(inactive)` when it ranks below the main model. A
+  click opens its line (Model, Main, State). With no advisor set the row has no advisor group, and
+  `ⓘ` still says `off`.
+
 ## 0.1.0 - 2026-10-11
 
 First release.
