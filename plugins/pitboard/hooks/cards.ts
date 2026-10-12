@@ -104,11 +104,11 @@ const pct0 = (n: number) => `${Math.round(n)}%`
 const pct1 = (n: number | null) => (n === null ? 'n/a' : `${n.toFixed(1)}%`)
 const rate = (n: number | null) => (n === null ? 'n/a' : `${n.toFixed(1)}%/h`)
 
-function clock(at: number, locale: string | null, weekday = false) {
-  const options: Intl.DateTimeFormatOptions = { hour: '2-digit', minute: '2-digit', hour12: false }
+function clock(at: number, meta: StatusMeta | null, weekday = false) {
+  const options: Intl.DateTimeFormatOptions = { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: meta?.timeZone }
   if (weekday) options.weekday = 'short'
   try {
-    return new Date(at).toLocaleString(locale ?? undefined, options)
+    return new Date(at).toLocaleString(meta?.locale ?? undefined, options)
   } catch {
     return new Date(at).toLocaleString(undefined, options)
   }
@@ -172,7 +172,7 @@ export function alerts(v: View): { level: Level; head: string; advice: string }[
     if (f.fullAt !== null && f.resetInMs !== null && f.fullAt < v.now + f.resetInMs)
       out.push({
         level: 'act',
-        head: `5h limit hits 100% at ${clock(f.fullAt, v.meta?.locale ?? null)}`,
+        head: `5h limit hits 100% at ${clock(f.fullAt, v.meta)}`,
         advice: `${reset} · pace ${rate(f.ratePerHour)} vs budget ${rate(f.evenPerHour)} · hold subagents`,
       })
     else if (f.pct >= 70) out.push({ level: f.level, head: `5h limit ${pct0(f.pct)}`, advice: reset })
@@ -342,7 +342,7 @@ function fiveCard(v: View): Card {
   const projected = f.ratePerHour !== null && f.resetInMs !== null ? f.pct + f.ratePerHour * (f.resetInMs / HOUR_MS) : null
   const forecast: Rows =
     isShort && f.fullAt !== null
-      ? [['Runs out', clock(f.fullAt, v.meta?.locale ?? null), 'act']]
+      ? [['Runs out', clock(f.fullAt, v.meta), 'act']]
       : [['At reset', projected !== null ? `~${pct0(projected)}` : 'n/a', projected !== null && projected >= 80 ? 'watch' : undefined]]
   const rows: Rows = [
     ['Used', pct0(f.pct), f.level],
@@ -376,7 +376,7 @@ function weekCard(v: View): Card {
   const rows: Rows = w
     ? [
         ['Used', pct0(w.pct), w.level],
-        ['Resets', w.resetAt !== null ? clock(w.resetAt, v.meta?.locale ?? null, true) : 'n/a'],
+        ['Resets', w.resetAt !== null ? clock(w.resetAt, v.meta, true) : 'n/a'],
         ...paceRows(w.ratePerHour, w.evenPerHour, '1 h', 'watch', [['Week elapsed', even !== null ? pct0(even) : 'n/a']]),
         [lead !== null && lead > 0 ? 'Overspent' : 'Spare', leadText, lead === null || lead <= 0 ? undefined : lead > 100 / 7 ? 'act' : 'watch'],
       ]
@@ -395,7 +395,7 @@ function scopedCard(v: View, b: View['scoped'][number]): Card {
     level: b.level,
     rows: [
       ['Used', pct0(b.percentUsed), b.level],
-      ['Resets', resetAt !== null ? clock(resetAt, v.meta?.locale ?? null, true) : 'n/a'],
+      ['Resets', resetAt !== null ? clock(resetAt, v.meta, true) : 'n/a'],
     ],
     ...noted(b.level !== 'calm' ? `${pct0(b.percentUsed)} used: switch model for work that does not need ${b.name}.` : null, [
       `Weekly limit for ${b.name} models alone; resets with the week.`,

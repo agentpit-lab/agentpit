@@ -125,3 +125,6 @@ narrow terminal, or the readings in the Claude mobile app, which has no row.
      bar also shows, paler, where the current pace leads by the reset.
 
 **How to tell it worked:** Claude Code answers `Status pane opened.` and the pane shows the cards.
+
+The row anatomy page draws the pane for each moment of a working day, in the CLI and in Desktop:
+see [The /pitboard pane](row-anatomy.html#pane).

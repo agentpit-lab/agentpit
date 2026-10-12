@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.4 - 2026-10-12
+
+### Added
+
+- The row anatomy page has a section on the `/pitboard` pane: for the moment chosen in the working
+  day, the pane as the CLI and Desktop draw it, side by side on a wide screen. The getting-started
+  page has a step that opens it. Both are drawn from pitboard's own `drawPane`, and the docs check
+  fails when the drawn pane no longer matches the code.
+
 ## 0.1.3 - 2026-10-12
 
 - The terminal row, its detail line and the `/pitboard` pane draw in Claude Code's theme colours, so

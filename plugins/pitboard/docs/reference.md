@@ -119,7 +119,8 @@ the fullest style that fits the window:
 
 The Desktop card shows the rows, the bar of a limit, and advice when the reading needs a decision.
 The `/pitboard` pane shows every card in the row's order with its explanations; see
-[Open every card with /pitboard](how-to.md#open-every-card-with-pitboard).
+[Open every card with /pitboard](how-to.md#open-every-card-with-pitboard), and the pane itself in the
+CLI and in Desktop in [The /pitboard pane](row-anatomy.html#pane).
 
 ## Levels
 

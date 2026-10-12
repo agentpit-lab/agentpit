@@ -33,6 +33,8 @@ export type StatusMeta = {
   model: string
   advisor: string | null
   locale: string | null
+  // Unset in a session, so clock times follow the machine; the documentation specimens pin it.
+  timeZone?: string
   effort: string | null
   leaf: string
   branch: string | null
