@@ -1,5 +1,5 @@
 // Pure part of the inbox writer: no engine calls, so tests reach it directly. The reading format is
-// the README's contract, section "The limits file and the inbox".
+// the contract in docs/reference.md, section "The inbox (for writers)".
 
 export type RateLimit = { kind: string; percentUsed: number; resetsAt?: string | null }
 export type InboxBucket = { used_percentage: number; resets_at: string | null }

@@ -1,0 +1,237 @@
+# pitboard reference
+
+Every reading the row and its cards show, the levels that colour them, the environment variables
+and files pitboard reads, and what it needs to run. The tables between `generated` markers come from
+the plugin's code; `python .ci/docs_facts.py build` rewrites them.
+
+## Readings and card rows
+
+<!-- generated:begin labels -->
+| Label |
+|---|
+| 5h |
+| 7d |
+| API cost |
+| Advisor |
+| At reset |
+| Auto-compact |
+| Branch |
+| Budget |
+| Cache |
+| Claude Code |
+| Countdown |
+| Ctx |
+| Effort |
+| Hit |
+| If cold |
+| Last turn |
+| Left |
+| Main |
+| Model |
+| Overspent |
+| Pace |
+| Resets |
+| Resets in |
+| Running |
+| Runs out |
+| Session |
+| Spare |
+| Started in |
+| State |
+| TTL |
+| Turns |
+| Turns left |
+| Used |
+| Week elapsed |
+| Window |
+<!-- generated:end -->
+
+The table lists every label the row and its cards can show, in alphabetical order. A model-scoped
+weekly limit takes the model's name as its label, such as `Fable`, so its label depends on the
+account and is not in the table.
+
+### The row
+
+The row has three groups of readings, context, cache, and limits, parted by `│` in the CLI and by a
+thin rule in Desktop. Readings of one group are parted by a dot. `ⓘ` closes the row.
+
+| Reading | CLI | Desktop |
+|---|---|---|
+| `Ctx` | Two-cell gauge; `↻` after it while auto-compact is on; the percentage once it leaves calm | Pie; `↻` while auto-compact is on; the percentage once it leaves calm |
+| `Cache` | Two-cell gauge that fills as the cache's time to live (TTL) runs out; a flame while a reply runs; a snowflake once the cache has expired; the countdown once it leaves calm | Pie, flame, or snowflake, as in the CLI; the countdown once it leaves calm |
+| `Hit` | The last turn's hit rate, without a gauge | The same |
+| `5h`, `7d` | Two-cell gauge; the percentage once it leaves calm | Bar with an even-pace tick, the percentage and the time to reset at every level; see [Desktop limit styles](#desktop-limit-styles) |
+| Model-scoped limit (`Fable`, ...) | Two-cell gauge; the percentage once it leaves calm | Pie; the percentage once it leaves calm |
+| Advisor | Its own group between `Ctx` and `Cache`, only while an advisor is set; a click opens its line; also in the `ⓘ` line | Its own group between `Ctx` and `Cache`, only while an advisor is set |
+| Branch | In the `ⓘ` line | Absent; Desktop runs no processes for a plugin |
+| `ⓘ` | Opens the session line | Shows the session card |
+
+A CLI gauge is two cells of a block that rises in eighths over a grey track, in the level's colour
+once the reading leaves calm. A Desktop pie or bar fills in the same colours.
+
+In the CLI, a click on a reading's name, or Enter while the name has focus, opens its card as one
+line under the row, with `▲` under the opened name and a line of advice when the reading needs a
+decision. A second click closes it. In Desktop, pointing at a reading shades it and shows its card.
+
+### Desktop limit styles
+
+pitboard tries to keep the Desktop row on one line. It estimates the row's width from what it shows and picks
+the fullest style that fits the window:
+
+| Style | `5h` and `7d` drawn as |
+|---|---|
+| Bars | A bar with the percentage and the time to reset |
+| Bars without reset | A bar with the percentage; the card still shows the time to reset |
+| Pies | A pie, as the other readings; the percentage and time to reset only once the limit leaves calm |
+
+### Cards
+
+| Card | Rows |
+|---|---|
+| Context | Auto-compact, Used, Left, Window, Turns left |
+| Cache | Countdown, TTL, If cold |
+| Cache hits | Last turn, Session |
+| 5h limit | Used, Resets in, Pace, Budget, At reset or Runs out |
+| Week | Used, Resets, Pace, Budget, Week elapsed, Spare or Overspent |
+| A model-scoped limit, titled by the model's name | Used, Resets |
+| Advisor | Model, Main, State |
+| `ⓘ`, titled by the main model's name | Effort, Advisor, Claude Code, Started in, Branch, Running, Turns, API cost |
+
+- Context: `Auto-compact` reads `on` or `off`. When a smaller compaction window is set, it adds who
+  set it: `env`, `settings`, `account`, `experiment`, `model default`, or `default`. `Used` counts
+  toward the compaction point while auto-compact is on, and toward the full window while it is off.
+  `Left` shows only while the compaction point is below the full window. `Window` shows only while
+  auto-compact is on, as `<compaction window> of <model window>` when the two differ. `Turns left`
+  shows while auto-compact is on, once the context has grown over at least two of the last turns.
+- Cache: `Countdown` reads whole minutes while calm, `mm:ss` once it warns, `replying` while a reply
+  runs, and `expired` after the cache has expired. `TTL` reads `1h` or `5m`, or `5m?` until a cache
+  write has shown which. `If cold` is the context the next turn writes again, and how much dearer
+  that turn is than a warm one: about 20 times with a one-hour TTL, 12.5 times with five minutes.
+- Cache hits: both rows are cache reads divided by reads plus writes. `Session` counts from the last
+  compaction.
+- 5h limit: `At reset` gives the projected percentage at the reset. `Runs out` replaces it with the
+  clock time the limit reaches 100% when that comes before the reset.
+- Week: `Spare` or `Overspent` gives the distance from even pace in points and in hours of budget.
+- `ⓘ`: `Branch` shows only when the branch could be read; see
+  [The Branch row is missing](troubleshooting.md#the-branch-row-is-missing). `API cost` is the
+  session at API prices; a subscription is not charged per token.
+- A row reads `n/a` while its number is unknown, for example `Pace` before it has enough readings.
+
+The Desktop card shows the rows, the bar of a limit, and advice when the reading needs a decision.
+The `/pitboard` pane shows every card in the row's order with its explanations; see
+[Open every card with /pitboard](how-to.md#open-every-card-with-pitboard).
+
+## Levels
+
+<!-- generated:begin levels -->
+| Reading | Level | Starts at (below, for minutes left) |
+|---|---|---|
+| cache_1h_minutes_left | watch | 15 |
+| cache_1h_minutes_left | act | 5 |
+| cache_5m_minutes_left | watch | 2.5 |
+| cache_5m_minutes_left | act | 1 |
+| context_pct | watch | 60 |
+| context_pct | act | 80 |
+| five_hour_pct | watch | 70 |
+| five_hour_pct | act | 90 |
+| week_pct | watch | 80 |
+| week_pct | act | 95 |
+<!-- generated:end -->
+
+A reading is calm (grey), watch (amber), or act (red). The table gives the value where each level
+starts: a percentage for context and limits, and minutes left for the cache, where the level starts
+below the value. `context_pct` is `Ctx`, `five_hour_pct` is `5h`, `week_pct` is `7d` and every
+model-scoped limit, and `cache_1h_minutes_left` and `cache_5m_minutes_left` are `Cache` with a
+one-hour and a five-minute TTL.
+
+- Context also turns act at three turns left or fewer, while auto-compact is on.
+- The five-hour limit also turns act when its Pace is above its Budget, because at that pace it runs
+  out before the reset. See [Colours](explanation.md#colours).
+- The weekly limit and each model-scoped limit use the same levels, from the percentage used only.
+- The cache levels follow from the TTL: watch below the lesser of 15 minutes and half the TTL, act
+  below the lesser of 5 minutes and a fifth of the TTL. The countdown ends 5 seconds before the TTL.
+- An expired cache is blue, apart from the levels.
+- `Hit` and the session card have no levels.
+
+Inside the cards, some rows have colours of their own:
+
+| Row | Colour |
+|---|---|
+| 5h `Pace` above `Budget` | Red |
+| 5h `At reset` at 80% or more | Amber |
+| 5h `Runs out` | Red |
+| Week `Pace` above `Budget` | Amber |
+| Week `Overspent` | Amber; red past a day of budget (100/7, about 14.3 points) |
+| Advisor `State` `inactive`, `ⓘ` `Advisor` when inactive | Amber |
+| Context `Auto-compact` `on` | Green |
+
+## Environment variables
+
+<!-- generated:begin env -->
+| Variable |
+|---|
+| `CLAUDE_CONFIG_DIR` |
+| `HOME` |
+| `LANG` |
+| `LC_ALL` |
+| `LC_TIME` |
+| `PACELINE_STATE_DIR` |
+| `USERPROFILE` |
+<!-- generated:end -->
+
+| Variable | Use |
+|---|---|
+| `CLAUDE_CONFIG_DIR` | The Claude Code configuration directory; `~/.claude` when unset. |
+| `USERPROFILE`, `HOME` | The home directory for `~/.claude`, `USERPROFILE` first. |
+| `PACELINE_STATE_DIR` | paceline's state directory, where the limits file lies. |
+| `LC_ALL`, `LC_TIME`, `LANG` | The locale for weekday names, in this order; `C` and `POSIX` are skipped. |
+
+pitboard reads these variables from the environment Claude Code started in.
+
+## Files read
+
+`<config>` is `$CLAUDE_CONFIG_DIR`, else `~/.claude`. `<state>` is `$PACELINE_STATE_DIR` when it is set
+and not empty, else `<config>/state/paceline`, the rule paceline uses.
+
+| File | What pitboard takes from it | When |
+|---|---|---|
+| `<config>/settings.json` | `advisorModel`; the effort level for `/effort` | At session start, after each turn, every 20 seconds, and after `/advisor` and `/effort` |
+| `<state>/rate-limits.json` | Five-hour and weekly readings of every session; model-scoped limits | At session start, after each turn, and every 20 seconds |
+| `<state>/rate-limits.history.jsonl` and its rotated `.1` | Earlier readings, for Pace | At session start |
+| `<config>/projects/<start directory>/<session id>.jsonl` | Cache reads and writes since the last compaction; the TTL; the last request's time | At session start, after each turn, and after `/clear` or a resume |
+
+- The limits file and its history are paceline's; [paceline's reference](../../paceline/docs/reference.md#the-limits-file-for-readers)
+  describes their format.
+- The transcript folder is the start directory with every character other than a letter or digit
+  turned into `-`. When the transcript is not there, pitboard searches every folder under
+  `<config>/projects`.
+- Claude Code reads a file of up to 4 MiB for a plugin. For a longer transcript, pitboard reads its
+  last 4 MB through `node`.
+- Until the first request reports an effort level, the effort comes from `modelSettings` or
+  `effortLevel` in the settings Claude Code loaded.
+
+pitboard runs these processes where Claude Code runs processes for a plugin:
+
+| Command | For |
+|---|---|
+| `git branch --show-current`, in the start directory | `Branch`, at session start and after each turn |
+| `pwsh -NoProfile -Command (Get-Culture).Name` | The locale, once per session, when no locale variable is set |
+| `node -e <tail reader> <transcript>` | A transcript over 4 MiB |
+
+pitboard writes no file and changes no setting. It keeps the five-hour readings of the last 3 hours
+and the weekly readings of the last 6 hours in the store Claude Code gives each plugin, so a new
+session starts with a Pace.
+
+## Requirements
+
+| Requirement | Needed for |
+|---|---|
+| Claude Code 2.1.287 or later | The row |
+| `git` | `Branch` |
+| `pwsh` (PowerShell 7) | Weekday names in the OS locale on Windows, where no locale variable is set |
+| `node` | Cache hits and the TTL from a transcript over 4 MiB |
+| [paceline](../../paceline/README.md) | Readings other sessions saw, and Pace from the first draw |
+| paceline's usage-watch | Model-scoped limits |
+
+`git`, `pwsh`, and `node` help only where Claude Code runs processes for a plugin, the CLI. The
+layout is fixed; pitboard has no settings.

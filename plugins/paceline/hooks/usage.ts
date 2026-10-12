@@ -1,5 +1,5 @@
 // Pure part of usage-watch: no engine calls, so tests reach it directly. The reading follows the
-// README's exact-reading contract, section "The inbox (for writers)".
+// exact-reading contract in docs/reference.md, section "The inbox (for writers)".
 
 export const USAGE_URL = 'https://api.anthropic.com/api/oauth/usage'
 export const USAGE_TICK_MS = 10_000

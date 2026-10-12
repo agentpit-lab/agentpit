@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Pace Claude subscription usage against the weekly and five-hour limits.
 
-Stdlib only. See paceline's README.md for the CLI reference, exit codes and state file schemas.
+Stdlib only. See paceline's docs/reference.md for the CLI reference, exit codes and state file schemas.
 """
 import argparse
 import contextlib

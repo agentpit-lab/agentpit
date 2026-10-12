@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>agentpit documentation</title>
+<style>
+:root { --bg: #f8f7f3; --surface: #ffffff; --ink: #1d1f1c; --muted: #67695f; --line: #e2dfd5; --accent: #0b6a88; color-scheme: light; }
+@media (prefers-color-scheme: dark) { :root { --bg: #121413; --surface: #1a1d1b; --ink: #e8e6df; --muted: #9d9f96; --line: #30332e; --accent: #55b6d3; color-scheme: dark; } }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+main { max-width: 720px; margin: 0 auto; padding: 48px 16px; display: grid; gap: 32px; }
+h1, h2 { font-family: "Iowan Old Style", Charter, "Sitka Text", Cambria, Georgia, serif; font-weight: 500; margin: 0; }
+h1 { font-size: 2.125rem; }
+p { margin: 0; color: var(--muted); }
+section { display: grid; gap: 12px; }
+a.card { display: grid; gap: 4px; padding: 16px; background: var(--surface); border: 1px solid var(--line); border-radius: 6px; color: var(--ink); text-decoration: none; }
+a.card:hover, a.card:focus-visible { border-color: var(--accent); }
+a.card strong { color: var(--accent); }
+.cards { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>agentpit documentation</h1>
+    <p>Guides and interactive pages for the plugins of the agentpit Claude Code marketplace.</p>
+  </header>
+  <section>
+    <h2>pitboard</h2>
+    <p>A status row for context, the prompt cache and the usage limits.</p>
+    <div class="cards">
+      <a class="card" href="plugins/pitboard/docs/getting-started.html"><strong>Getting started</strong><span>Install it and read the row.</span></a>
+      <a class="card" href="plugins/pitboard/docs/row-anatomy.html"><strong>Row anatomy</strong><span>Every reading, in a working day.</span></a>
+    </div>
+  </section>
+  <section>
+    <h2>paceline</h2>
+    <p>Keeps a session's context and the subscription's usage limits in shape.</p>
+    <div class="cards">
+      <a class="card" href="plugins/paceline/docs/getting-started.html"><strong>Getting started</strong><span>Its four functions and where pace speaks.</span></a>
+      <a class="card" href="plugins/paceline/docs/budget-simulator.html"><strong>Budget simulator</strong><span>What pace will tell you, before it does.</span></a>
+    </div>
+  </section>
+</main>
+</body>
+</html>

@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.2.1 - 2026-10-12
+
+### Added
+
+- Documentation in `docs/`: a getting-started page and a budget simulator that runs pace's own rules,
+  also on GitHub Pages, and how-to, reference, explanation and troubleshooting guides.
+
+### Changed
+
+- The README is a short entry point; its details moved into `docs/`.
+
 ## 0.2.0 - 2026-10-12
 
 ### Added

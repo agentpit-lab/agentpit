@@ -1,0 +1,217 @@
+# paceline troubleshooting
+
+Find the symptom, then read its cause, the command that checks it, and the fix. For most problems,
+start with `paceline doctor`: it checks the Python runtime, the state directory, the pace switch,
+the inbox, the limits file, the process lookup, the memory reading, the time zone, the hooks, and
+the debug log, and prints a hint for what it finds.
+
+## Pace looks inactive
+
+No `pace:` line appears before an Agent or Workflow launch, and no launch ever asks you first.
+
+**Cause:** one of these:
+
+- pace is off. It is off after install until you turn it on.
+- pace has no usage data yet. The limits file fills after the first answer in a session with
+  paceline loaded. Until then, `paceline status` fails, and the hook adds nothing.
+- The hooks cannot run Python. See [A hook reports a Python problem](#a-hook-reports-a-python-problem).
+- `PACELINE_STATE_DIR` is set in your shell but not where Claude Code starts, so the hooks and your
+  commands use different state directories.
+
+**Check:**
+
+```
+paceline status
+paceline doctor
+```
+
+`paceline status` ends with `pace hooks off (paceline on)` while pace is off, and fails with
+`paceline: no usage data yet` before the first reading. In `paceline doctor`, the `switch` probe
+shows the switch and the `paths` probe shows the state directory.
+
+**Fix:** run `paceline on`. If there is no data, take one turn in any session and run
+`paceline status` again. Set `PACELINE_STATE_DIR` where Claude Code starts, or nowhere.
+
+## The budget looks wrong
+
+The budget per hour is much higher or lower than you expect, or it is 0.
+
+**Cause:** the budget follows the profile and the plans. The usual reasons:
+
+- The profile's time zone or day hours do not match your day, so the clock falls in a night or off
+  hour, and the budget shown is that of the next day hour.
+- A declared `away` plan gives its day hours no budget; a `heavy` plan raises their share.
+- The reserve holds back `reserve_pct` until the end of the week.
+- On a weekend, the weekend day hours share at most `weekend_cap_pct` of the week.
+- With `--model`, `PACELINE_MODEL`, or `ANTHROPIC_MODEL` set, a model-scoped weekly bucket counts
+  when it is higher than the weekly reading.
+- No hour can get more than `five_hour_to_week_pct / 5` percent of the week.
+
+**Check:**
+
+```
+paceline status --json
+paceline plan list
+```
+
+In the JSON, `now_local` is the clock in the profile's zone, `in_day_hours` says whether it is a day
+hour, `current_plan` is the plan in force, `reserve_pct` and `spendable_pct` show the reserve,
+`weekend` shows the weekend cap, and `weekly.matched_scoped` names a model-scoped bucket that
+counts.
+
+**Fix:** correct the profile with `paceline profile set` (see
+[Change a profile setting](how-to.md#change-a-profile-setting)), or cancel a plan that no longer
+holds. The [budget simulator](budget-simulator.html) shows how each input moves the budget, and the
+[explanation](explanation.md#the-budget-per-hour) gives the rules.
+
+## Data is STALE
+
+`paceline status` shows `STALE data N min old`, and the `pace:` line shows `STALE data`.
+
+**Cause:** the newest reading is older than `stale_threshold_min` (30 minutes). Without usage-watch,
+readings refresh only when a session on this machine takes a model turn, so the data ages while no
+session works. While the data is stale, the hard limits on the five-hour and weekly windows are
+skipped, and the night queue waits.
+
+**Check:**
+
+```
+paceline merge --verbose
+paceline doctor
+```
+
+`paceline merge --verbose` merges the inbox now and prints the time of the newest reading. In
+`paceline doctor`, the `inbox` probe shows the newest reading's age, and the `limits` probe shows
+each bucket's age and flags a reading from the future.
+
+**Fix:** take a turn in any session, or turn on usage-watch so readings refresh while sessions are
+idle (see [Keep usage current while idle](how-to.md#keep-usage-current-while-idle)).
+
+## The time zone is wrong
+
+Day and night hours are shifted, or a session start says the profile counts in UTC while this
+machine is in another zone.
+
+**Cause:** a new profile takes this machine's zone only when it can detect it and Python here has
+data for it; otherwise the profile keeps `UTC`. The zone comes from `TZ` when it holds a zone name,
+then on Windows from ICU (Windows 10 1903 and later), and on macOS and Linux from the target of
+`/etc/localtime` or from `/etc/timezone`. An existing profile keeps its zone.
+
+Without the `tzdata` package, Python may have no zone data, which is common on Windows. paceline
+then knows only `UTC` and built-in Central and Eastern European zones with EU summer time:
+`Europe/Madrid`, `Europe/Paris`, `Europe/Berlin`, `Europe/Rome`, `Europe/Amsterdam`,
+`Europe/Brussels`, `Europe/Vienna`, `Europe/Warsaw`, `Europe/Prague`, `Europe/Stockholm`,
+`Europe/Kyiv`, `Europe/Kiev`, `Europe/Helsinki`, `Europe/Athens`, and `Europe/Riga`.
+
+**Check:**
+
+```
+paceline profile check
+```
+
+It prints the profile's zone, whether it is confirmed, and the detected zone, or a hint with the
+command to run.
+
+**Fix:** set the zone:
+
+```
+paceline profile set timezone America/New_York
+```
+
+If the command refuses the zone because Python has no data for it, install the data first with
+`python -m pip install tzdata`. To keep UTC, run `paceline profile set timezone UTC`; that also
+stops the hint.
+
+## A hook reports a Python problem
+
+Claude Code shows a hook error that names `python3` or `python`, or a function stays silent although
+it is on.
+
+**Cause:** every hook command runs `python3` when it works, else `python`. When neither is on the
+`PATH`, the hook fails. When the Python found is older than 3.9, the hooks do nothing and write a
+`hook.python` line to `<state>/debug.log`. On Windows, a `python` that only opens the Microsoft Store
+counts as missing.
+
+**Check:**
+
+```
+paceline doctor
+```
+
+The `runtime` probe shows the Python version and which of `python3` and `python` are on the `PATH`.
+On a Python older than 3.9, `paceline` stops at once with a message that names the version. Lines with `"failure":true` in `<state>/debug.log` record
+what a hook skipped; a hook writes them even without the debug flag.
+
+**Fix:** install Python 3.9 or later and put it on the `PATH` as `python3` or `python`, then start a
+new session.
+
+## The night queue waits all night
+
+`paceline auto` keeps exiting 10 (`wait`), and no item starts.
+
+**Cause:** `auto` waits when one of these holds:
+
+- The usage data is stale. If the agent only waits between calls, no session takes a turn, and
+  without usage-watch the data does not refresh.
+- Five-hour usage is at the night threshold (95%) or the hard stop.
+- An item is still `running`, or the next item's dependencies are not done. An item that was
+  started and never marked done keeps the queue waiting.
+- No allowed model has weekly headroom for the item.
+- There is no usage data at all.
+
+**Check:**
+
+```
+paceline auto --json
+paceline queue list
+```
+
+`reasons` in the JSON names the cause, and `wait_until` is set while the five-hour window is full.
+`paceline queue list` shows items stuck in `running`.
+
+**Fix:** for stale data, turn on usage-watch before the night. For an item stuck in `running`, run
+`paceline queue done <id>`, `paceline queue fail <id>`, or `paceline queue defer <id>`. For a full
+five-hour window, the queue resumes after `wait_until`. For no model with headroom, add a model to
+`routine_models` or `models`, or lower the item's estimate when it was set too high.
+
+## usage-watch shows nothing
+
+`paceline status` shows no model-scoped buckets, and the data ages while sessions are idle, although
+usage-watch is on.
+
+**Cause:** usage-watch needs a claude.ai login and an open session with paceline. Without a
+claude.ai login, it sends nothing. While
+`CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC` is set, Claude Code refuses the request, and usage-watch
+asks again after 10 minutes. When the usage endpoint answers with an error or a format paceline does
+not read, the limits file keeps the session readings.
+
+**Check:**
+
+```
+paceline usage-watch status
+```
+
+- `last attempt: never` while the switch is on: no session is open, or Claude Code gives no login
+  for the request.
+- `last error: network error`: the request was refused or could not reach the server, for example
+  because of `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC`.
+- `last error: HTTP <status>` or `unexpected response`: the endpoint answered with an error or a
+  format paceline does not read.
+
+**Fix:** keep a session open, sign in to Claude Code with a claude.ai account, or unset
+`CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC`. After an HTTP 429 answer, usage-watch tries again after
+125 seconds; after any other error, after 10 minutes.
+
+## Collect a diagnosis for a bug report
+
+When none of the above explains the problem, record a trace and bundle it:
+
+1. Create the flag file `<state>/debug.on`.
+2. Use Claude Code as usual for a while.
+3. Run `paceline doctor --live --bundle ~/paceline-doctor.zip`.
+4. Delete the flag file.
+
+While the flag exists, paceline and its hooks append one JSON line per step to `<state>/debug.log`.
+`PACELINE_DEBUG=1` traces a single command the same way. The log and the bundle write your home
+directory as `~`. The bundle holds the plan phrases you typed, reservation labels, and session IDs,
+so read it before you share it.

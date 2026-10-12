@@ -4,8 +4,8 @@ paceline's function-hooks module drops one reading per session into <state>/inbo
 `rateLimits` Claude Code hands to plugins; another plugin may drop readings there in the same format.
 merge_step() merges every reading into rate-limits.json under <state>/limits.lock. It is the only
 writer of that file; scripts/limits_merge.py runs it from the hooks, scripts/pace.py from its
-commands. The file format, the inbox format and the merge rule are the README's contract, section
-"The limits file and the inbox".
+commands. The file format, the inbox format and the merge rule are the contract in docs/reference.md,
+sections "The limits file (for readers)" and "The inbox (for writers)".
 
 <state> is $PACELINE_STATE_DIR, else <config>/state/paceline, where <config> is $CLAUDE_CONFIG_DIR,
 else ~/.claude.

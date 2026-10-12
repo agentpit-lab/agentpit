@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.1.2 - 2026-10-12
+
+### Added
+
+- Documentation in `docs/`: a getting-started page and a row anatomy page that draws the row with
+  pitboard's own code, also on GitHub Pages, and how-to, reference, explanation and troubleshooting
+  guides.
+
+### Changed
+
+- The README is a short entry point; its details moved into `docs/`.
+
+### Removed
+
+- `docs/anatomy.html`, replaced by `docs/row-anatomy.html`.
+
 ## 0.1.1 - 2026-10-12
 
 - The CLI row shows the advisor between the context and the cache while one is set, as Desktop does:

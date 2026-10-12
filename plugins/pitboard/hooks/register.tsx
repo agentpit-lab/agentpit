@@ -2,7 +2,8 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
 import type { StatusCache, StatusLimit, StatusSample, StatusScoped } from '../types'
-import { desktopKey, drawDesktop, drawPane, drawTerminal } from './draw'
+import { desktopKey } from './cards'
+import { drawDesktop, drawPane, drawTerminal } from './draw'
 import type { Els } from './draw'
 import {
   buildView,
