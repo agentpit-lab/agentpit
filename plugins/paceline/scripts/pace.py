@@ -2400,7 +2400,7 @@ def build_parser():
     common.add_argument("--session", help="Claude session id (default: $CLAUDE_SESSION_ID)")
     common.add_argument("--no-merge", action="store_true", help="do not merge the inbox readings into rate-limits.json first")
     common.add_argument("--now", help="override the clock (ISO 8601), for what-if and tests")
-    common.add_argument("--state-dir", help="state directory (default: $PACELINE_STATE_DIR, else ~/.claude/state/paceline)")
+    common.add_argument("--state-dir", help="state directory (default: $PACELINE_STATE_DIR, else $CLAUDE_CONFIG_DIR/state/paceline, else ~/.claude/state/paceline)")
 
     parser = argparse.ArgumentParser(
         prog="paceline", parents=[common],
@@ -2502,7 +2502,7 @@ def build_parser():
     return parser
 
 
-GROUPS = {"cache-watch": "keep an idle session's prompt cache alive: on|off|status|config",
+GROUPS = {"cache-watch": "keep an idle session's one-hour prompt cache alive: on|off|status|config",
           "context-watch": "context against the auto-compaction point: config|status",
           "usage-watch": "read the account's exact usage through Claude Code: on|off|status"}
 

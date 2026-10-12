@@ -126,5 +126,5 @@ narrow terminal, or the readings in the Claude mobile app, which has no row.
 
 **How to tell it worked:** Claude Code answers `Status pane opened.` and the pane shows the cards.
 
-The row anatomy page draws the pane for each moment of a working day, in the CLI and in Desktop:
-see [The /pitboard pane](row-anatomy.html#pane).
+The getting-started page draws the pane in the CLI and in Desktop:
+see [Getting started, step 3](https://agentpit-lab.github.io/agentpit/plugins/pitboard/docs/getting-started.html#install).

@@ -29,8 +29,14 @@ Then tell the operator, in one or two lines and in their language, what the comm
 - `on` succeeded: watching is on, the cache expiry and the next wake time; the session wakes only
   while idle; any message from them resets the count; replying `stop` turns it off. A push reaches
   the phone only with Remote Control on and "Push when Claude decides" enabled in `/config`.
-- `on` printed `not started`: the reason as printed. Cache-watch keeps only one-hour cache entries.
+- `on` printed `not started`: the reason as printed. Cache-watch keeps only one-hour cache entries,
+  and only the main thread's entries count.
 - `off`, `status`, `config`: the printed lines, unchanged in substance.
 
 Each wake is one turn: a cache read of the whole context, counted against the five-hour limit. After
 `on` succeeds, mention that in the same reply.
+
+Limits: cache-watch keeps only one-hour cache entries and only the main thread's cache, so a resumed
+subagent whose cache expired starts cold; a five-minute main thread is refused even when its
+subagents write one-hour entries; it does nothing in `claude -p` runs. The plugin's
+`docs/limitations.md` lists every limit.

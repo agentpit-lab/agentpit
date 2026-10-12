@@ -51,7 +51,7 @@ where `<config>` is `$CLAUDE_CONFIG_DIR`, else `~/.claude`.
 | `paceline queue fail` |  |
 | `paceline queue retry` |  |
 | `paceline queue remove` |  |
-| `paceline cache-watch` | keep an idle session's prompt cache alive: on\|off\|status\|config |
+| `paceline cache-watch` | keep an idle session's one-hour prompt cache alive: on\|off\|status\|config |
 | `paceline context-watch` | context against the auto-compaction point: config\|status |
 | `paceline usage-watch` | read the account's exact usage through Claude Code: on\|off\|status |
 <!-- generated:end -->
@@ -189,7 +189,10 @@ depends on it.
 
 - `paceline cache-watch on --session ID --data-dir DIR [--lead MIN] [--max N]` watches one session.
   It exits 3 and prints `not started` with the reason when it finds no transcript for the session,
-  no one-hour cache entry yet, or five-minute cache entries.
+  no one-hour cache entry yet, or five-minute cache entries. cache-watch holds only the one-hour
+  prompt cache; when the main thread switches to five-minute entries while watching, it stops
+  itself, and `status` shows the session as `off (five-minute cache)`. See
+  [limitations](limitations.md#cache-watch).
 - `paceline cache-watch off --session ID --data-dir DIR` stops watching a session.
 - `paceline cache-watch status --data-dir DIR` lists every watched session: on or off and why, the
   wakes so far, the cache expiry, and the next wake. It removes the state of sessions whose

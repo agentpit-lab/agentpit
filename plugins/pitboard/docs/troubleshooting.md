@@ -23,8 +23,7 @@ sits under the prompt, above the hint line; in Desktop, above the prompt.
 **Cause:** pitboard reads the branch with `git branch --show-current` in the start directory, and
 shows the `Branch` row in the `ⓘ` card only when that returns a name. The row is missing when:
 
-- Claude Code runs no processes for a plugin on this surface, as in Desktop.
-- `git` is not on `PATH`.
+- `git` is not on the `PATH` of the environment Claude Code starts in.
 - The start directory is not in a git repository.
 - `HEAD` is detached, so there is no current branch.
 

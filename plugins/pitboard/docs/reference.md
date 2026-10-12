@@ -63,7 +63,7 @@ thin rule in Desktop. Readings of one group are parted by a dot. `ⓘ` closes th
 | `5h`, `7d` | Two-cell gauge; the percentage once it leaves calm | Bar with an even-pace tick, the percentage and the time to reset at every level; see [Desktop limit styles](#desktop-limit-styles) |
 | Model-scoped limit (`Fable`, ...) | Two-cell gauge; the percentage once it leaves calm | Pie; the percentage once it leaves calm |
 | Advisor | Its own group between `Ctx` and `Cache`, only while an advisor is set; a click opens its line; also in the `ⓘ` line | Its own group between `Ctx` and `Cache`, only while an advisor is set |
-| Branch | In the `ⓘ` line | Absent; Desktop runs no processes for a plugin |
+| Branch | In the `ⓘ` line | In the session card |
 | `ⓘ` | Opens the session line | Shows the session card |
 
 A CLI gauge is two cells of a block that rises in eighths over a grey track, in the level's colour
@@ -120,7 +120,7 @@ the fullest style that fits the window:
 The Desktop card shows the rows, the bar of a limit, and advice when the reading needs a decision.
 The `/pitboard` pane shows every card in the row's order with its explanations; see
 [Open every card with /pitboard](how-to.md#open-every-card-with-pitboard), and the pane itself in the
-CLI and in Desktop in [The /pitboard pane](row-anatomy.html#pane).
+CLI and in Desktop in [Getting started, step 3](https://agentpit-lab.github.io/agentpit/plugins/pitboard/docs/getting-started.html#install).
 
 ## Levels
 
@@ -211,7 +211,7 @@ and not empty, else `<config>/state/paceline`, the rule paceline uses.
 - Until the first request reports an effort level, the effort comes from `modelSettings` or
   `effortLevel` in the settings Claude Code loaded.
 
-pitboard runs these processes where Claude Code runs processes for a plugin:
+pitboard runs these processes, in the CLI and in Desktop:
 
 | Command | For |
 |---|---|
@@ -234,5 +234,6 @@ session starts with a Pace.
 | [paceline](../../paceline/README.md) | Readings other sessions saw, and Pace from the first draw |
 | paceline's usage-watch | Model-scoped limits |
 
-`git`, `pwsh`, and `node` help only where Claude Code runs processes for a plugin, the CLI. The
-layout is fixed; pitboard has no settings.
+`git`, `pwsh`, and `node` help only when they are on the `PATH` of the environment Claude Code
+starts in ([limitations](limitations.md#some-readings-need-git-pwsh-or-node)). The layout is fixed;
+pitboard has no settings.

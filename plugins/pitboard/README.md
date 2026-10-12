@@ -16,7 +16,7 @@ Windows, macOS, and Linux.
 Requirements:
 
 - Claude Code 2.1.287 or later.
-- Optional, where Claude Code runs processes for a plugin (the CLI): `git` for the branch, `pwsh`
+- Optional, on the `PATH` of the environment Claude Code starts in: `git` for the branch, `pwsh`
   (PowerShell 7) for weekday names in the OS locale on Windows, and `node` for a session transcript
   over 4 MiB.
 - Optional: [paceline](../paceline/README.md), for readings other sessions saw and, with its
@@ -41,5 +41,6 @@ fixed colours. pitboard writes no file and has no settings.
 - [Reference](docs/reference.md): readings and card rows, levels, environment variables, files read,
   requirements.
 - [How pitboard works](docs/explanation.md): where the numbers come from, the formulas, why the row
-  can differ from `/usage`, what pitboard cannot see, colours.
+  can differ from `/usage`, colours.
 - [Troubleshooting](docs/troubleshooting.md): problems by symptom, each with cause, check, and fix.
+- [Limitations](docs/limitations.md): what the plugin cannot do, and what still works.

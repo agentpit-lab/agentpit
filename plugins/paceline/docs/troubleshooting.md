@@ -3,7 +3,8 @@
 Find the symptom, then read its cause, the command that checks it, and the fix. For most problems,
 start with `paceline doctor`: it checks the Python runtime, the state directory, the pace switch,
 the inbox, the limits file, the process lookup, the memory reading, the time zone, the hooks, and
-the debug log, and prints a hint for what it finds.
+the debug log, and prints a hint for what it finds. Run the `paceline` commands in a session's Bash
+tool, or ask the agent to run them.
 
 ## Pace looks inactive
 
@@ -61,7 +62,7 @@ counts.
 
 **Fix:** correct the profile with `paceline profile set` (see
 [Change a profile setting](how-to.md#change-a-profile-setting)), or cancel a plan that no longer
-holds. The [budget simulator](budget-simulator.html) shows how each input moves the budget, and the
+holds. The [budget simulator](https://agentpit-lab.github.io/agentpit/plugins/paceline/docs/budget-simulator.html) shows how each input moves the budget, and the
 [explanation](explanation.md#the-budget-per-hour) gives the rules.
 
 ## Data is STALE

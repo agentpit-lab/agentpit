@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.1.5 - 2026-10-12
+
+### Added
+
+- `docs/limitations.md` lists what pitboard cannot do, grouped by where you meet it, each entry with
+  what you see and what still works; the row anatomy page links it.
+
+### Changed
+
+- The row anatomy page no longer repeats the `/pitboard` pane, which the getting-started page shows
+  in step 3.
+
+### Fixed
+
+- The docs no longer say that only the CLI runs processes for a plugin. Desktop runs them too: the
+  readings that need `git`, `pwsh` or `node`, such as the branch, show in Desktop's card as in the
+  CLI.
+
 ## 0.1.4 - 2026-10-12
 
 ### Added

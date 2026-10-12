@@ -3,7 +3,7 @@
 This page explains where paceline's numbers come from and how pace turns them into a budget, a
 recommendation, and the night queue's decisions. For the exact commands and keys, see the
 [reference](reference.md). To try the budget with your own numbers, open the
-[budget simulator](budget-simulator.html).
+[budget simulator](https://agentpit-lab.github.io/agentpit/plugins/paceline/docs/budget-simulator.html).
 
 ## Where usage readings come from
 
@@ -58,6 +58,35 @@ Code refuses the request, and usage-watch records `network error`.
   125 seconds between requests plus up to 15 seconds to the merge.
 - For 15 minutes after an exact reading, session readings leave that bucket alone. The
   [inbox rules](reference.md#the-inbox-for-writers) give the full merge rule.
+
+## Who pace is for
+
+pace pays off when the weekly limit runs out before the reset, when many agents, Workflows, or night
+queues run, or when you want to use the whole week's limit. Find your profile by what pitboard or
+`/usage` shows:
+
+| Profile | Signs in pitboard or `/usage` | What fits |
+|---|---|---|
+| A. The weekly limit always lasts, and you do not want to use more | At the reset, the `Week` card shows `Spare` of more than a day (about 14 points); `7d` stays grey; `/usage` shows the weekly limit well below 100% at the reset | pace adds little. Keep context-watch; turn on usage-watch only for exact figures in pitboard |
+| B. The weekly limit runs out before the reset | `Overspent` in amber or red mid-week; `7d` amber from 80%, red from 95% before the reset day; `/usage` shows the weekly limit reached early | pace: a budget per hour, the throttle to routine models from 85% weekly, the reserve held to the week's end, the confirmation when the week is used up |
+| C. Bursts of many agents fill the five-hour window | The `5h limit` card shows `Runs out` or turns red; Pace above Budget | pace: the advised number of agents in the `pace:` line, the confirmation from 80% (day) or 95% (night) of the five-hour window, reservations; usage-watch for fresh data |
+| D. You want to use the whole week's limit | `Spare` near the reset, while work waits; `/paceline:pace status` shows `forecast unused` | pace with a night queue and a leftover pool for the last night before the reset; usage-watch so night data stays fresh |
+| E. Agents should work while you are away | Any of the above, plus unattended work | A night queue with usage-watch on and the machine kept awake ([Run a night queue](how-to.md#run-a-night-queue)) |
+
+The [getting-started page](https://agentpit-lab.github.io/agentpit/plugins/paceline/docs/getting-started.html#fit) asks three questions: where the `Week` card
+usually stands near the reset (Spare more than a day, about even, Overspent or run out, or not
+sure); whether you run one session with few subagents or many subagents, Workflows, or parallel
+sessions; and whether agents should work while you are away. The first matching rule gives the
+recommendation:
+
+1. Not sure where the `Week` card stands: watch it in pitboard for a week, or turn pace on and read
+   `/paceline:pace status`; `/paceline:pace off` undoes it.
+2. Agents should work while you are away: profiles D and E, pace with a night queue and usage-watch.
+3. Overspent or run out: profile B, pace, with profile C's advice as well when many agents run.
+4. Many agents: profile C, pace and usage-watch.
+5. About even with few subagents: pace is optional; it keeps the even rate and warns before the
+   limits.
+6. Spare with few subagents: profile A; pace adds little.
 
 ## Day, night, and off hours
 
@@ -175,8 +204,10 @@ earliest of them was acquired, never below 0. Only the night queue subtracts it 
 The `pace:` line shows the number of active reservations; the budget per hour does not change.
 
 A reservation ends when it is released, when its lease expires (30 minutes, or 240 minutes for a
-subagent's keyed reservation), or when its process is gone. At session end, the hook releases the
-session's reservations. The released reservation records its actual cost: the change in weekly
+subagent's keyed reservation), or when its process is gone. At session end, the hook asks pace to
+release the session's reservations; reservations may outlive their session when that does not
+finish in Claude Code's time for session-end hooks (see
+[limitations](limitations.md#reservations-may-outlive-their-session)). The released reservation records its actual cost: the change in weekly
 usage since it was acquired.
 
 ## The night queue's decisions
@@ -225,12 +256,5 @@ fills from `paceline queue report` and the queue's state.
 
 ## What pace cannot see
 
-- Without usage-watch, only the five-hour and weekly windows: the session readings paceline
-  records hold only those two. A model's own weekly limit is not seen, and `--model` has no effect.
-- Without usage-watch, the data is as of the last turn of any session on this machine.
-- A session whose requests carry no limit readings gives pace no data.
-- The measured cost of a reservation or queue item is a change in account-wide weekly usage, so
-  parallel work inflates it. A reservation that overlapped another is marked `overlapped`, and
-  `paceline calibrate` leaves it out.
-- The forecast and `paceline calibrate` need history: 3 hours of the last day for the forecast, and
-  `calibration_min_days` (14) days for calibration.
+The [limitations](limitations.md#data-pace-cannot-see) list what pace cannot see, with every other
+limitation of paceline.

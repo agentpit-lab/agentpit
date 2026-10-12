@@ -1,7 +1,7 @@
 # How pitboard works
 
-Where pitboard's numbers come from, how fresh they are, how it computes Pace, Budget, and the rest,
-and what it cannot see. For the list of readings and thresholds, see the [reference](reference.md).
+Where pitboard's numbers come from, how fresh they are, and how it computes Pace, Budget, and the
+rest. For the list of readings and thresholds, see the [reference](reference.md).
 
 ## Where the numbers come from
 
@@ -30,7 +30,7 @@ flowchart LR
 | `Session` hits, the TTL | The session transcript since the last compaction. |
 | Model, effort, Claude Code version, turns, session time | Claude Code. Until a request reports the effort, it comes from `modelSettings` or `effortLevel` in the settings. `/effort` in this session shows at once. |
 | Advisor | `advisorModel` in `settings.json`. `/advisor` in this session shows at once. |
-| Branch | `git branch --show-current` in the start directory, where Claude Code runs processes for a plugin. |
+| Branch | `git branch --show-current` in the start directory. |
 
 `/clear`, and a resume inside a running session, drop the previous conversation's context, cache, and
 session readings at once. The limits stay, because they belong to the account. Subagents' requests and
@@ -146,17 +146,8 @@ of budget is 100/7, about 14.3 points.
 
 ## What pitboard cannot see
 
-- Limits while every session is idle, unless paceline's usage-watch is on.
-- Other sessions' readings, unless paceline records them.
-- Model-scoped limits, unless paceline's usage-watch writes them.
-- The advisor of the running conversation. pitboard shows the setting, `advisorModel` in
-  `settings.json`.
-- Pointer movement in Desktop. Desktop tells a plugin nothing about hover, so a card is the surface's
-  own hover reveal.
-- A stable transcript format. The transcript is a private file of Claude Code. If pitboard cannot
-  read it, `Session` counts only the requests since pitboard loaded or since the last compaction,
-  and `TTL` reads
-  `5m?`.
+The [limitations](limitations.md#data-pitboard-cannot-see) list what pitboard cannot see, with every other
+limitation of pitboard.
 
 ## Colours
 

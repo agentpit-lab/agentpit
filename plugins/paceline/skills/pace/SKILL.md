@@ -4,7 +4,9 @@ description: >
   Turn pace on or off, show its status, a diagnosis or its profile, or change a profile setting.
   Pace turns the five-hour and weekly limits into a per-hour budget; while it is on, its hooks put
   a pace line before every Agent and Workflow launch, ask for confirmation at a hard limit, hold a
-  reservation for each subagent and remind at session start of unconfirmed plans. Use when the
+  reservation for each subagent, and at session start remind of unconfirmed plans, suggest
+  leftover tasks on Thursday and Friday when the forecast leaves part of the weekly limit unused,
+  and hint while the profile counts in UTC and the machine is in another zone. Use when the
   operator asks to turn pace on or off, to see the budget, to change a pace setting such as the
   time zone or the day hours, or to check why pace misbehaves.
 argument-hint: "on | off | status | doctor | profile | profile set KEY VALUE"

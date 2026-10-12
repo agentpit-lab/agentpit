@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.2.3 - 2026-10-12
+
+### Added
+
+- `docs/limitations.md` lists what paceline cannot do, grouped by where you meet it, each entry with
+  what you see and what still works. The cache-watch and usage-watch how-tos state their limits
+  before the steps, and the docs check fails when a listed limit is no longer stated where its
+  record says.
+- The getting-started page and the explanation have "Do you need pace?": five profiles by what
+  pitboard or `/usage` shows, and three questions that recommend a setup.
+
+### Changed
+
+- Steps that turn a function on or off or show its status use the slash commands
+  `/paceline:pace`, `/paceline:usage-watch`, `/paceline:context-watch` and `/paceline:cache-watch`.
+  The `paceline` command stays in the reference, the night queue, plan and profile guides, and
+  troubleshooting.
+- The skills, the help text and the plugin description state the same behaviour and limits as the
+  docs: cache-watch keeps only the main thread's one-hour cache, usage-watch needs a claude.ai login
+  and an open session and reads an endpoint outside Anthropic's published API, the state directory
+  follows `CLAUDE_CONFIG_DIR`, and pace's session-start reminders include the leftover suggestion
+  and the time zone hint.
+
 ## 0.2.2 - 2026-10-12
 
 - The documentation pages draw the terminal in Claude Code's theme colours, light or dark with the
