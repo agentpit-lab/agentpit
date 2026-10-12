@@ -1,0 +1,239 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>pitboard anatomy</title>
+<style>
+/* One reading column: row specimens first, then reference tables. Self-contained, no external assets. */
+:root {
+  --bg: #f6f5f1; --panel: #ffffff; --fg: #23241f; --muted: #696b63; --line: #dddcd5; --code-bg: #eeede7;
+  --body: system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "Cascadia Mono", "JetBrains Mono", Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --bg: #1b1c19; --panel: #24251f; --fg: #e6e5df; --muted: #9c9e95; --line: #3a3b35; --code-bg: #2e2f29; color-scheme: dark; }
+}
+:root[data-theme="dark"] { --bg: #1b1c19; --panel: #24251f; --fg: #e6e5df; --muted: #9c9e95; --line: #3a3b35; --code-bg: #2e2f29; color-scheme: dark; }
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--fg); font: 15px/1.55 var(--body); margin: 0; padding: 28px 16px 56px; }
+main { max-width: 980px; margin: 0 auto; display: grid; gap: 40px; }
+h1, h2 { font-weight: 600; margin: 0; }
+h1 { font-size: 1.9rem; line-height: 1.15; }
+h2 { font-size: 1.3rem; }
+h3 { font-size: .78rem; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 0; font-weight: 600; }
+p { margin: 0; }
+section { display: grid; gap: 14px; min-width: 0; }
+code { font-family: var(--mono); font-size: .86em; background: var(--code-bg); padding: 1px 5px; border-radius: 4px; }
+.lede, .note { color: var(--muted); }
+.note { font-size: .86rem; }
+.specimen { display: grid; gap: 8px; min-width: 0; }
+.scroll { overflow-x: auto; }
+/* Specimens copy each surface's own look, so they keep fixed colours in both page themes. */
+.term { background: #fdf6e3; color: #4a4a44; font: 14px/1.5 var(--mono); padding: 12px 14px; border-radius: 6px; border: 1px solid #e6dcc0; white-space: pre; width: max-content; min-width: 100%; }
+.term .g { background: #afafaf; }
+.term.dark { background: #0f2a33; color: #c9d1c9; border-color: #1d3f4a; }
+.term.dark .g { background: #505050; }
+.desk { background: #f1f1ef; color: #3b3b38; font: 15px/1 var(--body); padding: 14px 18px; border-radius: 14px; display: flex; align-items: center; gap: 12px; width: max-content; min-width: 100%; position: relative; }
+.desk.dark { background: #262624; color: #d4d3cd; }
+.desk .r { display: flex; align-items: center; gap: 7px; padding: 4px 9px; border-radius: 6px; }
+.desk .r.hover { background: rgba(128,128,128,.12); }
+.desk .rule { width: 1px; height: 16px; background: #b9b9b4; }
+.desk.dark .rule { background: #55554f; }
+.desk svg { display: block; }
+.card { position: absolute; left: 150px; bottom: 58px; background: #fff; color: #2b2b28; border: 1px solid #d9d8d2; border-radius: 10px; padding: 12px 14px; font: 13px/1.5 var(--body); box-shadow: 0 6px 18px rgba(0,0,0,.12); width: 290px; }
+.card b { display: block; margin-bottom: 6px; font-size: 14px; }
+.card table { font-size: 13px; }
+.card td { border: 0; padding: 1px 12px 1px 0; }
+.stage { padding-top: 250px; }
+table { border-collapse: collapse; width: 100%; font-size: .9rem; font-variant-numeric: tabular-nums; }
+th, td { text-align: left; vertical-align: top; padding: 8px 10px; border-bottom: 1px solid var(--line); }
+th { font-size: .74rem; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); font-weight: 600; white-space: nowrap; }
+td:first-child { white-space: nowrap; font-weight: 500; }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 4px 6px; min-width: 0; }
+.sw { display: inline-block; width: .9em; height: .9em; border-radius: 3px; vertical-align: -1px; margin-right: 6px; border: 1px solid rgba(0,0,0,.12); }
+.cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 18px; }
+.cols > * { min-width: 0; }
+ul { margin: 0; padding-left: 1.2em; display: grid; gap: 6px; }
+</style>
+</head>
+<body>
+<main>
+  <header style="display:grid;gap:10px">
+    <h3>pitboard · function hooks</h3>
+    <h1>The status row in the CLI and Claude Code Desktop</h1>
+    <p class="lede">One row of signals next to the prompt. Grey means nothing needs you. A colour and a number appear only once a reading crosses its threshold. Each reading has a card with its name and its readings, a click away in the CLI and a hover away in Desktop; <code>/pitboard</code> unfolds every card in a pane with what each reading means.</p>
+  </header>
+
+  <section>
+    <h2>What it looks like</h2>
+    <div class="specimen">
+      <h3>CLI · above the prompt's hint line · ⓘ opened</h3>
+      <div class="scroll"><div class="term"><span style="color:#c9c3b0">────────────────────────────────────────────────────────────────</span>
+<span style="color:#9a9a92">Ctx</span> <span class="g" style="color:#666666">▁▁</span> <span style="color:#5faf5f">↻</span> <span style="color:#c9c3b0">│</span> <span style="color:#9a9a92">Cache</span> <span class="g" style="color:#666666">▂▂</span> <span style="color:#c9c3b0">·</span> <span style="color:#9a9a92">Hit</span> <span style="color:#85877f">99%</span> <span style="color:#c9c3b0">│</span> <span style="color:#9a9a92">5h</span> <span class="g" style="color:#666666">▁▁</span> <span style="color:#c9c3b0">·</span> <span style="color:#9a9a92">7d</span> <span class="g" style="color:#e0b000">▇▇</span> <span style="color:#e0b000;font-weight:700">92%</span> <span style="color:#c9c3b0">·</span> <span style="color:#9a9a92">Fable</span> <span class="g" style="color:#666666">▁▁</span> <span style="color:#c9c3b0">│</span> <span style="color:#23241f">ⓘ</span>
+                                                         <span style="color:#6e706b">▲</span>
+<span style="color:#d787ff;font-weight:700">Opus 5.5</span><span style="color:#8a8a84"> · Effort </span><span style="color:#4eba65">medium</span><span style="color:#8a8a84"> · Advisor </span><span style="color:#ff87d7">Fable</span>
+<span style="color:#8a8a84">Claude Code </span>2.1.289<span style="color:#8a8a84"> · Started in </span>…\my-repo<span style="color:#8a8a84"> · Branch </span>develop<span style="color:#8a8a84"> · Running </span>4h 02m<span style="color:#8a8a84"> · Turns </span>47<span style="color:#8a8a84"> · API cost </span>$34.51</div></div>
+      <div class="scroll"><div class="term dark"><span style="color:#8f9a95">Ctx</span> <span class="g" style="color:#999999">▂▂</span> <span style="color:#5faf5f">↻</span> <span style="color:#3d5a63">│</span> <span style="color:#8f9a95">Cache</span> <span style="color:#5fd7ff">❄</span>  <span style="color:#3d5a63">·</span> <span style="color:#8f9a95">Hit</span> <span style="color:#a9aba5">100%</span> <span style="color:#3d5a63">│</span> <span style="color:#8f9a95">5h</span> <span class="g" style="color:#999999">▁▁</span> <span style="color:#3d5a63">·</span> <span style="color:#8f9a95">7d</span> <span class="g" style="color:#e0b000">▇▇</span> <span style="color:#e0b000;font-weight:700">92%</span> <span style="color:#3d5a63">·</span> <span style="color:#8f9a95">Fable</span> <span class="g" style="color:#999999">▂▂</span> <span style="color:#3d5a63">│</span> ⓘ
+                                                <span style="color:#c9d1c9">▲</span>
+<span style="font-weight:700">Week</span><span style="color:#6e706b"> · Used </span><span style="color:#e0b000">92%</span><span style="color:#6e706b"> · Resets </span>Sat 05:00<span style="color:#6e706b"> · Pace </span><span style="color:#e0b000">2.1%/h</span><span style="color:#6e706b"> · Budget </span>0.6%/h<span style="color:#6e706b"> · Week elapsed </span>84%<span style="color:#6e706b"> · Overspent </span><span style="color:#e0b000">8 pts (13h 26m)</span>
+<span style="color:#6e706b">92% used: save it for work that needs it.</span></div></div>
+      <p class="note">Light and dark terminal. A gauge is two cells of a block that rises in eighths (<code>▁</code> to <code>█</code>) over a grey track; the track and a calm fill are theme colours, so both stay visible on either background. The name stands left of its gauge; a dot parts readings of one group, <code>│</code> the groups. <code>↻</code> after the context: auto-compact is on. The cache gauge fills as its TTL runs out; a flame while a reply runs, a snowflake once expired. A click (or Enter under the focus) on a name opens its readings as one line with a <code>▲</code> under it, and advice under them only when the reading needs a decision; a second click closes it.</p>
+    </div>
+
+    <div class="specimen">
+      <h3>Desktop · in the band above the prompt · light</h3>
+      <div class="scroll"><div class="desk">
+        <div class="r"><span>Ctx</span><svg width="16" height="16" viewBox="0 0 16 16" role="img" aria-label="Ctx 12%"><circle cx="8" cy="8" r="8" fill="#dcdbd6"/><circle cx="8" cy="8" r="4" fill="none" stroke="#8a8a85" stroke-width="8" stroke-dasharray="3.0 25.13" transform="rotate(-90 8 8)"/></svg><span style="color:#3d9a5c">↻</span></div>
+        <span class="rule"></span>
+        <div class="r"><span style="color:#8a8a85">Advisor</span><span style="color:#ff87d7">Fable</span></div>
+        <span class="rule"></span>
+        <div class="r"><span>Cache</span><svg width="16" height="16" viewBox="0 0 16 16" role="img" aria-label="Cache cold"><g stroke="#2a9db5" stroke-width="1.4" stroke-linecap="round" fill="none"><path d="M8 1.5V14.5M2.4 4.75L13.6 11.25M2.4 11.25L13.6 4.75"/><path d="M6.3 2.6L8 4L9.7 2.6M6.3 13.4L8 12L9.7 13.4"/></g></svg></div><span style="color:#8a8a85">·</span>
+        <div class="r"><span>Hit</span><span style="color:#8a8a85">100%</span></div>
+        <span class="rule"></span>
+        <div class="r"><span>5h</span><svg width="40" height="12" viewBox="0 0 40 12" role="img" aria-label="5h 8%, even pace 16%"><rect x="0" y="4" width="40" height="4" rx="2" fill="#dcdbd6"/><rect x="0" y="4" width="3.2" height="4" rx="2" fill="#8a8a85"/><rect x="5.4" y="1" width="2" height="10" rx="1" fill="#2f2f2c"/></svg><b>8%</b><span style="color:#8a8a85">4h 12m</span></div><span style="color:#8a8a85">·</span>
+        <div class="r"><span>7d</span><svg width="40" height="12" viewBox="0 0 40 12" role="img" aria-label="7d 92%, even pace 84%"><rect x="0" y="4" width="40" height="4" rx="2" fill="#dcdbd6"/><rect x="0" y="4" width="36.8" height="4" rx="2" fill="#c4841d"/><rect x="32.6" y="1" width="2" height="10" rx="1" fill="#2f2f2c"/></svg><b style="color:#c4841d">92%</b><span style="color:#8a8a85">1d 3h</span></div><span style="color:#8a8a85">·</span>
+        <div class="r"><svg width="16" height="16" viewBox="0 0 16 16" role="img" aria-label="Fable 14%"><circle cx="8" cy="8" r="8" fill="#dcdbd6"/><circle cx="8" cy="8" r="4" fill="none" stroke="#8a8a85" stroke-width="8" stroke-dasharray="3.5 25.13" transform="rotate(-90 8 8)"/></svg><span>Fable</span></div>
+        <span class="rule"></span>
+        <div class="r">ⓘ</div>
+      </div></div>
+      <p class="note">Advisor shows only while one is set. Fable is a model's own weekly limit, shown while the limits file carries it; it turns amber from 80% and red from 95%, like the week.</p>
+    </div>
+
+    <div class="specimen">
+      <h3>Desktop · a window too narrow for the bars even without their times to reset: the limits turn into pies</h3>
+      <div class="scroll"><div class="desk">
+        <div class="r"><span>Ctx</span><svg width="16" height="16" viewBox="0 0 16 16" role="img" aria-label="Ctx 12%"><circle cx="8" cy="8" r="8" fill="#dcdbd6"/><circle cx="8" cy="8" r="4" fill="none" stroke="#8a8a85" stroke-width="8" stroke-dasharray="3.0 25.13" transform="rotate(-90 8 8)"/></svg><span style="color:#3d9a5c">↻</span></div>
+        <span class="rule"></span>
+        <div class="r"><span style="color:#8a8a85">Advisor</span><span style="color:#ff87d7">Fable</span></div>
+        <span class="rule"></span>
+        <div class="r"><span>Cache</span><svg width="16" height="16" viewBox="0 0 16 16" role="img" aria-label="Cache cold"><g stroke="#2a9db5" stroke-width="1.4" stroke-linecap="round" fill="none"><path d="M8 1.5V14.5M2.4 4.75L13.6 11.25M2.4 11.25L13.6 4.75"/><path d="M6.3 2.6L8 4L9.7 2.6M6.3 13.4L8 12L9.7 13.4"/></g></svg></div><span style="color:#8a8a85">·</span>
+        <div class="r"><span>Hit</span><span style="color:#8a8a85">100%</span></div>
+        <span class="rule"></span>
+        <div class="r"><svg width="16" height="16" viewBox="0 0 16 16" role="img" aria-label="5h 8%"><circle cx="8" cy="8" r="8" fill="#dcdbd6"/><circle cx="8" cy="8" r="4" fill="none" stroke="#8a8a85" stroke-width="8" stroke-dasharray="2.0 25.13" transform="rotate(-90 8 8)"/></svg><span>5h</span></div><span style="color:#8a8a85">·</span>
+        <div class="r"><svg width="16" height="16" viewBox="0 0 16 16" role="img" aria-label="7d 92%"><circle cx="8" cy="8" r="8" fill="#dcdbd6"/><circle cx="8" cy="8" r="4" fill="none" stroke="#c4841d" stroke-width="8" stroke-dasharray="23.1 25.13" transform="rotate(-90 8 8)"/></svg><span>7d</span><b style="color:#c4841d">92%</b><span style="color:#8a8a85">1d 3h</span></div><span style="color:#8a8a85">·</span>
+        <div class="r"><svg width="16" height="16" viewBox="0 0 16 16" role="img" aria-label="Fable 14%"><circle cx="8" cy="8" r="8" fill="#dcdbd6"/><circle cx="8" cy="8" r="4" fill="none" stroke="#8a8a85" stroke-width="8" stroke-dasharray="3.5 25.13" transform="rotate(-90 8 8)"/></svg><span>Fable</span></div>
+        <span class="rule"></span>
+        <div class="r">ⓘ</div>
+      </div></div>
+      <p class="note">The full row needs about 100 columns. The row steps down when its estimated width, from the parts it draws, passes the band's width in cells: first the bars drop their time to reset, which their cards still show, then the limits turn into pies. A limit pie shows its number and time to reset only at watch and act; the row steps back up once it fits again.</p>
+    </div>
+
+    <div class="specimen">
+      <h3>Desktop · dark · pointer over the weekly limit</h3>
+      <div class="scroll stage"><div class="desk dark">
+        <div class="r"><span>Ctx</span><svg width="16" height="16" viewBox="0 0 16 16" role="img" aria-label="Ctx 12%"><circle cx="8" cy="8" r="8" fill="#3a3a37"/><circle cx="8" cy="8" r="4" fill="none" stroke="#9a9893" stroke-width="8" stroke-dasharray="3.0 25.13" transform="rotate(-90 8 8)"/></svg><span style="color:#3d9a5c">↻</span></div>
+        <span class="rule"></span>
+        <div class="r"><span>Cache</span><svg width="16" height="16" viewBox="0 0 16 16" role="img" aria-label="Cache 36% of the TTL gone"><circle cx="8" cy="8" r="8" fill="#3a3a37"/><circle cx="8" cy="8" r="4" fill="none" stroke="#9a9893" stroke-width="8" stroke-dasharray="9.0 25.13" transform="rotate(-90 8 8)"/></svg></div><span style="color:#9a9893">·</span>
+        <div class="r"><span>Hit</span><span style="color:#9a9893">100%</span></div>
+        <span class="rule"></span>
+        <div class="r hover"><span>7d</span><svg width="40" height="12" viewBox="0 0 40 12" role="img" aria-label="7d 92%, even pace 84%"><rect x="0" y="4" width="40" height="4" rx="2" fill="#3a3a37"/><rect x="0" y="4" width="36.8" height="4" rx="2" fill="#c4841d"/><rect x="32.6" y="1" width="2" height="10" rx="1" fill="#ecebe7"/></svg><b style="color:#c4841d">92%</b><span style="color:#9a9893">1d 3h</span></div>
+        <div class="card" style="background:#2b2b28;color:#e6e5df;border-color:#44443f"><b>Week</b><table>
+          <tr><td style="color:#9a9893">Used</td><td style="text-align:right;color:#c4841d;font-weight:600">92%</td></tr>
+          <tr><td style="color:#9a9893">Resets</td><td style="text-align:right;font-weight:600">Sat 05:00</td></tr>
+          <tr><td style="color:#9a9893">Pace</td><td style="text-align:right;color:#c4841d;font-weight:600">2.1%/h</td></tr>
+          <tr><td style="color:#9a9893">Budget</td><td style="text-align:right;font-weight:600">0.6%/h</td></tr>
+          <tr><td style="color:#9a9893">Week elapsed</td><td style="text-align:right;font-weight:600">84%</td></tr>
+          <tr><td style="color:#9a9893">Overspent</td><td style="text-align:right;color:#c4841d;font-weight:600">8 pts (13h 26m)</td></tr></table>
+          <svg width="260" height="12" viewBox="0 0 260 12" style="display:block;margin:6px 0"><rect x="0" y="3" width="260" height="6" rx="3" fill="#3a3a37"/><rect x="0" y="3" width="239" height="6" rx="3" fill="#c4841d"/><rect x="217" y="0" width="2" height="12" rx="1" fill="#ecebe7"/></svg>
+          <p style="margin:0;color:#9a9893">92% used: save it for work that needs it.</p></div>
+      </div></div>
+      <p class="note">Hovering a reading shades it and shows its card, drawn in Desktop's own text and framed by Desktop as a popover: the reading's name, one reading to a line with the value at the right edge, a bar for a limit (used, the 5h projection paler, the even-pace tick), and advice only when the reading needs a decision. The explanations are in <code>/pitboard</code>. Model and effort are Desktop's own, under the prompt, so the row leaves them out.</p>
+    </div>
+  </section>
+
+  <section>
+    <h2>Readings</h2>
+    <div class="panel scroll">
+      <table>
+        <thead><tr><th>Name</th><th>What it shows</th><th>Amber (watch)</th><th>Red (act)</th><th>In the card</th></tr></thead>
+        <tbody>
+          <tr><td>Ctx</td><td>Context fill. With auto-compact on, the limit is the compaction trigger, else the whole window. <code>↻</code> after it while auto-compact is on.</td><td>from 60%</td><td>from 80%, or three turns or fewer to compaction at the recent growth</td><td>Auto-compact on, on (env, settings, account) or off; Used of the compact point; Left; Window; Turns left</td></tr>
+          <tr><td>Advisor</td><td>The <code>/advisor</code> model in its colour, dimmed with <code>(inactive)</code> when weaker than the main model. Shown only while one is set.</td><td colspan="2">no level</td><td>Model, Main, State. CLI: in the <code>ⓘ</code> line</td></tr>
+          <tr><td>Cache</td><td>The prompt cache's TTL (5 min or 1 h, less 5 s margin): the pie fills as it runs out. A flame while a request runs, a blue snowflake once the cache expired.</td><td>under half the TTL, at most 15 min</td><td>under a fifth of the TTL, at most 5 min</td><td>Countdown (minutes while calm, <code>mm:ss</code> once it warns), TTL, If cold: the context to write again and how much dearer (20× at 1 h, 12.5× at 5 min)</td></tr>
+          <tr><td>Hit</td><td>Share of the last request's input read from the cache. A number, no gauge.</td><td colspan="2">no level</td><td>Last turn, Session (since the last compaction)</td></tr>
+          <tr><td>5h</td><td>Five-hour limit.</td><td>from 70%</td><td>from 90%, or a pace that runs out before the reset</td><td>Used, Resets in, Pace (90 min), Budget, At reset or Runs out; a bar with the projection</td></tr>
+          <tr><td>7d</td><td>Weekly limit across models.</td><td>from 80%</td><td>from 95%</td><td>Used, Resets, Pace (6 h), Budget, Week elapsed, Spare or Overspent (amber, red past a day); a bar</td></tr>
+          <tr><td>Fable …</td><td>A model's own weekly limit, when the account has one. Shown while the limits file carries it and holds a reading tagged <code>usage-endpoint</code> at most 15 min old.</td><td>from 80%</td><td>from 95%</td><td>Used, Resets (its own)</td></tr>
+          <tr><td>ⓘ</td><td>The session card.</td><td colspan="2">—</td><td>Effort, Advisor, Claude Code, Started in, Branch (CLI), Running, Turns, API cost</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="note">The number next to a name shows only at watch and act, except a Desktop limit, which always shows it. Thresholds are the same in the CLI and Desktop.</p>
+  </section>
+
+  <section>
+    <h2>Colours</h2>
+    <p>A colour means one thing everywhere: none, nothing to do (good values stay uncoloured too); amber, worth a glance; red, changes what to do next; blue, a cold cache; green, a state that is on (auto-compact). Model and effort colours name the model, not a state.</p>
+    <div class="cols">
+      <div class="panel">
+        <table>
+          <thead><tr><th>Level</th><th>Desktop</th><th>CLI</th></tr></thead>
+          <tbody>
+            <tr><td>calm</td><td><span class="sw" style="background:#8a8a85"></span>#8a8a85 (dark #9a9893)</td><td><span class="sw" style="background:#666666"></span><span class="sw" style="background:#999999"></span>theme key <code>inactive</code></td></tr>
+            <tr><td>watch</td><td><span class="sw" style="background:#c4841d"></span>#c4841d</td><td><span class="sw" style="background:#e0b000"></span>#e0b000</td></tr>
+            <tr><td>act</td><td><span class="sw" style="background:#e0483e"></span>#e0483e</td><td><span class="sw" style="background:#f05a4f"></span>#f05a4f</td></tr>
+            <tr><td>cold cache</td><td><span class="sw" style="background:#2a9db5"></span>#2a9db5</td><td><span class="sw" style="background:#5fd7ff"></span>#5fd7ff</td></tr>
+            <tr><td>on (auto-compact)</td><td><span class="sw" style="background:#3d9a5c"></span>#3d9a5c</td><td><span class="sw" style="background:#5faf5f"></span>#5faf5f</td></tr>
+            <tr><td>track</td><td><span class="sw" style="background:#dcdbd6"></span>disc #dcdbd6 (dark #3a3a37)</td><td><span class="sw" style="background:#afafaf"></span><span class="sw" style="background:#505050"></span>theme key <code>subtle</code></td></tr>
+            <tr><td>even-pace tick</td><td><span class="sw" style="background:#2f2f2c"></span>#2f2f2c (dark #ecebe7)</td><td>no tick</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="panel">
+        <table>
+          <thead><tr><th>Model</th><th>Colour</th></tr></thead>
+          <tbody>
+            <tr><td>Opus</td><td><span class="sw" style="background:#d787ff"></span>#d787ff</td></tr>
+            <tr><td>Sonnet</td><td><span class="sw" style="background:#5fafff"></span>#5fafff</td></tr>
+            <tr><td>Fable</td><td><span class="sw" style="background:#ff87d7"></span>#ff87d7</td></tr>
+            <tr><td>Haiku</td><td><span class="sw" style="background:#87d7af"></span>#87d7af</td></tr>
+          </tbody>
+        </table>
+        <p class="note" style="padding:6px 10px">The advisor takes its model's colour.</p>
+      </div>
+      <div class="panel">
+        <table>
+          <thead><tr><th>Effort</th><th>Colour</th></tr></thead>
+          <tbody>
+            <tr><td>low</td><td><span class="sw" style="background:#ffc107"></span>#ffc107</td></tr>
+            <tr><td>medium</td><td><span class="sw" style="background:#4eba65"></span>#4eba65</td></tr>
+            <tr><td>high</td><td><span class="sw" style="background:#b1b9f9"></span>#b1b9f9</td></tr>
+            <tr><td>xhigh</td><td><span class="sw" style="background:#d0b4ff"></span>#d0b4ff</td></tr>
+            <tr><td>max</td><td><span class="sw" style="background:#eb5f57"></span>#eb5f57</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Where the data comes from</h2>
+    <div class="panel scroll">
+      <table>
+        <thead><tr><th>Reading</th><th>Source</th><th>When it moves</th></tr></thead>
+        <tbody>
+          <tr><td>Ctx, Cache, Hit, API cost</td><td>the session's own model requests</td><td>after each request; the cache counts down between them</td></tr>
+          <tr><td>auto-compact, compact point and window</td><td><code>/context</code>'s breakdown: <code>autoCompactThreshold</code>, <code>rawMaxTokens</code>, <code>autocompactSource</code></td><td>at session start and after each compaction</td></tr>
+          <tr><td>after a resume</td><td>the session transcript</td><td>Hit, the TTL regime and the last request time return at once, before the first new reply</td></tr>
+          <tr><td>5h, week, Fable and its reset</td><td>The API headers of each reply, merged with paceline's limits file <code>rate-limits.json</code> when it exists (in <code>$PACELINE_STATE_DIR</code>, else <code>~/.claude/state/paceline/</code>); Fable only from that file</td><td>re-read every 20 s, so an idle session sees another session's reading within about 20 s</td></tr>
+          <tr><td>advisor</td><td><code>advisorModel</code> in <code>~/.claude/settings.json</code></td><td>re-read every 20 s; <code>/advisor</code> in this session shows at once</td></tr>
+          <tr><td>Running</td><td>the session's launch, as Claude Code reports it</td><td>a resumed session counts from its first launch; <code>/clear</code> restarts it</td></tr>
+          <tr><td>Branch</td><td><code>git branch --show-current</code> in the start directory</td><td>at session start; CLI only, since Desktop runs no processes for a plugin</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <h2>Worth knowing</h2>
+    <ul>
+      <li>The row shows the advisor setting. <code>/advisor</code> may say the running conversation keeps its previous advisor until <code>/clear</code> or <code>/compact</code>; a plugin cannot read that state.</li>
+      <li>A Desktop card is drawn with the row, and the row redraws only when what it shows changes, so a card's paces and times can be up to a minute old. In the last 5 minutes of the cache the row counts seconds, so a card opened then can stay up.</li>
+      <li>Desktop draws the band's frame and the card's popover frame itself; the plugin draws only their content.</li>
+      <li>With every session idle the limits do not move; the scoped readings drop off after 15 minutes and return with the next endpoint reading in the file.</li>
+    </ul>
+  </section>
+</main>
+</body>
+</html>

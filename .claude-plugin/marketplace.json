@@ -1,0 +1,9 @@
+{
+  "name": "agentpit",
+  "owner": {"name": "agentpit-lab", "url": "https://github.com/agentpit-lab"},
+  "description": "Claude Code plugins that keep a session's context and a subscription's usage limits in view: paceline and pitboard.",
+  "plugins": [
+    {"name": "paceline", "source": "./plugins/paceline"},
+    {"name": "pitboard", "source": "./plugins/pitboard"}
+  ]
+}

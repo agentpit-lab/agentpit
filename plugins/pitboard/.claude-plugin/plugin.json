@@ -1,0 +1,8 @@
+{
+  "name": "pitboard",
+  "version": "0.1.0",
+  "description": "A status row for Claude Code, drawn through function hooks in the CLI and in Claude Code Desktop on Windows, macOS and Linux: context against the auto-compaction point, the prompt cache's time to live and hit rate, the five-hour and weekly limits with their pace, and on a click or hover the model, effort, advisor, branch, session time and API cost. /pitboard opens every reading in a pane. Reads paceline's limits file when it exists, to show readings other sessions saw; writes no file. Requires Claude Code 2.1.287 or later.",
+  "types": "./types/index.d.ts",
+  "author": {"name": "agentpit-lab", "url": "https://github.com/agentpit-lab"},
+  "keywords": ["statusline", "ui", "context-window", "auto-compact", "usage-limits", "function-hooks"]
+}

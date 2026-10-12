@@ -1,0 +1,9 @@
+#!/bin/sh
+# Runs paceline.py with the first Python 3 on PATH. The interpreter is picked before the run, so
+# paceline.py runs once and its exit code and errors reach the caller. Under Git Bash, MSYS2 or
+# Cygwin the path is converted for a Windows Python, which cannot open /d/... when
+# MSYS_NO_PATHCONV=1 turns off the shell's own conversion.
+d=$(dirname "$0")
+if command -v cygpath >/dev/null 2>&1; then d=$(cygpath -m "$d"); fi
+if command -v python3 >/dev/null 2>&1; then exec python3 "$d/../scripts/paceline.py" "$@"; fi
+exec python "$d/../scripts/paceline.py" "$@"
