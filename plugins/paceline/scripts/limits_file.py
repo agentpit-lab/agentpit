@@ -169,15 +169,27 @@ def inbox_buckets(readings, clock):
 
 
 def reading_wins(new, held, record, now):
-    """The merge rule. An exact reading wins unless the held bucket was observed later: inbox files are
-    read again at every merge, so an old exact reading must not undo newer ones. Otherwise a passed window
-    loses to any reading, a held exact reading stands for EXACT_HOLD, the later window wins, within one
-    window the higher reading wins, and a tie keeps the later one."""
+    """The merge rule. An exact reading wins over a held exact bucket observed no later, and over a held
+    ordinary bucket observed less than EXACT_HOLD after it, unless its own window has passed and the held
+    one's has not: inbox files are read again at every merge, so an old exact reading must not undo much
+    newer ones. Otherwise a passed window loses to any reading, a held exact reading stands for
+    EXACT_HOLD, the later window wins, within one window the higher reading wins, and a tie keeps the
+    later one."""
     if not is_bucket(held):
         return True
     held_at = bucket_at(held, record)
     if new["source"] == EXACT_SOURCE:
-        return held_at is None or bucket_at(new) >= held_at
+        if held_at is None:
+            return True
+        if held.get("source", (record or {}).get("source")) == EXACT_SOURCE:
+            return bucket_at(new) >= held_at
+        # An ordinary reading lags the account by one request, so seconds or minutes do not outrank an
+        # exact one.
+        new_reset = safe_iso(new.get("resets_at"))
+        held_reset = safe_iso(held.get("resets_at"))
+        if new_reset and new_reset <= now and not (held_reset and held_reset <= now):
+            return False
+        return bucket_at(new) >= held_at - EXACT_HOLD
     reset = safe_iso(held.get("resets_at"))
     if reset and reset <= now:
         return True
@@ -212,6 +224,10 @@ def merge_readings(previous, readings, now):
     held_seven = record.get("seven_day")
     newest = None
     exact_scoped = None
+    # In the order they were observed, so file names cannot decide a merge; an undated reading goes last
+    # and is skipped by inbox_buckets.
+    far = dt.datetime.max.replace(tzinfo=UTC)
+    readings = sorted(readings, key=lambda r: safe_iso(r.get("observed_at")) or far)
     for name, bucket, reading in inbox_buckets(readings, clock):
         if reading_wins(bucket, record.get(name), record, now):
             record[name] = bucket

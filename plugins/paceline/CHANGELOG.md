@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.1 - 2026-10-12
+
+### Fixed
+
+- An exact reading (usage-watch, or any writer marking `"source": "usage-endpoint"`) no longer loses
+  to a session's ordinary reading observed a few seconds after it. The merge takes inbox readings in
+  the order they were observed instead of by file name, and an ordinary reading replaces an exact one
+  only when observed more than 15 minutes later.
+
 ## 0.1.0 - 2026-10-12
 
 First release.

@@ -372,9 +372,13 @@ and may add the model-scoped weekly limits:
 ```
 
 - `source` other than `usage-endpoint`, or none, means an ordinary reading.
-- An exact reading replaces the bucket of the same name, whatever its window and number, unless
-  the bucket in the file was observed later. Inbox files are read at every merge, so this keeps an
-  old exact reading from undoing newer ones.
+- The merge takes the readings in the order they were observed, whatever their file names.
+- An exact reading replaces the bucket of the same name, whatever its window and number, unless the
+  bucket in the file is an exact reading observed later, or an ordinary reading observed more than
+  15 minutes later. An ordinary reading lags the account by one request, so it does not outrank an
+  exact reading taken seconds or minutes before it. Inbox files are read at every merge, so the
+  15 minutes keep an old exact reading from undoing much newer ones. An exact reading whose window
+  has passed does not replace a bucket of a window still running.
 - For 15 minutes after an exact reading, ordinary readings leave that bucket alone, unless its
   window has passed. After that the merge rule above applies again, so keep posting fresh exact
   readings for your numbers to stay.
