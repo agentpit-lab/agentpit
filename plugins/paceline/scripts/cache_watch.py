@@ -7,7 +7,8 @@ which wakes the session (an `asyncRewake` hook). The woken turn is itself a requ
 cache for another hour; it sends one short line as a push, and ends. A prompt from the operator
 resets the count of wakes; after `max` wakes in a row without one, watching stops. A compaction
 turns watching off: the waiter's cache anchor predates the compacted context, so a wake would keep
-nothing.
+nothing. A waiter that finds the cache already expired (the computer slept past the wake) turns
+watching off too, and the next prompt from the operator carries a one-time notice saying so.
 
 CLI (through bin/paceline):
     paceline cache-watch on --session ID --data-dir DIR [--lead MIN] [--max N]
@@ -90,48 +91,78 @@ def _parse_ts(value):
         return None
 
 
-def read_transcript(path):
-    """The regime ('1h', '5m' or None) and anchor (epoch seconds) of the last main-thread cache write.
+class TranscriptReader:
+    """Folds a transcript into the regime ('1h', '5m' or None) and anchor (epoch seconds) of the last
+    main-thread cache write, and that request's context size, reading only what was appended since.
 
     Subagent rows are skipped, a message id counts once, and the TTL runs from the row that triggered
     the request (the prompt or a tool result), the nearest recorded moment before the request started.
     """
-    try:
-        text = Path(path).read_text(encoding="utf-8", errors="replace")
-    except OSError:
-        return None
-    regime = None
-    anchor = None
-    trigger = None
-    seen = set()
-    for line in text.splitlines():
+
+    def __init__(self, path):
+        self.path = Path(path)
+        self.reset()
+
+    def reset(self):
+        self.offset = 0
+        self.regime = None
+        self.anchor = None
+        self.trigger = None
+        self.context_tokens = None
+        self.seen = set()
+
+    def update(self):
+        """The fold so far, or None when the file can't be read."""
+        try:
+            if self.path.stat().st_size < self.offset:
+                self.reset()
+            with self.path.open("rb") as f:
+                f.seek(self.offset)
+                for raw in f:
+                    # Claude Code may be mid-append: a line without its newline waits for the next step.
+                    if not raw.endswith(b"\n"):
+                        break
+                    self.offset += len(raw)
+                    self._fold(raw.decode("utf-8", errors="replace"))
+        except OSError:
+            return None
+        return {"regime": self.regime, "anchor": self.anchor, "context_tokens": self.context_tokens}
+
+    def _fold(self, line):
         if '"timestamp"' not in line and '"usage"' not in line:
-            continue
+            return
         try:
             row = json.loads(line)
         except ValueError:
-            continue
+            return
         if not isinstance(row, dict) or row.get("isSidechain"):
-            continue
+            return
         at = _parse_ts(row.get("timestamp"))
         message = row.get("message") if isinstance(row.get("message"), dict) else {}
         usage = message.get("usage")
         if row.get("type") != "assistant" or not isinstance(usage, dict):
             if row.get("type") == "user" and at is not None:
-                trigger = at
-            continue
+                self.trigger = at
+            return
         msg_id = message.get("id")
         if msg_id:
-            if msg_id in seen:
-                continue
-            seen.add(msg_id)
-        anchor = trigger if trigger is not None else (at if at is not None else anchor)
+            if msg_id in self.seen:
+                return
+            self.seen.add(msg_id)
+        self.anchor = self.trigger if self.trigger is not None else (at if at is not None else self.anchor)
+        sizes = [usage.get(k) for k in ("input_tokens", "cache_read_input_tokens", "cache_creation_input_tokens")]
+        sizes = [v for v in sizes if isinstance(v, int)]
+        self.context_tokens = sum(sizes) if sizes else None
         creation = usage.get("cache_creation") or {}
         if (creation.get("ephemeral_1h_input_tokens") or 0) > 0:
-            regime = "1h"
+            self.regime = "1h"
         elif (creation.get("ephemeral_5m_input_tokens") or 0) > 0:
-            regime = "5m"
-    return {"regime": regime, "anchor": anchor}
+            self.regime = "5m"
+
+
+def read_transcript(path):
+    """The whole transcript's fold (see TranscriptReader), or None when it can't be read."""
+    return TranscriptReader(path).update()
 
 
 def deadline_of(info):
@@ -172,6 +203,13 @@ def wake_text(state, session, data_dir, expires):
     )
 
 
+EXPIRED_TEXT = (
+    "paceline cache-watch: this session's cache expired at {clock}, before its wake (the computer was probably "
+    "asleep), so this turn writes the whole context to the cache again, and cache-watch is now off for this "
+    "session. After answering the operator's message, tell them that in one line, in their language; "
+    "/paceline:cache-watch on watches the session again."
+)
+
 FIVE_MIN_TEXT = (
     "paceline cache-watch stopped: this session now writes five-minute cache entries, and "
     "cache-watch keeps only one-hour entries. Tell the operator that in one line and end the turn."
@@ -198,8 +236,9 @@ def hook_stop(data_dir, payload):
         state["transcript"] = payload["transcript_path"]
     save_state(data_dir, session, state)
     sleep(SETTLE_S)
+    reader = TranscriptReader(state["transcript"])
     while True:
-        info = read_transcript(state["transcript"])
+        info = reader.update()
         if not info or info["regime"] is None or info["anchor"] is None:
             return 0
         if info["regime"] == "5m":
@@ -211,6 +250,12 @@ def hook_stop(data_dir, payload):
         fire = deadline - state["lead"] * 60
         t = now()
         if t >= deadline:
+            # A wake now would write the whole context anyway: stop watching, and let the next prompt say so.
+            state = load_state(data_dir, session)
+            if state and state.get("on") and state.get("generation") == generation:
+                state.update(on=False, stopped_reason="expired", expired_at=deadline, notice=True,
+                             generation=uuid.uuid4().hex)
+                save_state(data_dir, session, state)
             return 0
         if t < fire:
             sleep(min(STEP_S, fire - t))
@@ -234,6 +279,8 @@ def hook_prompt(data_dir, payload):
         return 0
     if WAKE_MARK in str(payload.get("prompt") or ""):
         return 0
+    if state.pop("notice", None):
+        print(EXPIRED_TEXT.format(clock=_clock(state.get("expired_at") or now())))
     state.update(wakes=0, generation=uuid.uuid4().hex)
     save_state(data_dir, session, state)
     return 0
@@ -287,6 +334,7 @@ def _describe(session, state):
             "ttl-5m": "five-minute cache",
             "no-reply": f"no reply after {state.get('max')} wakes",
             "compact": "compacted",
+            "expired": "cache expired before the wake",
         }
         head = f"off ({reasons.get(state.get('stopped_reason'), state.get('stopped_reason') or 'unknown')})"
     parts = [session, head, f"lead {state.get('lead')} min", f"wakes {state.get('wakes', 0)}/{state.get('max')}"]
@@ -301,6 +349,21 @@ def _describe(session, state):
         else:
             parts.append("expired")
     return " · ".join(parts)
+
+
+# A one-hour cache write is 2x the base input price and a cache read 0.1x or less (Anthropic's
+# prompt-caching prices), so a rewrite after the expiry costs at least 20 reads.
+COST_RATIO = ("which costs at least 20 times the read (Anthropic API prices: one-hour cache write 2x the input "
+              "price, cache read 0.1x or less).")
+
+
+def kilo(n):
+    """A token count as pitboard's cards print it: 900, 506k, 1.2M."""
+    if n >= 1_000_000:
+        return f"{n / 1_000_000:.1f}".rstrip("0").rstrip(".") + "M"
+    if n >= 1000:
+        return f"{int(n / 1000 + 0.5)}k"
+    return str(n)
 
 
 def cmd_on(args):
@@ -330,6 +393,15 @@ def cmd_on(args):
     }
     save_state(args.data_dir, args.session, state)
     print(_describe(args.session, state))
+    tokens = info.get("context_tokens")
+    if tokens is not None:
+        print(f"A wake reads the ~{kilo(tokens)}-token context from the cache and keeps it another hour. Once the "
+              f"cache has expired, the next turn writes those ~{kilo(tokens)} tokens to the cache again, {COST_RATIO}")
+    else:
+        print("A wake reads the context from the cache and keeps it another hour. Once the cache has expired, the "
+              f"next turn writes the whole context to the cache again, {COST_RATIO}")
+    print("Each wake still counts against the five-hour limit; how much a cache read weighs in subscription limits "
+          "is not published.")
     return 0
 
 
@@ -364,7 +436,8 @@ def cmd_status(args):
             continue
         rows.append(_describe(path.stem, state))
     print("\n".join(rows) if rows else "no session is watched")
-    print("Each wake is one turn: a cache read of the whole context, counted against the five-hour limit.")
+    print("A wake keeps the cache for far less than writing the whole context again after it expired; each wake "
+          "still counts against the five-hour limit.")
     return 0
 
 

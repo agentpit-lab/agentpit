@@ -35,8 +35,9 @@ Then tell the operator, in one or two lines and in their language, what the comm
   and only the main thread's entries count.
 - `off`, `status`, `config`: the printed lines, unchanged in substance.
 
-Each wake is one turn: a cache read of the whole context, counted against the five-hour limit. After
-`on` succeeds, mention that in the same reply.
+After `on` succeeds, pass on its last two lines in the same reply, in one or two lines: a wake
+keeps the cache for far less than writing the whole context again after it expired (give the
+numbers `on` printed), and each wake still counts against the five-hour limit.
 
 Limits: cache-watch keeps only one-hour cache entries and only the main thread's cache, so a resumed
 subagent whose cache expired starts cold; a five-minute main thread is refused even when its

@@ -25,6 +25,9 @@ export type CacheView = {
   isRebuilt: boolean
   // Tokens a cold turn would write again: the live context.
   rewrite: number | null
+  // How many times dearer a cold turn is than a warm one, and whether that is only a lower bound.
+  ratio: number
+  isRatioFloor: boolean
   level: Level
 }
 
@@ -202,9 +205,23 @@ function contextView(m: StatusMeasure | null, samples: number[]): ContextView | 
   return { pct, used, limit, window: m.window, compactWindow, compactSource: m.compactSource ?? null, isAuto: m.isAutoCompact, turnsLeft, level }
 }
 
-function cacheView(c: StatusCache, now: number, tokens: number | null): CacheView {
+// A cold turn writes the context again at 2x (one-hour TTL) or 1.25x (five-minute TTL) the base input
+// price, where a warm turn reads it at the cache-read price: 0.05x on Opus 5.5 and Sonnet 5.5, 0.025x
+// on Fable 5.1 and Mythos 5.1, 0.1x elsewhere. Prices from the Pricing section of
+// https://platform.claude.com/docs/en/build-with-claude/prompt-caching. A model not
+// listed here may read cheaper than 0.1x, so its ratio is a lower bound.
+export function coldRatio(model: string | null, regime: '1h' | '5m' | null): { ratio: number; isFloor: boolean } {
+  const id = (model ?? '').toLowerCase().replace(/[.\s]/g, '-')
+  const family = (name: string) => new RegExp(`(^|-)${name}(?![0-9])`).test(id)
+  const read = family('opus-5-5') || family('sonnet-5-5') ? 0.05 : family('fable-5-1') || family('mythos-5-1') ? 0.025 : null
+  const write = regime === '1h' ? 2 : 1.25
+  return { ratio: Math.round((write / (read ?? 0.1)) * 10) / 10, isFloor: read === null }
+}
+
+function cacheView(c: StatusCache, now: number, tokens: number | null, model: string | null): CacheView {
   const hitAvg = c.reads + c.writes > 0 ? (c.reads / (c.reads + c.writes)) * 100 : null
-  const base = { regime: c.regime, hitLast: c.hitLast, hitAvg, isRebuilt: c.isRebuilt, rewrite: tokens }
+  const { ratio, isFloor } = coldRatio(model, c.regime)
+  const base = { regime: c.regime, hitLast: c.hitLast, hitAvg, isRebuilt: c.isRebuilt, rewrite: tokens, ratio, isRatioFloor: isFloor }
   if (c.isInFlight) return { ...base, state: 'hot', leftMs: null, level: 'calm' }
   if (c.anchorMs === null) return { ...base, state: 'none', leftMs: null, level: 'calm' }
   // With no write seen yet the documented 5-minute default is assumed.
@@ -284,7 +301,7 @@ export function buildView(i: ViewInput): View {
   return {
     now: i.now,
     context: contextView(i.measure, i.ctxSamples),
-    cache: cacheView(i.cache, i.now, i.measure?.tokens ?? null),
+    cache: cacheView(i.cache, i.now, i.measure?.tokens ?? null, i.meta?.model ?? null),
     five: fiveView(five.merged, five.isExact, i.fiveSamples, i.now),
     week:
       weekPct === undefined

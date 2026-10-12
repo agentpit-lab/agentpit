@@ -137,18 +137,23 @@ What it cannot do:
   expired starts cold. See [main thread only](limitations.md#cache-watch-keeps-only-the-main-threads-cache).
 - It refuses a session with no cache entry yet. See
   [a cache entry first](limitations.md#cache-watch-needs-a-cache-entry-first).
-- A computer that sleeps past the cache's expiry misses the wake and loses the cache, with no
-  message. See [sleep](limitations.md#a-computer-that-sleeps-past-the-caches-expiry-loses-the-cache).
+- A computer that sleeps past the cache's expiry misses the wake and loses the cache. cache-watch
+  then turns off, `status` shows `off (cache expired before the wake)`, and your next message brings
+  a one-line notice. See [sleep](limitations.md#a-computer-that-sleeps-past-the-caches-expiry-loses-the-cache).
 - It keeps no cache in `claude -p` runs. See
   [non-interactive runs](limitations.md#cache-watch-does-nothing-in-non-interactive-runs).
 - Without Remote Control and "Push when Claude decides", no push reaches your phone. See
   [the push](limitations.md#the-push-reaches-a-phone-only-with-remote-control).
 
-Each wake is one full-context turn: a cache read of the whole context plus a one-line push, counted
-against your five-hour limit. With the defaults, that is at most five turns per absence; see
-[each wake is a full-context turn](limitations.md#each-wake-is-a-full-context-turn). To change
-the defaults, run `/paceline:cache-watch config --lead 10 --max 3`; to change them for one session,
-pass the same options to `on`.
+A wake keeps the cache for far less than losing it costs. The woken turn reads the context from
+the cache; the first turn after the cache's expiry writes the whole context to the cache again,
+which by Anthropic's API prices costs at least 20 times the read (a one-hour cache write is 2
+times the input price, a cache read 0.1 times or less). Each wake still counts against the
+five-hour limit; how much a cache read weighs in subscription limits is not published. With the
+defaults, that is at most five wakes per absence; see
+[each wake counts against the five-hour limit](limitations.md#each-wake-counts-against-the-five-hour-limit).
+To change the defaults, run `/paceline:cache-watch config --lead 10 --max 3`; to change them for
+one session, pass the same options to `on`.
 
 **How to tell it worked:** `/paceline:cache-watch status` shows the session as `on`, with the cache
 expiry and the next wake, for example

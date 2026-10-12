@@ -142,20 +142,25 @@ cache-watch starts only after the main thread has written a cache entry, which t
 ### A computer that sleeps past the cache's expiry loses the cache
 
 The wake runs in a hook process on this computer. A computer that sleeps past the cache's expiry
-misses the wake, and no message tells you.
+misses the wake. cache-watch then turns itself off for the session, and your next message brings a
+one-line notice.
 
-**What you see:** after the computer wakes, the next turn writes the whole context to the cache
-again. `/paceline:cache-watch status` shows the session as `on` with the cache `expired`.
+**What you see:** after the computer wakes, your next turn writes the whole context to the cache
+again, and the agent tells you in one line that the cache expired before the wake and cache-watch
+is off. `/paceline:cache-watch status` shows `off (cache expired before the wake)`.
 
-**What still works:** keep the computer awake while you are away, as
-[Run a night queue](how-to.md#run-a-night-queue) describes in its first step.
+**What still works:** run `/paceline:cache-watch on` to watch the session again, or keep the
+computer awake while you are away, as [Run a night queue](how-to.md#run-a-night-queue) describes
+in its first step.
 
-### Each wake is a full-context turn
+### Each wake counts against the five-hour limit
 
-Each wake is one turn: a cache read of the whole context plus a one-line push, counted against your
-five-hour limit.
+Each wake is one turn: it reads the context from the cache and sends a one-line push. The read
+costs far less than the rewrite of the whole context that the first turn after the cache's expiry
+would make (at least 20 times less by Anthropic's API prices), but the turn still counts against
+the five-hour limit. How much a cache read weighs in subscription limits is not published.
 
-**What you see:** at most `max` (5) such turns per absence, with the default settings.
+**What you see:** at most `max` (5) wake turns per absence, with the default settings.
 
 **What still works:** lower `--max`, or raise `--lead`, with `/paceline:cache-watch config`. See
 [Hold the cache while away](how-to.md#hold-the-cache-while-away).
@@ -219,17 +224,21 @@ the hook adds nothing.
 
 **What still works:** the next launch tries again. Run `paceline doctor` to find a slow step.
 
-### Reservations may outlive their session
+### Reservations of a cut-off session wait for the next pace call
 
-At session end, a hook asks pace to release the session's reservations. Claude Code gives all
-`SessionEnd` hooks 1.5 seconds by default, and a plugin's own timeout does not raise it, according
-to Claude Code's documentation. Reservations may outlive their session when the release does not
-finish in time.
+At session end, a hook records the end and releases the session's reservations in its own process.
+Claude Code gives all `SessionEnd` hooks 1.5 seconds together by default, and a plugin's own timeout
+does not raise it, according to Claude Code's documentation. When that budget cuts the release off,
+or another paceline call holds the state lock, the next pace call releases them: the `pace:` line
+before a launch, `paceline auto`, or a session start. Only a hook stopped before it records the end
+leaves them until their process is gone or their lease ends.
 
-**What you see:** until the lease ends (30 minutes, or 240 minutes for a subagent) or pace finds the
-owning process gone, the night queue counts the reservation as outstanding.
+**What you see:** the reservations of an ended session stay active until the next pace call. When
+the hook was stopped before it recorded the end, the night queue counts them as outstanding until
+the lease ends (30 minutes, or 240 minutes for a subagent) or pace finds the owning process gone.
 
-**What still works:** `paceline reserve list` shows the active reservations, and
+**What still works:** `CLAUDE_CODE_SESSIONEND_HOOKS_TIMEOUT_MS`, set where Claude Code starts, raises
+the budget for all `SessionEnd` hooks. `paceline reserve list` shows the active reservations, and
 `paceline reserve prune` drops the ones whose process is gone. See
 [Reservations](explanation.md#reservations).
 

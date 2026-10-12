@@ -103,12 +103,15 @@ the fullest style that fits the window:
   set it: `env`, `settings`, `account`, `experiment`, `model default`, or `default`. `Used` counts
   toward the compaction point while auto-compact is on, and toward the full window while it is off.
   `Left` shows only while the compaction point is below the full window. `Window` shows only while
-  auto-compact is on, as `<compaction window> of <model window>` when the two differ. `Turns left`
+  auto-compact is on, as `<compaction window> of <model window>` when the two differ. The compaction
+  point is read again as soon as `/autocompact`, `/model` or `/config` finishes. `Turns left`
   shows while auto-compact is on, once the context has grown over at least two of the last turns.
 - Cache: `Countdown` reads whole minutes while calm, `mm:ss` once it warns, `replying` while a reply
   runs, and `expired` after the cache has expired. `TTL` reads `1h` or `5m`, or `5m?` until a cache
-  write has shown which. `If cold` is the context the next turn writes again, and how much dearer
-  that turn is than a warm one: about 20 times with a one-hour TTL, 12.5 times with five minutes.
+  write has shown which; in a new session that takes a few seconds after the first reply. `If cold`
+  is the context the next turn writes again, and how many times dearer that turn is than a warm one
+  for the session's model, such as `~40×`; `≥20×` marks a model whose cache-read price pitboard does
+  not know, so the ratio is a lower bound.
 - Cache hits: both rows are cache reads divided by reads plus writes. `Session` counts from the last
   compaction.
 - 5h limit: `At reset` gives the projected percentage at the reset. `Runs out` replaces it with the

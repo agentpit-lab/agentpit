@@ -204,11 +204,11 @@ earliest of them was acquired, never below 0. Only the night queue subtracts it 
 The `pace:` line shows the number of active reservations; the budget per hour does not change.
 
 A reservation ends when it is released, when its lease expires (30 minutes, or 240 minutes for a
-subagent's keyed reservation), or when its process is gone. At session end, the hook asks pace to
-release the session's reservations; reservations may outlive their session when that does not
-finish in Claude Code's time for session-end hooks (see
-[limitations](limitations.md#reservations-may-outlive-their-session)). The released reservation records its actual cost: the change in weekly
-usage since it was acquired.
+subagent's keyed reservation), or when its process is gone. At session end, the hook records the
+end and releases the session's reservations; when Claude Code's time for session-end hooks cuts it
+off, the next pace call releases them (see
+[limitations](limitations.md#reservations-of-a-cut-off-session-wait-for-the-next-pace-call)). The
+released reservation records its actual cost: the change in weekly usage since it was acquired.
 
 ## The night queue's decisions
 

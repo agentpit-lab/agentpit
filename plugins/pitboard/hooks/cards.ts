@@ -163,7 +163,7 @@ export function alerts(v: View): { level: Level; head: string; advice: string }[
         head: k.level === 'act' ? `Cache cools in ${mmss(k.leftMs)}` : `Cache ${mmss(k.leftMs)} left`,
         advice: k.isRebuilt
           ? rebuiltNote(k)
-          : `a reply now keeps it; a cold turn writes ${rewrite} again (~20× a warm one)`,
+          : `a reply now keeps it; a cold turn writes ${rewrite} again (${k.isRatioFloor ? '≥' : '~'}${k.ratio}× a warm one)`,
       })
   }
   const f = v.five
@@ -275,8 +275,7 @@ function contextCard(v: View): Card {
 
 function cacheCard(v: View): Card {
   const k = v.cache
-  // A cold turn writes the context at 1.25x (5m) or 2x (1h) the input price; a warm one reads it at 0.1x.
-  const ratio = k.regime === '1h' ? 20 : 12.5
+  const ratio = `${k.isRatioFloor ? '≥' : '~'}${k.ratio}×`
   // Whole minutes while calm: the card is redrawn only with the row, which a calm cache leaves alone,
   // so seconds would stand still; once it warns the row redraws every second and so does this.
   const expires =
@@ -293,7 +292,7 @@ function cacheCard(v: View): Card {
     ['Countdown', expires, k.state === 'warm' ? k.level : undefined],
     ['TTL', k.regime ?? '5m?'],
     // What the next turn writes again once the cache has expired, and how much dearer that turn is.
-    ['If cold', k.rewrite !== null ? `${kilo(k.rewrite)} (~${ratio}×)` : 'n/a'],
+    ['If cold', k.rewrite !== null ? `${kilo(k.rewrite)} (${ratio})` : 'n/a'],
   ]
   const advice =
     k.state === 'cold'

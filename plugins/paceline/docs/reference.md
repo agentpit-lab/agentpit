@@ -191,11 +191,14 @@ depends on it.
   It exits 3 and prints `not started` with the reason when it finds no transcript for the session,
   no one-hour cache entry yet, or five-minute cache entries. cache-watch holds only the one-hour
   prompt cache; when the main thread switches to five-minute entries while watching, it stops
-  itself, and `status` shows the session as `off (five-minute cache)`. See
+  itself, and `status` shows the session as `off (five-minute cache)`. After the session line, `on`
+  prints two lines on what a wake costs: the context size, and that a rewrite of the context after
+  the cache expired costs at least 20 times a wake's cache read. See
   [limitations](limitations.md#cache-watch).
 - `paceline cache-watch off --session ID --data-dir DIR` stops watching a session.
 - `paceline cache-watch status --data-dir DIR` lists every watched session: on or off and why
-  (`operator`, `five-minute cache`, `no reply after N wakes`, `compacted`), the wakes so far, the
+  (`operator`, `five-minute cache`, `no reply after N wakes`, `compacted`,
+  `cache expired before the wake`), the wakes so far, the
   cache expiry, and the next wake. It removes the state of sessions whose
   transcript has not changed for 24 hours.
 - `paceline cache-watch config --data-dir DIR [--lead MIN] [--max N]` shows or changes the defaults:
@@ -408,6 +411,7 @@ first source of the time zone. A POSIX rule such as `CET-1CEST` is ignored.
 | `<state>/pace.json` | The pace switch, `{"on": true}` or `{"on": false}`. Missing means off. |
 | `<state>/pace-profile.json` | The pace profile, with the declared plans. |
 | `<state>/pace-registry.json` | Active reservations and the last 500 completed ones. |
+| `<state>/ended-sessions/` | One marker per ended session whose reservations wait for release; the next pace call releases them and deletes the marker. |
 | `<state>/night-queue.json` | The night queue: the current run, the last 14 runs, and the items. |
 | `<state>/leftover-pool.json` | The leftover pool: when and for which weekly window it was approved, and the items. |
 | `<state>/pace.lock` | The lock of the pace files. |
@@ -524,8 +528,8 @@ holds `<state>/limits.lock`, so writers take turns. paceline needs no status lin
 | Module: `session.measure` | Once per model turn | Writes the session's inbox reading. Always on. |
 | Module: `session.start` timer | Every 15 seconds while the session is open | Lists `<state>/inbox/`, and runs `limits_merge.py` only when the inbox changed since the last merge. Always on. |
 | Module: `session.start` timer | At session start, then every 10 seconds while the session is open | usage-watch. Reads its switch; while it is on and 125 seconds have passed, asks Claude Code for the account's usage. |
-| `Stop`: `cache_watch.py hook stop` | After every turn | Waits for the next wake of a watched session; returns at once for any other session. |
-| `UserPromptSubmit`: `cache_watch.py hook prompt` | Every prompt | Resets the wake count of a watched session. |
+| `Stop`: `cache_watch.py hook stop` | After every turn | Waits for the next wake of a watched session; returns at once for any other session. When the cache expired before the wake, turns the session off with the reason `cache expired before the wake`. |
+| `UserPromptSubmit`: `cache_watch.py hook prompt` | Every prompt | Resets the wake count of a watched session. After a cache that expired before its wake, adds a one-time notice for the agent to pass on. |
 | `PreCompact`, `SessionStart` (`compact`): `cache_watch.py hook compact` | Before and after a compaction, manual or automatic | Turns a watched session off with the reason `compacted`, which also ends its waiting `Stop` hook. |
 | `SessionEnd`: `cache_watch.py hook session-end` | Session end | Removes the session's cache-watch state. |
 | `SessionStart`: `context_watch.py hook session-start` | Session start | Removes old snapshots while context-watch is on. |
@@ -533,7 +537,7 @@ holds `<state>/limits.lock`, so writers take turns. paceline needs no status lin
 | `PreToolUse` (`Agent`, `Workflow`): `pace_pre_agent.py` | Before each launch | Adds the `pace:` line; asks you at a hard limit. |
 | `SubagentStart`, `SubagentStop`: `pace_subagent.py` | Subagent start and stop | Acquires and releases the subagent's reservation. |
 | `SessionStart` (`startup`, `resume`): `pace_session_start.py` | Session start | Adds unconfirmed plans, the leftover-pool suggestion, and the time zone hint. |
-| `SessionEnd`: `pace_session_end.py` | Session end | Releases the session's reservations. |
+| `SessionEnd`: `pace_session_end.py` | Session end | Records the session's end in `<state>/ended-sessions/` and releases its reservations; the next pace call finishes a release that was cut off. |
 
 The four pace hooks exit at once, with no output, while pace is off. While a function is off, its
 command hooks still start one Python process per matching event. The command hooks run `python3`

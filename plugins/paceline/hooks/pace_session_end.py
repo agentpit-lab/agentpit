@@ -2,12 +2,15 @@
 """SessionEnd hook: release this session's pace reservations (subagent, workflow, gate, queue).
 
 Does nothing while pace is off; a reservation left when pace is turned off mid-session expires by
-its lease. Fire and forget: never blocks or fails the session's exit, so every error is swallowed.
-PACELINE_SCRIPT overrides the pace.py path, for tests.
+its lease. Claude Code gives all SessionEnd hooks 1.5 seconds together, so the hook first writes an
+end marker, <state>/ended-sessions/<session id>.json, then releases in this process. When it is cut
+off or the state lock stays busy, the next pace call sweeps the marker. Fire and forget: never blocks
+or fails the session's exit, so every error is swallowed.
 """
+import datetime as dt
 import json
 import os
-import subprocess
+import re
 import sys
 from pathlib import Path
 
@@ -44,8 +47,14 @@ def too_old():
     return bool(reason)
 
 
-PACE = os.environ.get("PACELINE_SCRIPT") or str(Path(__file__).resolve().parent.parent / "scripts" / "pace.py")
-TIMEOUT_SEC = 5
+LOCK_TIMEOUT_SEC = 0.5
+
+
+def write_marker(sd, session, now):
+    folder = sd / "ended-sessions"
+    folder.mkdir(parents=True, exist_ok=True)
+    name = re.sub(r"[^A-Za-z0-9_-]", "_", session)
+    limits_file.write_json(folder / f"{name}.json", {"session_id": session, "ended_at": limits_file.iso_ms(now)})
 
 
 def main():
@@ -59,13 +68,14 @@ def main():
         return 0
     trace("hook.session_end")
     try:
-        out = subprocess.run([sys.executable, PACE, "reserve", "release-session", "--session", session],
-                             capture_output=True, text=True, encoding="utf-8", timeout=TIMEOUT_SEC)
-    except (OSError, subprocess.TimeoutExpired) as error:
+        sd = limits_file.paceline_dir()
+        now = limits_file.parse_iso(os.environ.get("PACELINE_NOW")) or dt.datetime.now(dt.timezone.utc)
+        write_marker(sd, session, now)
+        # Imported only now: the marker is on disk before the slowest step starts.
+        import pace
+        pace.end_session(sd, session, now, lock_timeout=LOCK_TIMEOUT_SEC)
+    except Exception as error:  # noqa: BLE001 - the marker stays for the next pace call
         note_failure("hook.session_end", error=error)
-        return 0
-    if out.returncode != 0:
-        note_failure("hook.session_end", exit_code=out.returncode, stderr=out.stderr.strip()[-300:])
     return 0
 
 

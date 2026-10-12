@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.2.5 - 2026-10-12
+
+### Fixed
+
+- A session's pace reservations are released within Claude Code's 1.5-second budget for session-end
+  hooks: the hook records the end and releases in its own process. When the budget cuts it off,
+  the next pace call releases them (the `pace:` line before a launch, `paceline auto`, a session
+  start).
+- The leftover suggestion in `paceline status` prints the profile's `leftover_suggest_pct`; it
+  printed `>10%` whatever the profile said.
+- A waiting cache-watch reads only the transcript lines appended since its last step; it read the
+  whole transcript every minute.
+- A cache that expired before its wake, as when the computer slept, turns cache-watch off for the
+  session (`status` shows `off (cache expired before the wake)`), and the next message brings a
+  one-line notice. The watch used to stay `on` with nothing waiting.
+
+### Changed
+
+- cache-watch says first what a wake saves: `on` prints that a wake reads the context from the
+  cache, with its size, while a rewrite after the expiry costs at least 20 times that read, and
+  that each wake still counts against the five-hour limit. `status` and the skill say the same.
+
 ## 0.2.4 - 2026-10-12
 
 ### Fixed

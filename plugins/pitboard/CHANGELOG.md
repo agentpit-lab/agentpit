@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.1.7 - 2026-10-12
+
+### Fixed
+
+- In a new session `TTL` shows the cache's real TTL a few seconds after the first reply that writes
+  it, and the countdown runs from it, instead of `5m?` for the whole session.
+- The Context card shows a new compaction point as soon as `/autocompact`, `/model` or `/config`
+  finishes, instead of after the turn ends.
+
+### Changed
+
+- `If cold` and the cache advice give the cold-turn ratio for the session's model, such as `~40×` on
+  Opus 5.5; `≥` marks a model whose cache-read price pitboard does not know.
+
 ## 0.1.6 - 2026-10-12
 
 ### Added

@@ -289,7 +289,7 @@ def locked(sd, timeout=20.0, name="pace.lock"):
                 break
             except OSError:
                 if time.monotonic() > deadline:
-                    raise PaceError(f"{name} busy for {timeout:.0f} s; another paceline call is stuck")
+                    raise PaceError(f"{name} busy for {timeout:g} s; another paceline call is stuck")
                 time.sleep(0.02)
         try:
             yield
@@ -1192,6 +1192,59 @@ def close_reservation(registry, r, now, effective, actual, why):
     return entry
 
 
+ENDED_DIR = "ended-sessions"
+ENDED_MAX_AGE = 7 * DAY
+
+
+def sweep_ended_sessions(store, now, effective=None):
+    """Close the reservations of each session a session-end hook marked as ended, then drop its marker.
+
+    A reservation acquired after the end belongs to the same session resumed under its id, and stays.
+    Returns the closed entries.
+    """
+    folder = store.sd / ENDED_DIR
+    try:
+        markers = sorted(folder.glob("*.json"))
+    except OSError:
+        return []
+    registry, closed = store["registry"], []
+    for path in markers:
+        try:
+            marker = json.loads(path.read_text(encoding="utf-8"))
+            session, ended = marker["session_id"], parse_iso(marker["ended_at"])
+        except (OSError, ValueError, TypeError, KeyError):
+            session = ended = None
+        if session and ended and now - ended <= ENDED_MAX_AGE:
+            targets = [r for r in registry["reservations"]
+                       if r.get("session_id") == session and parse_iso(r["acquired_at"]) <= ended]
+            for r in targets:
+                closed.append(close_reservation(registry, r, now, effective, None, "session ended"))
+                registry["reservations"].remove(r)
+        with contextlib.suppress(OSError):
+            path.unlink()
+    if closed:
+        store.touch("registry")
+    return closed
+
+
+def end_session(sd, session, now, lock_timeout=0.5):
+    """The session-end hook's release: sweep the end markers with the measured usage, waiting briefly for the lock.
+
+    Raises PaceError when the lock stays busy; the marker then waits for the next pace call.
+    """
+    effective = None
+    usage = load_usage(sd, read_profile(sd), now, allow_merge=False)
+    record = usage.get("record")
+    if record and record.get("seven_day"):
+        model = os.environ.get("PACELINE_MODEL") or os.environ.get("ANTHROPIC_MODEL")
+        effective = window_effective(record, now, model)[0]
+    with locked(sd, timeout=lock_timeout):
+        store = Store(sd)
+        closed = sweep_ended_sessions(store, now, effective)
+        store.save()
+    return [c for c in closed if c["session_id"] == session]
+
+
 def mark_overlap(registry):
     if len(registry["reservations"]) > 1:
         for r in registry["reservations"]:
@@ -1401,6 +1454,7 @@ def housekeeping(store, now):
         store.touch("profile")
     if prune_reservations(store["registry"], store["profile"], now):
         store.touch("registry")
+    sweep_ended_sessions(store, now)
 
 
 def cmd_status(ctx):
@@ -1422,10 +1476,11 @@ def status_report(ctx, store):
     tomorrow = plans_starting_tomorrow(store["profile"], ctx.now, tz)
     if tomorrow:
         extras.append(f"{len(tomorrow)} plan(s) start tomorrow, unconfirmed: " + ",".join(p["id"] for p in tomorrow))
+    pct = store["profile"]["leftover_suggest_pct"]
     suggest = (ctx.now.astimezone(tz).weekday() in (3, 4) and calc["forecast_unused_pct"] is not None
-               and calc["forecast_unused_pct"] > store["profile"]["leftover_suggest_pct"])
+               and calc["forecast_unused_pct"] > pct)
     if suggest:
-        extras.append("forecast leaves >10% unused: propose leftover tasks")
+        extras.append(f"forecast leaves >{pct:g}% unused: propose leftover tasks")
     calc.update(recommendation=rec, unconfirmed_tomorrow=[p["id"] for p in tomorrow], suggest_leftover_tasks=suggest,
                 active_reservations=len(store["registry"]["reservations"]), pace_on=limits_file.pace_enabled(ctx.sd))
     return status_line(calc, rec, extras), calc

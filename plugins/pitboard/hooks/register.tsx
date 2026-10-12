@@ -297,6 +297,24 @@ function settleCompaction($: EngineInterface, round: number, left: number) {
   })
 }
 
+// Bumped by each new chain, by /clear and a resume, and by a compaction, so an older chain gives up.
+let regimeRound = 0
+const REGIME_RETRY_MS = 2000
+const REGIME_RETRIES = 5
+
+// A turn.step reports the tokens a request wrote but not the TTL they asked for, and the
+// transcript may not hold the request's row yet when it returns: read it again a little later.
+function watchRegime($: EngineInterface, round: number, left: number) {
+  $.clock.after(REGIME_RETRY_MS, () => {
+    void (async () => {
+      if (round !== regimeRound) return
+      await refreshTranscript($)
+      if (round !== regimeRound) return
+      if ((await read($, cache)).regime === null && left > 1) watchRegime($, round, left - 1)
+    })()
+  })
+}
+
 async function transcriptPath($: EngineInterface): Promise<string | null> {
   const [root, id, config] = await Promise.all([$.session.root(), $.session.id(), configDir($)])
   if (transcriptFound?.id === id) return transcriptFound.path
@@ -507,6 +525,16 @@ export const register: Register = on => {
     return result
   })
 
+  // These change the compaction trigger without a turn or a compaction; turn.complete still
+  // catches a change that lands after the command returns, as a picker's does.
+  for (const command of ['autocompact', 'model', 'config']) {
+    on('command.run', { command }, async ($, e, next) => {
+      const result = await next(e)
+      await refreshThreshold($)
+      return result
+    })
+  }
+
   on('command.run', { command: 'pitboard' }, async $ => {
     await openPane($)
     return { text: 'pitboard pane opened.' }
@@ -532,6 +560,7 @@ export const register: Register = on => {
     // A precompute, a subagent's compaction or a veto leaves this conversation as it was.
     if (e.agentId || e.trigger === 'precompute' || result.skip !== undefined) return result
     await update($, cache, c => ({ ...c, reads: 0, writes: 0, isRebuilt: true }))
+    regimeRound++
     await update($, ctxSamples, () => [])
     await refreshThreshold($)
     // tokensAfter counts the messages alone, without the system prompt and tools; it stands until
@@ -550,6 +579,7 @@ export const register: Register = on => {
     await update($, measure, m => (m ? { ...m, tokens: null } : m))
     await update($, cache, () => ({ ...CACHE_START }))
     await update($, ctxSamples, () => [])
+    regimeRound++
     $.clock.after(0, () => {
       void (async () => {
         await refreshMeta($)
@@ -580,6 +610,7 @@ export const register: Register = on => {
           isRebuilt: c.isRebuilt && u.cache_read_input_tokens === 0,
         }
       })
+      if (u && u.cache_creation_input_tokens > 0 && (await read($, cache)).regime === null) watchRegime($, ++regimeRound, REGIME_RETRIES)
       // session.measure fires once per turn; a long turn makes dozens of requests, so the
       // context fill follows each one.
       if (u) {

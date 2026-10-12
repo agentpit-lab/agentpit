@@ -142,10 +142,17 @@ of budget is 100/7, about 14.3 points.
   turns that grew the context. It needs at least two of them. A drop in the context is a compaction
   and starts the series over.
 - The cache countdown is the start of the last request plus the TTL, one hour or five minutes, less a
-  5-second margin. Until a cache write shows the TTL, pitboard assumes five minutes.
+  5-second margin. Until a cache write shows the TTL, pitboard assumes five minutes. The hooks report
+  how many tokens a request wrote to the cache but not their TTL, so after a request that writes the
+  cache while the TTL is unknown, pitboard reads the transcript again every 2 seconds, up to five times.
 - `If cold` uses the price ratio of a cache write to a cache read. A write costs 1.25 times the input
-  price with a five-minute TTL and 2 times with a one-hour TTL; a read costs 0.1 times. A cold turn
-  therefore costs about 12.5 or 20 times a warm one.
+  price with a five-minute TTL and 2 times with a one-hour TTL. A read costs 0.05 times on Opus 5.5
+  and Sonnet 5.5, 0.025 times on Fable 5.1 and Mythos 5.1, and 0.1 times on other models
+  ([Anthropic, prompt caching prices](https://platform.claude.com/docs/en/build-with-claude/prompt-caching),
+  read 2026-10-12). With a one-hour TTL a cold turn therefore costs about 40 times a warm one on Opus
+  5.5 and Sonnet 5.5, and 80 times on Fable 5.1 and Mythos 5.1; with five minutes, 25 and 50 times.
+  On another model pitboard divides by the 0.1 read price and marks the result `≥`: at least 20 or
+  12.5 times.
 - `Hit` is cache reads divided by reads plus writes.
 
 ## Why the row can differ from /usage
