@@ -333,6 +333,9 @@ function paceRows(ratePerHour: number | null, budgetPerHour: number | null, need
 // An empty cell: keeps Budget under Pace in the desktop card's two columns.
 const GAP: [string, string] = ['', '']
 
+// Said where the person looks: the limits file could not tell whose figures these are.
+const accountRows = (isUnknown: boolean): Rows => (isUnknown ? [['Account', 'unknown', 'watch']] : [])
+
 function fiveCard(v: View): Card {
   const f = v.five
   if (!f) return { title: '5h limit', rows: [], bullets: ['No reading yet.'] }
@@ -347,6 +350,7 @@ function fiveCard(v: View): Card {
     ['Used', pct0(f.pct), f.level],
     ['Resets in', f.resetInMs !== null ? span(f.resetInMs) : 'n/a'],
     ...paceRows(f.ratePerHour, f.evenPerHour, '10 min', isShort ? 'act' : 'watch', forecast),
+    ...accountRows(v.isAccountUnknown),
   ]
   const tick = paceOf(f.resetInMs, 5 * HOUR_MS)
   // Whole percents: the card is part of the desktop key, and a finer tick would redraw the row every second.
@@ -378,6 +382,7 @@ function weekCard(v: View): Card {
         ['Resets', w.resetAt !== null ? clock(w.resetAt, v.meta, true) : 'n/a'],
         ...paceRows(w.ratePerHour, w.evenPerHour, '1 h', 'watch', [['Week elapsed', even !== null ? pct0(even) : 'n/a']]),
         [lead !== null && lead > 0 ? 'Overspent' : 'Spare', leadText, lead === null || lead <= 0 ? undefined : lead > 100 / 7 ? 'act' : 'watch'],
+        ...accountRows(v.isAccountUnknown),
       ]
     : []
   const advice = w && w.level !== 'calm' ? `${pct0(w.pct)} used: save it for work that needs it.` : null
@@ -395,6 +400,7 @@ function scopedCard(v: View, b: View['scoped'][number]): Card {
     rows: [
       ['Used', pct0(b.percentUsed), b.level],
       ['Resets', resetAt !== null ? clock(resetAt, v.meta, true) : 'n/a'],
+      ...accountRows(v.isScopedAccountUnknown),
     ],
     ...noted(b.level !== 'calm' ? `${pct0(b.percentUsed)} used: switch model for work that does not need ${b.name}.` : null, [
       `Weekly limit for ${b.name} models alone; resets with the week.`,

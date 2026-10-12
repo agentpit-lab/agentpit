@@ -60,6 +60,10 @@ export type View = {
   costUsd: number | null
   meta: StatusMeta | null
   elapsedMs: number | null
+  // A five-hour or weekly figure came from limits readings whose account cannot be told to be this one's.
+  isAccountUnknown: boolean
+  // The same for the model-scoped weekly figures, which come from the limits file alone.
+  isScopedAccountUnknown: boolean
 }
 
 const HOUR = 3600_000
@@ -77,6 +81,8 @@ export type ViewInput = {
   fiveSamples: StatusSample[]
   weekSamples: StatusSample[]
   ctxSamples: number[]
+  // The limits in fileLimits come from a partition marked unknown (pickPartition).
+  isFileAccountUnknown?: boolean
 }
 
 const TTL_MARGIN_MS = 5000
@@ -111,6 +117,42 @@ export function fileLimits(file: unknown, now: number): StatusLimit[] {
     out.push({ kind, percentUsed: b.used_percentage, resetsAt })
   }
   return out
+}
+
+const ACCOUNT_KEY = /^[0-9a-f]{16}$/
+const UNKNOWN_ACCOUNT = 'unknown'
+
+const isObject = (value: unknown): value is Record<string, unknown> => !!value && typeof value === 'object' && !Array.isArray(value)
+
+// The part of the limits file that belongs to the account with this key (null when it could not be
+// resolved), the same rule as paceline's pick_partition. isUnknown: the figures cannot be told to be
+// this account's, because the key is unresolved or they come from untagged readings. Another
+// account's partition is never returned; a known account with no partition and no untagged one gets
+// partition null.
+export function pickPartition(file: unknown, key: string | null): { partition: unknown; isUnknown: boolean } {
+  if (!isObject(file)) return { partition: null, isUnknown: key === null }
+  if (key === null) return { partition: file, isUnknown: true }
+  const accounts = file.accounts
+  if (!isObject(accounts)) return { partition: file, isUnknown: true }
+  const held = (name: string) => (name === UNKNOWN_ACCOUNT || ACCOUNT_KEY.test(name)) && isObject(accounts[name]) ? accounts[name] : undefined
+  const own = held(key)
+  if (own !== undefined) return { partition: own, isUnknown: false }
+  const untagged = held(UNKNOWN_ACCOUNT)
+  if (untagged !== undefined) return { partition: untagged, isUnknown: true }
+  return { partition: null, isUnknown: false }
+}
+
+// The history lines that belong to the account with this key, the same rule as paceline's
+// history_account_filter. Lines without a valid account, and lines an older merge wrote with an
+// accounts map, are untagged: they count only when every tagged line is this account's, which is the
+// case of a person who never switched. An unresolved key keeps every line.
+export function historyForAccount<T extends { account?: unknown; accounts?: unknown }>(records: T[], key: string | null): T[] {
+  if (key === null) return records
+  const tagged = records.map(r =>
+    'accounts' in r ? UNKNOWN_ACCOUNT : typeof r.account === 'string' && ACCOUNT_KEY.test(r.account) ? r.account : UNKNOWN_ACCOUNT,
+  )
+  const isMixed = tagged.some(a => a !== key && a !== UNKNOWN_ACCOUNT)
+  return records.filter((_, i) => tagged[i] === key || (tagged[i] === UNKNOWN_ACCOUNT && !isMixed))
 }
 
 export function freshScoped(file: unknown, now: number): StatusScoped[] {
@@ -293,16 +335,22 @@ export function buildView(i: ViewInput): View {
     const read = i.fileLimits.find(l => l.kind === kind)
     const file = rollLimit(read, i.now)
     const merged = mergeLimit(payload, file)
-    return { merged, isExact: merged !== undefined && merged === file && file === read }
+    // On an equal figure in the same window the payload is the session's own account's reading, so the
+    // file's copy of it is no reason to mark the figure.
+    const isTie = !!payload && !!file && payload.percentUsed === file.percentUsed && windowKey(payload.resetsAt) === windowKey(file.resetsAt)
+    return { merged, isExact: merged !== undefined && merged === file && file === read, isFromFile: merged !== undefined && merged === file && !isTie }
   }
   const five = pick('five_hour')
   const week = pick('seven_day')
   const weekPct = week.merged?.percentUsed
+  // Samples are kept only for the account's own readings, so a figure of a file whose account is
+  // unknown has none to compute a burn from.
+  const isUnknown = !!i.isFileAccountUnknown
   return {
     now: i.now,
     context: contextView(i.measure, i.ctxSamples),
     cache: cacheView(i.cache, i.now, i.measure?.tokens ?? null, i.meta?.model ?? null),
-    five: fiveView(five.merged, five.isExact, i.fiveSamples, i.now),
+    five: fiveView(five.merged, five.isExact, five.isFromFile && isUnknown ? [] : i.fiveSamples, i.now),
     week:
       weekPct === undefined
         ? null
@@ -310,12 +358,14 @@ export function buildView(i: ViewInput): View {
             pct: weekPct,
             resetAt: week.merged?.resetsAt ? Date.parse(week.merged.resetsAt) : null,
             isExact: week.isExact,
-            ...weekPace(weekPct, week.merged?.resetsAt, i.weekSamples, i.now),
+            ...weekPace(weekPct, week.merged?.resetsAt, week.isFromFile && isUnknown ? [] : i.weekSamples, i.now),
             level: weekLevel(weekPct),
           },
     scoped: i.scoped.map(b => ({ ...b, level: weekLevel(b.percentUsed) })),
     costUsd: i.measure?.costUsd ?? null,
     meta: i.meta,
     elapsedMs: i.meta ? i.now - i.meta.startedAt : null,
+    isAccountUnknown: isUnknown && (five.isFromFile || week.isFromFile),
+    isScopedAccountUnknown: isUnknown && i.scoped.length > 0,
   }
 }

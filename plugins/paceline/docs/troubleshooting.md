@@ -2,7 +2,7 @@
 
 Find the symptom, then read its cause, the command that checks it, and the fix. For most problems,
 start with `paceline doctor`: it checks the Python runtime, the state directory, the pace switch,
-the inbox, the limits file, the process lookup, the memory reading, the time zone, the hooks, and
+the inbox, the limits file, the signed-in account, the process lookup, the memory reading, the time zone, the hooks, and
 the debug log, and prints a hint for what it finds. Run the `paceline` commands in a session's Bash
 tool, or ask the agent to run them.
 
@@ -174,6 +174,39 @@ paceline queue list
 `paceline queue done <id>`, `paceline queue fail <id>`, or `paceline queue defer <id>`. For a full
 five-hour window, the queue resumes after `wait_until`. For no model with headroom, add a model to
 `routine_models` or `models`, or lower the item's estimate when it was set too high.
+
+## Status says account unknown
+
+`paceline status` ends with `account unknown (<reason>)`, the `pace:` line before a launch says
+`account unknown`, and pitboard's `5h limit` and `Week` cards show an `Account` row with `unknown`.
+
+**Cause:** paceline cannot tell the figures to be the signed-in account's. The reason says why:
+
+- `untagged`: the signed-in account has no partition in `rate-limits.json`, and the figures come
+  from the partition `unknown`, which holds readings with no `account` field. This is the state of a
+  file written before accounts existed, and of readings from a writer that does not tag them.
+- `no-file`: Claude Code's `.claude.json` is missing, so paceline cannot name the account.
+- `unreadable`: `.claude.json` does not parse, or could not be read twice in a row.
+- `no-account`: `.claude.json` has no `oauthAccount.accountUuid`, as when no account is signed in.
+
+With `no-file`, `unreadable`, or `no-account`, paceline reads the top level of the limits file, which
+mirrors the newest partition. The night queue waits with `account unknown` while a running night
+cannot name its account.
+
+**Check:**
+
+```
+paceline doctor
+paceline status --json
+```
+
+The `account` probe of `paceline doctor` gives a state and a reason code, never the account.
+`data.account` in `status --json` has the same state and reason, and the account's key.
+
+**Fix:** for `untagged`, take one turn in a session with paceline loaded; its reading carries the
+account and starts the account's own partition, and the mark goes. For `no-file`, `unreadable`, and
+`no-account`, sign in to Claude Code; with `CLAUDE_CONFIG_DIR` set, `<CLAUDE_CONFIG_DIR>/.claude.json`
+is the file, else `~/.claude.json`. Do not copy the file or edit it by hand.
 
 ## usage-watch shows nothing
 

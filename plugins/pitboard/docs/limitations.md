@@ -19,16 +19,33 @@ says `No reading yet.`
 **What still works:** context, cache, and the session card. See
 [Limits stay empty](troubleshooting.md#limits-stay-empty).
 
-### Two accounts in one configuration directory mix their limits
+### Two accounts in one configuration directory show their own limits, with gaps
 
-paceline's limits file carries no account. When you sign in to another account with `/login` in the
-same Claude Code configuration directory, pitboard reads the readings of both accounts from one file
-and combines them by window.
+paceline keeps the readings of each account in a partition of its own in the limits file, and
+pitboard draws the partition of the account that is signed in, found from Claude Code's
+`.claude.json`. After a `/login` the row follows the new account within about 20 seconds, and the
+samples behind `Pace` of the old account are dropped. Some gaps remain:
 
-**What you see:** the limits group can show the other account's reading.
+- A reading with no account, from an older paceline or another writer, sits in a partition that
+  belongs to no account. pitboard draws it when the signed-in account has no partition yet, and marks
+  it.
+- When `.claude.json` is missing, does not parse, or names no account, pitboard cannot tell whose
+  figures the file holds. It draws the top level of the file, which is the newest partition, and
+  marks it. If the account was known a moment before, pitboard keeps its samples and takes a
+  different account only when `.claude.json` names one.
+- Figures from a file of unknown account show no `Pace`, and they are not added to the samples
+  behind it.
+- The session's own limits, which Claude Code reports with each reply, are never marked. For the
+  turn after a `/login`, they may still be the old account's.
+- A `/login` in another open session can misfile paceline's readings for a while, as paceline's
+  limitations describe.
+
+**What you see:** the `5h limit`, `Week` and model-scoped limit cards show an `Account` row with
+`unknown` whenever a figure of the limit comes from a file whose account is not known. The row shows
+no mark while the figures are the account's own.
 
 **What still works:** give each account its own configuration directory, as the next entry
-describes. paceline's [limitations](../../paceline/docs/limitations.md#two-accounts-in-one-configuration-directory-share-one-limits-file)
+describes. paceline's [limitations](../../paceline/docs/limitations.md#two-accounts-in-one-configuration-directory-keep-their-limits-apart-with-gaps)
 give the detail.
 
 ### Each configuration directory has its own row data

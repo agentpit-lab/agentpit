@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.1.8 - 2026-10-13
+
+### Changed
+
+- The row and the pane show only the signed-in account's limits. When that account's readings are not
+  known, the five-hour, Week and model-scoped cards show an `Account unknown` row and mark their
+  figures.
+- Burn-rate samples are kept per account. A change of account starts the new account's samples, and
+  a figure of an unknown account shows no burn rate.
+
+### Fixed
+
+- In the CLI row, a `·` separates ⓘ from the pitboard button.
+- A failed read keeps the last samples. Overlapping refreshes run one after another, and a refresh
+  that finishes after a newer one is dropped.
+
 ## 0.1.7 - 2026-10-12
 
 ### Fixed

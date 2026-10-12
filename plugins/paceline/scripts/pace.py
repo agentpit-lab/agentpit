@@ -578,7 +578,28 @@ def claude_pid():
 
 # ---------------------------------------------------------------- usage data
 
-def read_history(sd):
+def own_account():
+    """(key, reason) for the account signed in now, as limits_file.resolve_account reports it."""
+    return limits_file.resolve_account()
+
+
+def history_account_filter(records, key):
+    """The history lines that belong to the account with this key.
+
+    Lines written before accounts existed, or with a null account, are untagged: they count only when
+    every tagged line is this account's, which is the case of a person who never switched. An unknown
+    own key keeps every line.
+    """
+    if key is None:
+        return records
+    # Only a 0.2.5 merge puts an accounts map on a history line, and its buckets may mix accounts.
+    tagged = [limits_file.UNKNOWN_ACCOUNT if "accounts" in r else limits_file.reading_account(r) for r in records]
+    mixed = any(a not in (key, limits_file.UNKNOWN_ACCOUNT) for a in tagged)
+    return [r for r, a in zip(records, tagged) if a == key or (a == limits_file.UNKNOWN_ACCOUNT and not mixed)]
+
+
+def read_history(sd, account=None):
+    """The history lines with a weekly reading, oldest first; account is the own key (None keeps every line)."""
     records = []
     for name in ("rate-limits.history.jsonl.1", "rate-limits.history.jsonl"):
         try:
@@ -592,7 +613,7 @@ def read_history(sd):
                 if record.get("seven_day"):
                     records.append(record)
     records.sort(key=lambda r: r["_at"])
-    return records
+    return history_account_filter(records, account)
 
 
 MERGE_LOCK_WAIT_SEC = 3
@@ -626,16 +647,48 @@ def bucket_times(record, now):
     return times
 
 
-def current_record(sd, now):
-    """rate-limits.json dated by its oldest live bucket, never by mtime; None without a seven_day bucket."""
-    record = read_limits(sd)
-    if not record or not is_bucket(record.get("seven_day")):
+NO_PARTITION = "no-partition"
+
+
+def pick_partition(limits, key, reason):
+    """(partition, account) for the account with this key (None when unresolved, then reason says why).
+
+    The account is {"state": "known" | "unknown", "key": the own key, "reason": a code or None}. Unknown
+    means the figures cannot be told to be this account's: the own key is unresolved, or they come from
+    the partition of untagged readings. Another account's partition is never returned.
+    """
+    def account(state, why):
+        return {"state": state, "key": key, "reason": why}
+
+    if not limits:
+        return None, account("known" if key else "unknown", None if key else reason)
+    if key is None:
+        return limits, account("unknown", reason)
+    held = limits_file.held_partitions(limits)
+    if key in held:
+        return held[key], account("known", None)
+    if limits_file.UNKNOWN_ACCOUNT in held:
+        return held[limits_file.UNKNOWN_ACCOUNT], account("unknown", "untagged")
+    if isinstance(limits.get("accounts"), dict):
+        return None, account("known", NO_PARTITION)
+    return limits, account("unknown", "untagged")
+
+
+def dated_record(partition, now):
+    """A partition dated by its oldest live bucket, never by mtime; None without a seven_day bucket."""
+    if not partition or not is_bucket(partition.get("seven_day")):
         return None
-    times = bucket_times(record, now)
-    at = min(times.values()) if times else safe_iso(record.get("observed_at"))
+    times = bucket_times(partition, now)
+    at = min(times.values()) if times else safe_iso(partition.get("observed_at"))
     if not at:
         return None
-    return dict(record, _at=at, _bucket_at={name: iso_ms(t) for name, t in times.items()})
+    return dict(partition, _at=at, _bucket_at={name: iso_ms(t) for name, t in times.items()})
+
+
+def current_record(sd, now, key=None, reason="no-file"):
+    """(record, account): the signed-in account's partition of rate-limits.json, dated; record is None without one."""
+    partition, account = pick_partition(read_limits(sd), key, reason)
+    return dated_record(partition, now), account
 
 
 def record_source(record):
@@ -659,31 +712,38 @@ def update_usage(sd, now, merge=True, lock_wait=0.0):
 
 def load_usage(sd, profile, now, allow_merge=True, max_age=None):
     """Latest usage record plus where it came from. Never raises on a busy lock or missing data."""
-    history = read_history(sd)
+    key, reason = own_account()
+    history = read_history(sd, key)
     fake = os.environ.get("PACELINE_USAGE_FILE")
     if fake:
-        record = json.loads(Path(fake).read_text(encoding="utf-8"))
-        record["_at"] = parse_iso(record.get("observed_at")) or now
-        return {"record": record, "source": "file", "error": None, "history": history}
+        partition, account = pick_partition(json.loads(Path(fake).read_text(encoding="utf-8")), key, reason)
+        record = dict(partition) if partition is not None else None
+        if record is not None:
+            record["_at"] = parse_iso(record.get("observed_at")) or now
+        return {"record": record, "source": "file", "error": None, "history": history, "account": account}
     limit = profile["usage_snapshot_max_age_sec"] if max_age is None else max_age
 
     def fresh(record):
         return record is not None and (now - record["_at"]).total_seconds() < limit
 
-    newest = current_record(sd, now)
+    newest, account = current_record(sd, now, key, reason)
     if fresh(newest):
-        return {"record": newest, "source": record_source(newest), "error": None, "history": history}
+        return {"record": newest, "source": record_source(newest), "error": None, "history": history,
+                "account": account}
     if not allow_merge or os.environ.get("PACELINE_NO_MERGE"):
-        return {"record": newest, "source": "fallback", "error": "merge disabled", "history": history}
+        return {"record": newest, "source": "fallback", "error": "merge disabled", "history": history,
+                "account": account}
     # The record is older than the limit: take in whatever the sessions have handed over since.
     # A reading is never newer than the last turn of any session, so a merge without error leaves
     # no error to report even when the data stays old.
     _, merged, error = update_usage(sd, now, lock_wait=LOAD_LOCK_WAIT_SEC)
-    history = read_history(sd)
-    newest = current_record(sd, now)
+    history = read_history(sd, key)
+    newest, account = current_record(sd, now, key, reason)
     if fresh(newest):
-        return {"record": newest, "source": record_source(newest), "error": None, "history": history}
-    return {"record": newest, "source": "fallback", "error": None if merged else error, "history": history}
+        return {"record": newest, "source": record_source(newest), "error": None, "history": history,
+                "account": account}
+    return {"record": newest, "source": "fallback", "error": None if merged else error, "history": history,
+            "account": account}
 
 
 def scoped_match(scoped, model):
@@ -913,6 +973,10 @@ def window_effective(record, now, model):
 def compute(now, profile, usage, model=None, commit_mb=None, outstanding=0.0, runs=None):
     """Every number the recommendation and the autonomous parameters are built from."""
     record = usage.get("record")
+    account = usage.get("account")
+    if (account or {}).get("reason") == NO_PARTITION:
+        raise PaceError("no usage data yet for the signed-in account: it fills after the first answer in a "
+                        "session with paceline loaded")
     if not record or not record.get("seven_day"):
         raise PaceError("no usage data yet: rate-limits.json has no weekly reading; it fills after the first "
                         "answer in a session with paceline loaded")
@@ -992,7 +1056,7 @@ def compute(now, profile, usage, model=None, commit_mb=None, outstanding=0.0, ru
         "data": {"source": usage.get("source"), "error": usage.get("error"),
                  "observed_at": iso_ms(record["_at"]) if record.get("_at") else record.get("observed_at"),
                  "bucket_observed_at": record.get("_bucket_at"), "age_min": round(age_min, 1) if age_min != math.inf else None,
-                 "stale": stale},
+                 "stale": stale, **({"account": account} if account else {})},
         "weekly": {"seven_day_pct": seven_used, "scoped": scoped, "model": model,
                    "matched_scoped": [s["name"] for s in matched], "effective_pct": effective,
                    "remaining_pct": remaining, "reset": iso_ms(reset), "reset_local": fmt_local(reset, tz),
@@ -1141,6 +1205,9 @@ def status_line(calc, rec, extras):
     if calc["data"]["source"] == "fallback" and calc["data"]["error"]:
         data += f" ({calc['data']['error']})"
     parts.append(data)
+    account = calc["data"].get("account") or {}
+    if account.get("state") == "unknown":
+        parts.append(f"account unknown ({account.get('reason')})")
     if calc["host"]["free_commit_mb"] is None:
         parts.append("host memory unknown")
     if calc.get("pace_on") is False:
@@ -1486,6 +1553,32 @@ def status_report(ctx, store):
     return status_line(calc, rec, extras), calc
 
 
+def night_over(run, local, profile):
+    day = local.date().isoformat()
+    return day > run["night_date"] or (day == run["night_date"] and local.hour >= profile["night_hours"][1])
+
+
+def switch_stop(now, store):
+    """The stop result when a run started under one account and another is signed in, else None.
+
+    Without readings for the new account no figures can be computed, so autonomous never runs; the
+    stop must not wait for them.
+    """
+    run = store["queue"].get("run")
+    run_key = (run or {}).get("account")
+    key, _ = own_account()
+    if not (run_key and key and run_key != key):
+        return None
+    profile = store["profile"]
+    reasons = ["account changed during the run"]
+    if night_over(run, now.astimezone(load_zone(profile["timezone"])), profile):
+        reasons.append("night ended")
+    return {"mode": "autonomous", "action": "stop", "may_start_next_item": False, "max_parallel_agents": 0,
+            "max_heavy_runs": None, "allowed_models": [], "budget_for_next_item_pct": 0.0, "next_item": None,
+            "wait_until": None, "reasons": reasons, "run": None, "stale": True,
+            "weekly_effective_pct": None, "five_hour_used_pct": None}
+
+
 def cmd_auto(ctx):
     with locked(ctx.sd):
         store = Store(ctx.sd)
@@ -1501,6 +1594,10 @@ def cmd_auto(ctx):
             # the sessions have handed over since.
             calc = ctx.calc(store, max_age=profile["auto_refresh_cache_sec"])
     except PaceError as error:
+        stopped = switch_stop(ctx.now, store)
+        if stopped:
+            emit(ctx.args, f"auto: STOP | {'; '.join(stopped['reasons'])}", stopped)
+            return EXIT_STOP
         result = {"mode": "autonomous", "action": "wait", "may_start_next_item": False, "max_parallel_agents": 0,
                   "max_heavy_runs": None, "allowed_models": [], "budget_for_next_item_pct": 0.0, "next_item": None,
                   "wait_until": None, "reasons": [str(error)], "run": None, "stale": True,
@@ -1531,12 +1628,13 @@ def autonomous(now, calc, store, profile, tz, start_run=False):
     night = calc["night"]
     local = now.astimezone(tz)
     run = queue.get("run")
+    current_key = (calc["data"].get("account") or {}).get("key")
     reused = bool(start_run and run and run.get("night_date") == night["date"])
     if start_run and not reused:
         if run:
             queue["past_runs"] = (queue.get("past_runs", []) + [run])[-14:]
         run = {"started_at": iso_ms(now), "night_date": night["date"], "reset": calc["weekly"]["reset"],
-               "used_at_start": effective,
+               "used_at_start": effective, "account": current_key,
                "allowance_pct": night["allowance_pct"], "surplus_pct": calc["surplus_pct"],
                "last_before_reset": night["last_before_reset"], "pool_spent_pct": 0.0}
         queue["run"] = run
@@ -1549,7 +1647,11 @@ def autonomous(now, calc, store, profile, tz, start_run=False):
                 "stale": calc["data"]["stale"], "weekly_effective_pct": effective,
                 "five_hour_used_pct": calc["five_hour"]["used_pct"]}
     spent = max(0.0, effective - run["used_at_start"])
-    if not (local.date().isoformat() > run["night_date"]
+    run_key = run.get("account")
+    switched = bool(run_key and current_key and run_key != current_key)
+    lost = bool(run_key and not current_key)
+    # The figures of another account, or of none, must not become this run's last known figures.
+    if not (switched or lost) and not (local.date().isoformat() > run["night_date"]
             or (local.date().isoformat() == run["night_date"] and local.hour >= profile["night_hours"][1])):
         run["last_effective"] = effective
         run["last_seen"] = iso_ms(now)
@@ -1559,7 +1661,9 @@ def autonomous(now, calc, store, profile, tz, start_run=False):
     commit = calc["host"]["free_commit_mb"]
     five = calc["five_hour"]
     stop = None
-    if commit is not None and commit < profile["min_free_commit_mb"]:
+    if switched:
+        stop = "account changed during the run"
+    elif commit is not None and commit < profile["min_free_commit_mb"]:
         stop = f"free commit {commit / 1024:.1f} GB < {profile['min_free_commit_mb'] / 1024:.0f} GB"
     elif (local.date().isoformat() == run["night_date"] and local.hour >= profile["night_hours"][1]) \
             or local.date().isoformat() > run["night_date"]:
@@ -1586,6 +1690,9 @@ def autonomous(now, calc, store, profile, tz, start_run=False):
     if stop:
         action = "stop"
         reasons.insert(0, stop)
+    elif lost:
+        action = "wait"
+        reasons.insert(0, "account unknown")
     if action == "start":
         if calc["data"]["stale"]:
             action = "wait"
@@ -2043,7 +2150,7 @@ def cmd_calibrate(ctx):
     with locked(ctx.sd):
         store = Store(ctx.sd)
         store.save()
-    history = read_history(ctx.sd)
+    history = read_history(ctx.sd, own_account()[0])
     result = calibrate(history, store, ctx.now, store["profile"], ctx.model)
     if result.get("note"):
         text = result["note"]
@@ -2318,6 +2425,11 @@ def probe_limits(sd, now):
     return ("warn" if stale else "ok"), evidence
 
 
+def probe_account():
+    key, reason = limits_file.resolve_account()
+    return ("ok" if key else "warn"), {"state": "known" if key else "unknown", "reason": reason}
+
+
 def probe_process():
     table = process_table()
     chain, pid = claude_ancestors(table)
@@ -2379,6 +2491,7 @@ def doctor_report(ctx, profile, live):
         probe("switch", probe_switch, sd),
         inbox,
         probe("limits", probe_limits, sd, ctx.now),
+        probe("account", probe_account),
         probe("process", probe_process),
         probe("memory", probe_memory),
         probe("timezone", probe_timezone, profile, ctx.now),

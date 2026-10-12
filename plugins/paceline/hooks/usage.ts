@@ -19,6 +19,7 @@ export type ExactReading = {
   five_hour?: Bucket
   seven_day?: Bucket
   scoped?: Scoped[]
+  account?: string
 }
 export type Outcome = { reading: ExactReading; at: number } | { error: string }
 
@@ -94,6 +95,14 @@ function scopedOf(limits: unknown): Scoped[] {
     out.push({ name, used_percentage: percent, ...(resets ? { resets_at: resets } : {}) })
   }
   return out
+}
+
+// The account that held before and after the request. A login during the request would leave the
+// answer of one account tagged with the other, so the reading is dropped; unknown on both sides stays
+// untagged, as readings were before accounts were told apart.
+export function tagOrDrop(reading: ExactReading, before: string | null, after: string | null): ExactReading | null {
+  if (before !== after) return null
+  return before === null ? reading : { ...reading, account: before }
 }
 
 export function readingFrom(status: number, text: string, at: number): Outcome {

@@ -24,12 +24,37 @@ a session is open, the module also checks the inbox every 15 seconds and merges 
 command merges first when the data is older than `usage_snapshot_max_age_sec` (300 seconds). The
 `pace:` line before an Agent launch uses the limits file as it stands, without a merge.
 
+### Which account a reading belongs to
+
+Two accounts can share one configuration directory, so one limits file. The writers tag each
+reading with the key of the account signed in at the moment they write it. The key is the first 16
+hex digits of a SHA-256 hash of the account and organization identifiers in Claude Code's
+`.claude.json`; it cannot be turned back into either identifier, and paceline stores nothing else
+from the file. The merge puts each account's readings into a partition of its own, `accounts[<key>]`,
+and mirrors the newest partition at the top level for readers that know nothing of accounts.
+Readings with no key go to the partition `unknown`.
+
+Every reader resolves the signed-in account itself and uses only that account's partition. When the
+account has no partition yet, it uses `unknown` and marks the figures `account unknown`; when there
+is neither, pace says `no usage data yet for the signed-in account`. When the account cannot be
+resolved at all, the reader takes the top level and marks it the same way. The history keeps one
+line per partition that changed, with its account, and pace's forecast and calibration count only
+the signed-in account's lines.
+
+After `/login` or `/logout`, the module holds back a reading whose limits equal the ones it held
+before the command while the account differs from the held one: Claude Code may still carry the old
+account's limits in the next request, and they must not be tagged with the new account.
+
+A partition that no reading has touched for 7 days goes at the next merge, except the newest one,
+which stays however old. Signing in again to an account whose partition remains shows its last
+figures at once, dated by their age.
+
 ```mermaid
 flowchart LR
   turn[Model turn in a session] -->|session reading| inbox[(inbox)]
   endpoint[Account usage via Claude Code] -->|exact reading, every 125 s| inbox
   inbox -->|merge| limits[(rate-limits.json)]
-  limits --> pace[pace: budget, pace line, night queue]
+  limits -->|partition of the signed-in account| pace[pace: budget, pace line, night queue]
   limits --> readers[Other readers, such as a status line]
 ```
 
@@ -236,10 +261,14 @@ flowchart TD
   unknown, and at least 1.
 - **Wait** (exit 10): running items or unfinished dependencies; stale data; five-hour usage at the
   threshold or the hard stop, whichever is lower, with `wait_until` set to the five-hour reset; no
-  allowed model with weekly headroom for the item; or no usage data at all.
+  allowed model with weekly headroom for the item; no usage data at all; or the account
+  cannot be resolved (`account unknown`).
 - **Stop** (exit 11): no run was started; free memory below the floor; the night is over; the queue
-  is empty; every remaining item is deferred or depends on a deferred item; or the next item does
-  not fit the budget and nothing is running.
+  is empty; every remaining item is deferred or depends on a deferred item; the next item does
+  not fit the budget and nothing is running; or the signed-in account is not the one the run started
+  under (`account changed during the run`). `auto` checks the account before every other stop, and
+  stops at once, because the new account may have no readings yet. A run started with no known
+  account is not checked.
 
 In `auto`, the throttle depends only on weekly usage: at `throttle_weekly_pct` with more than 24
 hours to the reset, the allowed models are `routine_models`. When five-hour usage is at or above

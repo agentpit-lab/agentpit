@@ -85,16 +85,24 @@ Every command except `cache-watch`, `context-watch`, and `usage-watch` accepts t
   differs from the budget); `forecast unused`, when there is enough history; the advised parallel
   agents and model; five-hour usage against the current threshold; the night allowance; the age of
   the data, with `STALE` in front when it is older than `stale_threshold_min`. Further fields appear
-  only when they apply: `host memory unknown`, `pace hooks off (paceline on)`, a `WARNING` that the
+  only when they apply: `account unknown (<reason>)`, when the figures cannot be told to be the
+  signed-in account's (the reasons are `untagged`, `no-file`, `unreadable`, and `no-account`),
+  `host memory unknown`, `pace hooks off (paceline on)`, a `WARNING` that the
   rest of the week is near the day hours' capacity, the reasons for a block, pause, or throttle,
   unconfirmed plans that start tomorrow, and the leftover-pool suggestion. The
-  [explanation](explanation.md) says how each number is computed.
+  [explanation](explanation.md) says how each number is computed. With `--json`, `data.account` is
+  `{"state": "known" | "unknown", "key": <the signed-in account's key or null>, "reason": <code or
+  null>}`; `key` is the one-way key of [the inbox](#the-inbox-for-writers), never an identifier of
+  the account.
 - `paceline auto [--start-run]` prints the parameters for the next night-queue item, for example
   `auto: START Q3 | budget 4.20% | agents <=3 models opus,sonnet,haiku`, and exits 0 (`start`), 10
   (`wait`), or 11 (`stop`). `--start-run` begins tonight's run: it fixes the night allowance and the
   weekly usage it counts from. Running it again in the same night keeps that run. With `--json`,
   the result has `action`, `next_item`, `budget_for_next_item_pct`, `max_parallel_agents`,
-  `max_heavy_runs`, `allowed_models`, `wait_until`, and `reasons`.
+  `max_heavy_runs`, `allowed_models`, `wait_until`, and `reasons`. A run remembers the account it
+  started under. When another account is signed in, `auto` stops with the reason
+  `account changed during the run`, checked before every other stop; when the account cannot be
+  resolved, it waits with `account unknown`.
 - `paceline on` and `paceline off` write the pace switch, `<state>/pace.json`.
 - `paceline calibrate` reads the limits history and the completed reservations and proposes new
   values for `five_hour_to_week_pct`, `reserve_pct`, `weekend_cap_pct`, `night_base_pct`, and
@@ -106,8 +114,10 @@ Every command except `cache-watch`, `context-watch`, and `usage-watch` accepts t
 - `paceline merge [--verbose]` merges the inbox into the limits file now. It prints nothing unless
   you pass `--verbose` or `--json`.
 - `paceline doctor [--live] [--bundle PATH]` diagnoses paceline on this machine. It runs these
-  probes: `runtime`, `paths`, `switch`, `inbox`, `limits`, `process`, `memory`, `timezone`, `hooks`,
-  and `debug_log`, each `ok`, `warn`, or `fail`, with a hint for some. `--json` shows the evidence of
+  probes: `runtime`, `paths`, `switch`, `inbox`, `limits`, `account`, `process`, `memory`, `timezone`, `hooks`,
+  and `debug_log`, each `ok`, `warn`, or `fail`, with a hint for some. The `account` probe reports
+  `known` or `unknown` and a reason code (`no-file`, `unreadable`, `no-account`), and nothing from
+  `.claude.json`. `--json` shows the evidence of
   each probe. Without `--live` it changes nothing; `--live` also runs one merge. `--bundle` writes a
   zip with the report, the debug log, the profile, the pace switch, the limits file, the last 50
   history lines, and the last 20 reservations. The report and the bundle write your home directory
@@ -402,8 +412,8 @@ first source of the time zone. A POSIX rule such as `CET-1CEST` is ignored.
 
 | File | Contents |
 |---|---|
-| `<state>/rate-limits.json` | The limits file. |
-| `<state>/rate-limits.history.jsonl` (+ `.1`) | One limits record per line, appended when a value changes, rotated to `.1` past 1 MiB. |
+| `<state>/rate-limits.json` | The limits file, with one partition per account. |
+| `<state>/rate-limits.history.jsonl` (+ `.1`) | One limits record per line, appended when a value of an account's partition changes, rotated to `.1` past 1 MiB. |
 | `<state>/inbox/` | Limit readings, one file per writer and session. |
 | `<state>/inbox/usage-watch.json` | usage-watch's latest exact reading. |
 | `<state>/inbox.seen` | The inbox state last handed to a merge, so open sessions do not merge it twice. |
@@ -421,6 +431,7 @@ first source of the time zone. A POSIX rule such as `CET-1CEST` is ignored.
 | `<state>/context-watch.json` | context-watch settings: `on`, `line`, `levels`, `snapshot_days`. |
 | `<state>/usage-watch.json` | The usage-watch switch, `{"on": true}` or `{"on": false}`. Missing means off. |
 | `<state>/usage-watch.state.json` | usage-watch's `last_attempt`, `last_success` (milliseconds since 1970), and `last_error`. It holds no token. |
+| `<CLAUDE_CONFIG_DIR>/.claude.json`, else `~/.claude.json` | Claude Code's own state file, read and never written, to name the signed-in account. paceline reads only `oauthAccount.accountUuid` and `oauthAccount.organizationUuid`, and stores only a 16-hex-digit SHA-256 key of the two. `~/.claude/.claude.json` is not it. |
 | `${CLAUDE_PLUGIN_DATA}/cache-watch/<session id>.json` | cache-watch state of one session. |
 | `${CLAUDE_PLUGIN_DATA}/cache-watch/defaults.json` | cache-watch defaults: `lead_minutes`, `max_wakes`. |
 | `<project>/.claude/paceline/<session id>.md` | context-watch snapshots. The folder has its own `.gitignore` (`*`), so git ignores it. |
@@ -441,9 +452,17 @@ status line plugin or any other program may read it. Its format:
   "five_hour": {"used_percentage": 42.5, "resets_at": "2026-10-11T12:00:00.000Z",
                 "observed_at": "2026-10-11T09:30:00.000Z", "source": "payload"},
   "seven_day": {"used_percentage": 18, "resets_at": "2026-10-16T03:00:00.000Z",
-                "observed_at": "2026-10-11T09:28:00.000Z", "source": "payload"}
+                "observed_at": "2026-10-11T09:28:00.000Z", "source": "payload"},
+  "account": "069e3589b134b882",
+  "accounts": {
+    "069e3589b134b882": {"observed_at": "2026-10-11T09:30:00.000Z", "source": "payload", "...": "..."},
+    "9f44059c413565ef": {"observed_at": "2026-10-10T18:02:00.000Z", "source": "payload", "...": "..."}
+  }
 }
 ```
+
+The fields above `account` are the newest partition, copied to the top level. A reader that knows
+nothing of accounts reads them as before.
 
 - `observed_at` is the newest bucket time; each bucket carries its own. Times are ISO 8601 in UTC.
 - `resets_at` is rounded to the minute and may be `null`.
@@ -455,7 +474,21 @@ status line plugin or any other program may read it. Its format:
   dropped when `seven_day` moves to another window without one.
 - The file is replaced through a temporary file and a rename, so a reader never sees a partial
   file. It is written only when it changes.
-- `<state>/rate-limits.history.jsonl` holds one such record per line.
+- `accounts` maps an account key to that account's record, in the format above without `account` and
+  `accounts`. A key is 16 lower-case hex digits, or `unknown` for readings with no account. Each
+  partition is merged on its own. A reader that knows the account it serves reads
+  `accounts[<its key>]`, else `accounts["unknown"]` and says that the account is unknown, and never
+  another account's partition.
+- `account` is the key of the partition copied to the top level, or `null` when that partition is
+  `unknown`.
+- A partition that no reading has touched for 7 days is dropped at the next merge, except the newest
+  partition, which stays however old.
+- A file written before accounts existed has no `accounts`. Its buckets count as readings of the
+  `unknown` account until the next merge moves them into that partition.
+- `<state>/rate-limits.history.jsonl` holds one such record per line: the partition that changed, with
+  its `account` (`null` when unknown), and never the `accounts` map. A line with no `account`, or
+  with an `accounts` map, was written by paceline 0.2.5 and may mix accounts. pace counts such a line
+  only while every tagged line is the signed-in account's.
 
 pace dates the file by its oldest live bucket, and judges freshness from that time.
 
@@ -471,6 +504,7 @@ and session, and overwrite your own file.
   "observed_at": "2026-10-11T09:30:00.000Z",
   "session_id": "<session id>",
   "model": "<model id or null>",
+  "account": "<account key, optional>",
   "five_hour": {"used_percentage": 42.5, "resets_at": "2026-10-11T12:00:00.000Z"},
   "seven_day": {"used_percentage": 18, "resets_at": "2026-10-16T03:00:00.000Z"}
 }
@@ -478,6 +512,14 @@ and session, and overwrite your own file.
 
 Rules:
 
+- `account` is optional and names the account the reading belongs to. A writer that can name the
+  account should set it: a reading without it, or with a value that is not 16 lower-case hex digits,
+  goes to the partition `unknown`, and readers mark those figures `account unknown`. Compute the key
+  as the first 16 hex digits of the SHA-256 hash of the UTF-8 text
+  `paceline-account-v1:<accountUuid>:<organizationUuid>`, with both identifiers lower-cased from
+  `oauthAccount` in `.claude.json` (see [Files](#files)) and `<organizationUuid>` empty when it is
+  missing. Write no `account` when `accountUuid` is not a UUID. Resolve it before every write, not
+  once per process, because a `/login` in another session changes the file.
 - `observed_at` is required and dates both buckets. A bucket needs a numeric `used_percentage`;
   `resets_at` is ISO 8601 or `null`.
 - A reading from the future, or with a reset later than its window allows, is skipped.

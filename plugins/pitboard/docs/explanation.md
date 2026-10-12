@@ -25,7 +25,7 @@ flowchart LR
 | Context | The token counts of each model request in the main conversation. After a compaction, the compaction's own size until `/context` can estimate the whole window, then that estimate until the next request. |
 | Auto-compact, the compaction point, the compaction window and who set it | `/context`'s breakdown, read at session start, after each turn, and after each compaction. |
 | Five-hour and weekly limits, API cost | Claude Code, once per turn, merged with the limits file when it exists. |
-| Readings other sessions saw, the history behind Pace, model-scoped limits | paceline's limits file and its history. |
+| Readings other sessions saw, the history behind Pace, model-scoped limits | paceline's limits file and its history, for the signed-in account only. |
 | Cache countdown, `Hit` for the last turn | The session's own requests. The countdown runs from the start of the last one. |
 | `Session` hits, the TTL | The session transcript since the last compaction. |
 | Model, effort, Claude Code version, turns, session time | Claude Code. Until a request reports the effort, it comes from `modelSettings` or `effortLevel` in the settings. `/effort` in this session shows at once. |
@@ -160,6 +160,11 @@ of budget is 100/7, about 14.3 points.
 - `/usage` shows the account's figures at the moment you run it. The row shows the newest reading
   Claude Code reported to a session, or paceline recorded, and moves only when one arrives.
 - Within one window the row keeps the higher of its own reading and the file's.
+- The file holds the readings of each account apart. pitboard finds the signed-in account in
+  Claude Code's `.claude.json` and draws that account's partition only, so a `/login` to another
+  account changes the figures within about 20 seconds. When pitboard cannot tell the account, or the
+  only readings have no account, it draws what the file has and shows `Account` `unknown` on the
+  limit cards.
 - The row rounds percentages to whole numbers.
 - A Desktop card takes its paces and times at the start of the minute.
 - Desktop's own context ring counts the full window. `Ctx` counts toward the compaction point while

@@ -9,8 +9,11 @@ export type InboxReading = {
   model: string | null
   five_hour?: InboxBucket
   seven_day?: InboxBucket
+  // The one-way key of the account signed in at the write; absent when it was not known.
+  account?: string
 }
-export type Sent = { key: string; at: number }
+// key is what a write is compared by; limits is its limits-only part, which the /login hold compares.
+export type Sent = { key: string; limits: string; at: number }
 
 // Unchanged readings still go out once a minute, or pace would call steady usage stale.
 export const INBOX_REFRESH_MS = 60_000
@@ -20,19 +23,25 @@ function pick(limits: readonly RateLimit[], kind: string): RateLimit | undefined
   return l ? { kind: l.kind, percentUsed: l.percentUsed, resetsAt: l.resetsAt ?? null } : undefined
 }
 
-// What a write is compared by: the two windows paceline merges; null when both are absent.
-export function inboxKey(limits: readonly RateLimit[]): string | null {
+// The two windows paceline merges; null when both are absent.
+export function limitsKey(limits: readonly RateLimit[]): string | null {
   const five = pick(limits, 'five_hour')
   const week = pick(limits, 'seven_day')
   if (!five && !week) return null
   return JSON.stringify([five ?? null, week ?? null])
 }
 
+// What a write is compared by: the windows and the account, so a switch of account writes at once.
+export function inboxKey(limits: readonly RateLimit[], account: string | null): string | null {
+  const key = limitsKey(limits)
+  return key === null ? null : JSON.stringify([key, account])
+}
+
 export function isDue(key: string, sent: Sent | null, now: number): boolean {
   return !sent || sent.key !== key || now - sent.at >= INBOX_REFRESH_MS
 }
 
-export function inboxReading(limits: readonly RateLimit[], now: number, sessionId: string, model: string | null): InboxReading {
+export function inboxReading(limits: readonly RateLimit[], now: number, sessionId: string, model: string | null, account: string | null): InboxReading {
   const bucket = (l: RateLimit): InboxBucket => ({ used_percentage: l.percentUsed, resets_at: l.resetsAt ?? null })
   const five = pick(limits, 'five_hour')
   const week = pick(limits, 'seven_day')
@@ -42,6 +51,7 @@ export function inboxReading(limits: readonly RateLimit[], now: number, sessionI
     model,
     ...(five ? { five_hour: bucket(five) } : {}),
     ...(week ? { seven_day: bucket(week) } : {}),
+    ...(account ? { account } : {}),
   }
 }
 

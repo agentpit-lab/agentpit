@@ -2,6 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
 import type { StatusCache, StatusLimit, StatusSample, StatusScoped } from '../types'
+import { accountFileOf, accountKeyOf } from './account'
 import { desktopKey } from './cards'
 import { drawDesktop, drawPane, drawTerminal } from './draw'
 import type { Els } from './draw'
@@ -11,7 +12,9 @@ import {
   encodeProject,
   fileLimits as readFileLimits,
   freshScoped,
+  historyForAccount,
   mergeLimit,
+  pickPartition,
   settingsEffort,
   stateDirOf,
 } from './view'
@@ -41,13 +44,42 @@ const weekSamples = atom({ plugin: 'pitboard', key: 'weekSamples' } as const, []
 const ctxSamples = atom({ plugin: 'pitboard', key: 'ctxSamples' } as const, [] as number[])
 const detail = atom({ plugin: 'pitboard', key: 'detail' } as const, null as string | null)
 const advisorPick = atom({ plugin: 'pitboard', key: 'advisorPick' } as const, null as { value: string | null; before?: string | null } | null)
+// The account signed in at the last refresh (null before the first) and whether the limits shown from
+// the file come from readings of unknown account.
+const account = atom({ plugin: 'pitboard', key: 'account' } as const, null)
 const paneOpen = atom({ plugin: 'pitboard', key: 'paneOpen' } as const, false)
 
 const toLimit = (l: StatusLimit): StatusLimit => ({ kind: l.kind, percentUsed: l.percentUsed, resetsAt: l.resetsAt })
 
 async function configDir($: EngineInterface) {
   const home = (await $.env.get('USERPROFILE')) ?? (await $.env.get('HOME')) ?? ''
-  return (await $.env.get('CLAUDE_CONFIG_DIR')) ?? `${home}/.claude`
+  return (await $.env.get('CLAUDE_CONFIG_DIR')) || `${home}/.claude`
+}
+
+// The key of the account signed in now, null when it cannot be told. Claude Code rewrites its state
+// file often, so a read that fails is tried once more after 50 ms. Nothing from the file is kept.
+async function accountOf($: EngineInterface): Promise<string | null> {
+  try {
+    const file = accountFileOf({
+      configDir: await $.env.get('CLAUDE_CONFIG_DIR'),
+      home: (await $.env.get('USERPROFILE')) ?? (await $.env.get('HOME')),
+    })
+    if (!(await $.fs.exists(file))) return null
+    for (let attempt = 0; attempt < 2; attempt++) {
+      let text: string | null = null
+      try {
+        text = await $.fs.read(file)
+      } catch {
+        text = null
+      }
+      const found = accountKeyOf(text)
+      if (found.reason !== 'unreadable') return found.key
+      if (attempt === 0) await new Promise<void>(resolve => $.clock.after(50, () => resolve()))
+    }
+  } catch {
+    // Whatever failed, the account is unknown.
+  }
+  return null
 }
 
 // paceline's <state>, found by paceline's own rule, so the row reads the files paceline writes.
@@ -164,32 +196,77 @@ async function refreshThreshold($: EngineInterface, count: 'summary' | 'full' = 
 
 type FileBucket = { used_percentage?: unknown; resets_at?: unknown }
 
+// Python's truthiness, which decides what paceline counts as a weekly reading: an empty object is none.
+const isFilled = (value: unknown) => (Array.isArray(value) ? value.length > 0 : value && typeof value === 'object' ? Object.keys(value).length > 0 : !!value)
+
+// Bumped by each refresh, so one that was overtaken while it waited drops its result.
+let sharedRound = 0
+
 // The limits file holds what every session that reports to it saw, and alone holds the
 // model-scoped weekly buckets, when a writer adds them.
 async function refreshShared($: EngineInterface) {
+  const round = ++sharedRound
+  const key = await accountOf($)
   const path = `${await stateDir($)}/rate-limits.json`
   let file: unknown = null
+  let isUnreadable = false
   try {
     file = JSON.parse(await $.fs.read(path))
   } catch {
     // A read that met a writer's rename keeps what the last read gave; no file yet draws the payload alone.
-    if (await $.fs.exists(path)) return
+    isUnreadable = await $.fs.exists(path)
   }
   const now = await $.clock.now()
-  await update($, scoped, () => freshScoped(file, now))
-  await update($, fileLimits, () => readFileLimits(file, now))
+  // A newer refresh started while this one waited and may have seen another account: its result stands.
+  if (round !== sharedRound) return
+  const known = await read($, account)
+  // A key that cannot be read for a moment is no change of account: the last key stands, and the
+  // figures are marked through pickPartition below.
+  const held = key ?? known?.key ?? null
+  if (key !== null && known?.key != null && known.key !== key) {
+    // Samples of two accounts would make one burn rate: start over with the new account's own. The
+    // payload left in the measure is the old account's until the next response.
+    await update($, account, () => ({ key, isFileUnknown: false }))
+    await update($, fiveSamples, () => [])
+    await update($, weekSamples, () => [])
+    await update($, fileLimits, () => [])
+    await update($, scoped, () => [])
+    await update($, measure, m => (m ? { ...m, limits: [] } : m))
+    await restoreSamples($, key)
+  }
+  if (isUnreadable) {
+    await update($, account, prev => ({ key: held, isFileUnknown: prev?.key === held && prev.isFileUnknown }))
+    return
+  }
+  // The partition of the signed-in account alone: another account's figures are never drawn.
+  const { partition, isUnknown } = pickPartition(file, key)
+  await update($, account, () => ({ key: held, isFileUnknown: isUnknown }))
+  await update($, scoped, () => freshScoped(partition, now))
+  await update($, fileLimits, () => readFileLimits(partition, now))
   await recordLimits($)
 }
 
 // Keeps the five-hour readings of the last 3 hours and the weekly ones of the last 6, in
 // $.store too, so a new session starts with burn rates instead of waiting for them.
 async function recordLimits($: EngineInterface) {
-  const [m, fl, now] = await Promise.all([read($, measure), read($, fileLimits), $.clock.now()])
-  const latest = (kind: string) => mergeLimit(m?.limits.find(l => l.kind === kind), fl.find(l => l.kind === kind))
+  const [m, fl, who, now] = await Promise.all([read($, measure), read($, fileLimits), read($, account), $.clock.now()])
+  const owner = who?.key ?? null
+  // Figures of a file whose account is unknown may be another account's: the session's own payload
+  // alone is sampled, under the key.
+  const latest = (kind: string) => {
+    const own = m?.limits.find(l => l.kind === kind)
+    return who?.isFileUnknown ? own : mergeLimit(own, fl.find(l => l.kind === kind))
+  }
   const five = latest('five_hour')
-  if (five) await $.store.set('fiveSamples', await update($, fiveSamples, prev => nextSamples(prev, five, now, 3 * 3600_000)))
+  if (five) {
+    const samples = await update($, fiveSamples, prev => nextSamples(prev, five, now, 3 * 3600_000))
+    await $.store.set('fiveSamples', { account: owner, samples })
+  }
   const week = latest('seven_day')
-  if (week) await $.store.set('weekSamples', await update($, weekSamples, prev => nextSamples(prev, week, now, 6 * 3600_000)))
+  if (week) {
+    const samples = await update($, weekSamples, prev => nextSamples(prev, week, now, 6 * 3600_000))
+    await $.store.set('weekSamples', { account: owner, samples })
+  }
 }
 
 // A reading joins the list only when it differs from the last one. Readings older than keepMs
@@ -203,7 +280,7 @@ function nextSamples(prev: StatusSample[], limit: StatusLimit, now: number, keep
 
 // The writers' change log, so a burn shows from the first draw instead of after an hour of this
 // session's own sampling. Past 1 MiB the log moves to `.1`, read first.
-async function historySamples($: EngineInterface): Promise<{ five: StatusSample[]; week: StatusSample[] }> {
+async function historySamples($: EngineInterface, key: string | null): Promise<{ five: StatusSample[]; week: StatusSample[] }> {
   const out = { five: [] as StatusSample[], week: [] as StatusSample[] }
   const base = `${await stateDir($)}/rate-limits.history.jsonl`
   let text = ''
@@ -214,22 +291,28 @@ async function historySamples($: EngineInterface): Promise<{ five: StatusSample[
       // Not there yet.
     }
   }
+  type Line = { observed_at?: unknown; account?: unknown; accounts?: unknown; five_hour?: FileBucket; seven_day?: FileBucket }
+  const lines: Line[] = []
   for (const line of text.split(/\r?\n/)) {
     try {
-      const r = JSON.parse(line) as { observed_at?: unknown; five_hour?: FileBucket; seven_day?: FileBucket }
-      const t = typeof r.observed_at === 'string' ? Date.parse(r.observed_at) : NaN
-      if (Number.isNaN(t)) continue
-      const sample = (b: FileBucket | undefined): StatusSample | null =>
-        b && typeof b.used_percentage === 'number'
-          ? { t, pct: b.used_percentage, resetsAt: typeof b.resets_at === 'string' ? b.resets_at : null }
-          : null
-      const five = sample(r.five_hour)
-      const week = sample(r.seven_day)
-      if (five) out.five.push(five)
-      if (week) out.week.push(week)
+      const r = JSON.parse(line) as Line
+      if (r && typeof r === 'object' && typeof r.observed_at === 'string' && !Number.isNaN(Date.parse(r.observed_at))) lines.push(r)
     } catch {
       // A torn last line while a writer appends.
     }
+  }
+  // paceline reads only the lines that hold a weekly reading, and applies the account rule to those.
+  const weekly = lines.filter(r => isFilled(r.seven_day))
+  for (const r of historyForAccount(weekly, key)) {
+    const t = Date.parse(String(r.observed_at))
+    const sample = (b: FileBucket | undefined): StatusSample | null =>
+      b && typeof b.used_percentage === 'number'
+        ? { t, pct: b.used_percentage, resetsAt: typeof b.resets_at === 'string' ? b.resets_at : null }
+        : null
+    const five = sample(r.five_hour)
+    const week = sample(r.seven_day)
+    if (five) out.five.push(five)
+    if (week) out.week.push(week)
   }
   return out
 }
@@ -245,14 +328,20 @@ function mergeSamples(a: StatusSample[], b: StatusSample[], now: number, keepMs:
 }
 
 // The state library needs each atom named at the update call, so the two lists restore apart.
-async function restoreSamples($: EngineInterface) {
+async function restoreSamples($: EngineInterface, key: string | null) {
   const [five, week, logged, now] = await Promise.all([
     $.store.get('fiveSamples'),
     $.store.get('weekSamples'),
-    historySamples($),
+    historySamples($, key),
     $.clock.now(),
   ])
-  const stored = (v: unknown) => (Array.isArray(v) ? (v as StatusSample[]) : [])
+  // Stored with the key of their account and dropped under another. A bare list predates the key:
+  // it is trusted only while the account cannot be told.
+  const stored = (v: unknown): StatusSample[] => {
+    if (Array.isArray(v)) return key === null ? (v as StatusSample[]) : []
+    const kept = v as { account?: unknown; samples?: unknown } | null | undefined
+    return kept && kept.account === key && Array.isArray(kept.samples) ? (kept.samples as StatusSample[]) : []
+  }
   await update($, fiveSamples, prev => mergeSamples(prev.length ? prev : stored(five), logged.five, now, 3 * 3600_000))
   await update($, weekSamples, prev => mergeSamples(prev.length ? prev : stored(week), logged.week, now, 6 * 3600_000))
 }
@@ -440,7 +529,7 @@ async function openPane($: EngineInterface) {
 
 // A given time keeps the caller off nowMs, so it is not redrawn every second.
 async function currentView($: EngineInterface, at?: number) {
-  const [m, c, mt, tick, sc, fl, fs, cs, ws] = await Promise.all([
+  const [m, c, mt, tick, sc, fl, fs, cs, ws, who] = await Promise.all([
     read($, measure),
     read($, cache),
     read($, meta),
@@ -450,9 +539,21 @@ async function currentView($: EngineInterface, at?: number) {
     read($, fiveSamples),
     read($, ctxSamples),
     read($, weekSamples),
+    read($, account),
   ])
   const now = tick || (await $.clock.now())
-  return buildView({ now, measure: m, cache: c, meta: mt, scoped: sc, fileLimits: fl, fiveSamples: fs, weekSamples: ws, ctxSamples: cs })
+  return buildView({
+    now,
+    measure: m,
+    cache: c,
+    meta: mt,
+    scoped: sc,
+    fileLimits: fl,
+    fiveSamples: fs,
+    weekSamples: ws,
+    ctxSamples: cs,
+    isFileAccountUnknown: who?.isFileUnknown ?? false,
+  })
 }
 
 export const register: Register = on => {
@@ -467,7 +568,9 @@ export const register: Register = on => {
     } catch {
       // The atom keeps its value: closed, unless this module placed the pane.
     }
-    await restoreSamples($)
+    const key = await accountOf($)
+    await update($, account, () => ({ key, isFileUnknown: false }))
+    await restoreSamples($, key)
     await refreshMeta($)
     // The shared file first: the session's own reading can be a turn old at start and would
     // enter the samples as a false step.

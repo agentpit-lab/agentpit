@@ -54,6 +54,10 @@ declare module 'claude-code' {
       meta: StatusMeta | null
       scoped: StatusScoped[]
       fileLimits: StatusLimit[]
+      // The account signed in at the last refresh (key null when it has never been told; a refresh that
+      // cannot read it keeps the last key), and whether the limits drawn from the file come from
+      // readings of unknown account.
+      account: { key: string | null; isFileUnknown: boolean } | null
       nowMs: number
       desktopNow: number
       fiveSamples: StatusSample[]

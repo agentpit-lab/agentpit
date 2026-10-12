@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.3.0 - 2026-10-13
+
+### Added
+
+- Each limit reading is tagged with a one-way key of the signed-in account. paceline reads only the
+  account and organization ids from `.claude.json` and stores a 16-hex-digit key, never the ids.
+- `rate-limits.json` keeps one partition per account. Its top level mirrors the newest partition, so
+  readers from before this version keep working.
+- `paceline doctor` has an `account` probe that reports a state and a reason code only.
+
+### Changed
+
+- Pace, the status line, the pre-agent hint and the night queue read only the signed-in account's
+  partition. Without one they show readings of an unknown account, marked; an account that cannot be
+  resolved shows `account unknown`.
+- A signed-out account's partition is kept up to 7 days. The newest partition is always kept, and
+  its figures show as stale.
+- The night queue stops with `account changed during the run` when another account signs in, and
+  waits with `account unknown` while the account cannot be resolved.
+- History lines are tagged with their account, one per changed partition.
+- Readings taken during `/login` and `/logout` are held, so an old account's figures are not tagged
+  with the new one.
+- After updating, restart open sessions: a session still running 0.2.5 merges every account into the
+  top level until it restarts. A history line such a session writes counts as untagged.
+
 ## 0.2.5 - 2026-10-12
 
 ### Fixed

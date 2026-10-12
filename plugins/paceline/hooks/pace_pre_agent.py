@@ -102,6 +102,8 @@ def advice(status):
              f"budget {status.get('budget_per_hour_pct', 0):.2f}%/h vs norm {status.get('normal_per_hour_pct') or 0:.2f}"]
     if data.get("stale"):
         parts.append(f"STALE data {data.get('age_min')} min old")
+    if (data.get("account") or {}).get("state") == "unknown":
+        parts.append("account unknown")
     parts += rec.get("reasons") or []
     return "pace: " + " | ".join(parts)
 

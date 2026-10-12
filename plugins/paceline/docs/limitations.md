@@ -21,18 +21,42 @@ before an Agent launch, and `/paceline:usage-watch status` shows `last attempt: 
 **What still works:** context-watch and cache-watch do not use limit readings. See
 [Keep usage current while idle](how-to.md#keep-usage-current-while-idle).
 
-### Two accounts in one configuration directory share one limits file
+### Two accounts in one configuration directory keep their limits apart, with gaps
 
-A reading in `rate-limits.json` carries no account. When you sign in to another account with
-`/login` in the same Claude Code configuration directory, the readings of both accounts go to one
-limits file. Within a window the higher reading wins, and a later window wins whichever account it
-came from.
+paceline tags each reading with a one-way key of the account that is signed in, and keeps the
+readings of each account in a partition of its own in `rate-limits.json`. Pace, the night queue,
+and pitboard read only the partition of the account signed in now. After a `/login` to another
+account in the same configuration directory, the old account's figures stay in the file and come
+back when you sign in to it again. A partition whose readings are all older than 7 days is dropped,
+except the newest one, which stays however old and shows as stale. The key comes from
+`oauthAccount` in Claude Code's own `.claude.json`; see [Files](reference.md#files).
 
-**What you see:** pace, the night queue, and status line plugins such as pitboard show a mix of the
-two accounts.
+Some gaps remain:
 
-**What still works:** give each account its own configuration directory, as the next entry
-describes.
+- A `/login` in another open session can misfile readings for a while. Every open session shares the
+  `.claude.json` file, and a session tags a reading with the account the file names at the moment it
+  writes. A session that writes just before it sees the change of account tags a reading of the old
+  account with the new account's key, and it stands in the new partition until an exact reading or
+  the next window replaces it.
+- A session still on paceline 0.2.5 does not tag its readings and merges them into a top level that
+  mixes accounts. A merge by a newer session rebuilds the top level from the partitions, and a 0.2.5
+  merge can mix it again. The mix lasts until every open session has restarted on the new version.
+- A reader that knows nothing of accounts, such as an older pitboard, sees only the top level, which
+  mirrors the newest partition. It shows the account that wrote last, whichever account is signed in.
+- A reading with no `account` field, from an older paceline or another writer, goes to the partition
+  `unknown`. Pace and pitboard use it when the signed-in account has no partition of its own, and
+  mark the figures as `account unknown`.
+- Claude Code Desktop, macOS, and Linux are not verified live. The behaviour of `oauthAccount` there
+  is read from Claude Code's files, not from a sign-in on those systems. Where the file names no
+  account, the state is `account unknown`.
+
+**What you see:** after a `/login`, `/paceline:pace status` shows the new account's figures, or
+`no usage data yet for the signed-in account` until its first reading arrives. When paceline cannot
+tell the account, `status` ends with `account unknown (<reason>)` and the `pace:` line adds
+`account unknown`. See [Status says account unknown](troubleshooting.md#status-says-account-unknown).
+
+**What still works:** a second configuration directory per account, as the next entry describes,
+keeps the files of two accounts apart altogether.
 
 ### Each configuration directory keeps its own state
 
@@ -44,7 +68,10 @@ usage-watch switch, and usage-watch schedule. Turning pace on in one does not tu
 other.
 
 **What still works:** to share one state directory, set `PACELINE_STATE_DIR` to the same path for
-both. See the [reference](reference.md#paceline-reference) for how `<state>` is found.
+both. Each session then resolves its own account from its own configuration directory's
+`.claude.json`, so the readings of the two accounts go to separate partitions of one limits file,
+and each session reads its own. See the [reference](reference.md#paceline-reference) for how
+`<state>` is found.
 
 ## Surfaces and session kinds
 

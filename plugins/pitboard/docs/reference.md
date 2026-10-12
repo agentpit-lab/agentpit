@@ -93,8 +93,8 @@ the fullest style that fits the window:
 | Context | Auto-compact, Used, Left, Window, Turns left |
 | Cache | Countdown, TTL, If cold |
 | Cache hits | Last turn, Session |
-| 5h limit | Used, Resets in, Pace, Budget, At reset or Runs out |
-| Week | Used, Resets, Pace, Budget, Week elapsed, Spare or Overspent |
+| 5h limit | Used, Resets in, Pace, Budget, At reset or Runs out, Account |
+| Week | Used, Resets, Pace, Budget, Week elapsed, Spare or Overspent, Account |
 | A model-scoped limit, titled by the model's name | Used, Resets |
 | Advisor | Model, Main, State |
 | `ⓘ`, titled by the main model's name | Effort, Advisor, Claude Code, Started in, Branch, Running, Turns, API cost |
@@ -114,6 +114,10 @@ the fullest style that fits the window:
   not know, so the ratio is a lower bound.
 - Cache hits: both rows are cache reads divided by reads plus writes. `Session` counts from the last
   compaction.
+- 5h limit, Week and a model-scoped limit: `Account` shows only as `unknown`, when a figure of the
+  limit comes from the limits file and the file cannot be told to be the signed-in account's: the
+  account could not be resolved, or the figures come from readings with no account. Figures from the
+  session's own reply are never marked.
 - 5h limit: `At reset` gives the projected percentage at the reset. `Runs out` replaces it with the
   clock time the limit reaches 100% when that comes before the reset.
 - Week: `Spare` or `Overspent` gives the distance from even pace in points and in hours of budget.
@@ -204,12 +208,17 @@ and not empty, else `<config>/state/paceline`, the rule paceline uses.
 | File | What pitboard takes from it | When |
 |---|---|---|
 | `<config>/settings.json` | `advisorModel`; the effort level for `/effort` | At session start, after each turn, every 20 seconds, and after `/advisor` and `/effort` |
-| `<state>/rate-limits.json` | Five-hour and weekly readings of every session; model-scoped limits | At session start, after each turn, and every 20 seconds |
-| `<state>/rate-limits.history.jsonl` and its rotated `.1` | Earlier readings, for Pace | At session start |
+| `<state>/rate-limits.json` | Five-hour and weekly readings and model-scoped limits, from the partition of the signed-in account | At session start, after each turn, and every 20 seconds |
+| `<state>/rate-limits.history.jsonl` and its rotated `.1` | Earlier readings of the signed-in account, for Pace | At session start |
+| `<config>/.claude.json`, else `~/.claude.json` | The signed-in account, as a 16-hex-digit SHA-256 key of `oauthAccount.accountUuid` and `organizationUuid`; nothing else in the file | With the limits file |
 | `<config>/projects/<start directory>/<session id>.jsonl` | Cache reads and writes since the last compaction; the TTL; the last request's time | At session start, after each turn, and after `/clear` or a resume |
 
 - The limits file and its history are paceline's; [paceline's reference](../../paceline/docs/reference.md#the-limits-file-for-readers)
-  describes their format.
+  describes their format. pitboard keeps the key of the account and the samples it stores together,
+  and drops stored samples that belong to another account.
+- `.claude.json` is Claude Code's own file, in `<config>` when `CLAUDE_CONFIG_DIR` is set, else in the
+  home directory itself, never in `~/.claude`. pitboard reads it, never writes it, and keeps only
+  the key.
 - The transcript folder is the start directory with every character other than a letter or digit
   turned into `-`. When the transcript is not there, pitboard searches every folder under
   `<config>/projects`.

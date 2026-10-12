@@ -381,7 +381,7 @@ const PANE_BUTTON = 'pitboard'
 
 // The terminal row's width in cells, from the same pieces drawTerminal draws, so the rule above spans
 // the row alone. Gaps: 1 inside a reading, 1 + · + 1 between readings, 1 + │ + 1 between groups; the
-// last part is ⓘ (2), a gap and the pane button, and the rule runs 1 past it so the button sits as far
+// last part is ⓘ (2), 1 + · + 1 and the pane button, and the rule runs 1 past it so the button sits as far
 // from its end as ⓘ from the │ before it.
 export function terminalCells(v: View): number {
   const { gauges, advisorOn } = readings(v)
@@ -396,7 +396,7 @@ export function terminalCells(v: View): number {
     const adv = advisorView(advisorOn)
     groupWidths.push(['Advisor', adv.name ?? 'off', ...(adv.isInactive ? ['(inactive)'] : [])].reduce((sum, w, i) => sum + w.length + (i > 0 ? 1 : 0), 0))
   }
-  return [...groupWidths, 2 + 1 + PANE_BUTTON.length].reduce((sum, w, i) => sum + w + (i > 0 ? 3 : 0), 0) + 1
+  return [...groupWidths, 2 + 3 + PANE_BUTTON.length].reduce((sum, w, i) => sum + w + (i > 0 ? 3 : 0), 0) + 1
 }
 
 export function drawTerminal(els: Els, v: View, open: string | null, toggle: (key: string) => void, openPane: () => void = () => {}) {
@@ -531,6 +531,7 @@ export function drawTerminal(els: Els, v: View, open: string | null, toggle: (ke
           <Box key="info" flexDirection="column" flexShrink={0}>
             <Box flexDirection="row" columnGap={1}>
               {name('info', 'ⓘ ')}
+              <Text key="pane-sep" color={RULE}>·</Text>
               {Button ? <Button key="pane" label={PANE_BUTTON} plain dimColor onPress={() => openPane()} /> : <Text dimColor>{PANE_BUTTON}</Text>}
             </Box>
             {pointer('info', 0)}

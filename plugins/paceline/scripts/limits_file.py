@@ -14,6 +14,7 @@ Standard library only; Python 3.9 or later.
 """
 import contextlib
 import datetime as dt
+import hashlib
 import json
 import math
 import os
@@ -33,7 +34,7 @@ EXACT_SOURCE = "usage-endpoint"
 EXACT_HOLD = dt.timedelta(minutes=15)
 WINDOW_LENGTH = {"five_hour": dt.timedelta(hours=5), "seven_day": dt.timedelta(days=7)}
 # Top-level fields of rate-limits.json that describe the record rather than hold a bucket.
-RECORD_META = ("observed_at", "source", "session_id", "model", "scoped")
+RECORD_META = ("observed_at", "source", "session_id", "model", "scoped", "account", "accounts")
 INBOX_DIR = "inbox"
 INBOX_BUCKETS = ("five_hour", "seven_day")
 INBOX_MAX_AGE = dt.timedelta(days=7)
@@ -93,6 +94,89 @@ def config_dir():
 def paceline_dir():
     """<state>: every file paceline keeps outside the plugin's data directory and the project."""
     return Path(os.environ.get("PACELINE_STATE_DIR") or config_dir() / "state" / "paceline")
+
+
+# ---------------------------------------------------------------- the account
+
+ACCOUNT_PREFIX = "paceline-account-v1"
+# The partition of readings whose account is not known.
+UNKNOWN_ACCOUNT = "unknown"
+ACCOUNT_KEY = re.compile(r"[0-9a-f]{16}")
+_UUID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
+ACCOUNT_RETRY_SEC = 0.05
+
+
+def account_file():
+    """Claude Code's own state file, which names the signed-in account.
+
+    Deliberately not under config_dir(): with CLAUDE_CONFIG_DIR unset the file is ~/.claude.json, and
+    ~/.claude/.claude.json, which may exist, holds no account.
+    """
+    config = os.environ.get("CLAUDE_CONFIG_DIR")
+    return Path(config) / ".claude.json" if config else Path.home() / ".claude.json"
+
+
+def _uuid_or_none(value):
+    if not isinstance(value, str):
+        return None
+    value = value.lower()
+    return value if _UUID.fullmatch(value) else None
+
+
+def account_key_of(text):
+    """(key, None) for the account the text of .claude.json names, else (None, reason).
+
+    reason is "unreadable" when the text does not parse and "no-account" when it names no account.
+    Only oauthAccount.accountUuid and oauthAccount.organizationUuid are touched; the key is one-way, so
+    neither identifier leaves this function.
+    """
+    if not isinstance(text, str):
+        return None, "unreadable"
+    try:
+        parsed = json.loads(text)
+    except Exception:
+        return None, "unreadable"
+    oauth = parsed.get("oauthAccount") if isinstance(parsed, dict) else None
+    oauth = oauth if isinstance(oauth, dict) else {}
+    account = _uuid_or_none(oauth.get("accountUuid"))
+    organization = _uuid_or_none(oauth.get("organizationUuid")) or ""
+    if account is None:
+        return None, "no-account"
+    digest = hashlib.sha256(f"{ACCOUNT_PREFIX}:{account}:{organization}".encode("utf-8")).hexdigest()
+    return digest[:16], None
+
+
+def read_account_text(path):
+    return path.read_text(encoding="utf-8")
+
+
+def resolve_account(path=None):
+    """(key, None) for the account signed in now, else (None, reason): "no-file", "unreadable" or "no-account".
+
+    Claude Code rewrites the file often, so a read or parse failure is tried once more after
+    ACCOUNT_RETRY_SEC. Never raises, and passes nothing from the file or an error on: an error message
+    may quote the file.
+    """
+    path = path or account_file()
+    result = (None, "unreadable")
+    for attempt in range(2):
+        try:
+            if not path.is_file():
+                return None, "no-file"
+            result = account_key_of(read_account_text(path))
+        except Exception:
+            result = (None, "unreadable")
+        if result[1] != "unreadable":
+            return result
+        if attempt == 0:
+            time.sleep(ACCOUNT_RETRY_SEC)
+    return result
+
+
+def reading_account(reading):
+    """The partition a reading belongs to: its account key, else UNKNOWN_ACCOUNT for a missing or malformed one."""
+    account = reading.get("account")
+    return account if isinstance(account, str) and ACCOUNT_KEY.fullmatch(account) else UNKNOWN_ACCOUNT
 
 
 # ---------------------------------------------------------------- the pace switch
@@ -372,8 +456,51 @@ def try_locked(sd, wait=0.0):
 
 # ---------------------------------------------------------------- the merge
 
+def held_partitions(previous):
+    """The partitions of the limits file as it stands: {account key or UNKNOWN_ACCOUNT: record}.
+
+    A file written before accounts existed is one record of unknown account. The top level of a file that
+    has partitions is never read: an older merge may have left it mixed, and the next write rebuilds it.
+    """
+    if not previous:
+        return {}
+    accounts = previous.get("accounts")
+    if isinstance(accounts, dict):
+        return {key: value for key, value in accounts.items()
+                if isinstance(value, dict) and (key == UNKNOWN_ACCOUNT or ACCOUNT_KEY.fullmatch(key))}
+    legacy = {name: value for name, value in previous.items() if name not in ("account", "accounts")}
+    return {UNKNOWN_ACCOUNT: legacy} if any(is_bucket(v) for v in legacy.values()) else {}
+
+
+def partition_age(partition, now):
+    """How long ago a partition's newest bucket was observed; None when none carries a time."""
+    times = [t for t in (bucket_at(v, partition) for name, v in partition.items()
+                         if name not in RECORD_META and is_bucket(v)) if t]
+    return now - max(times) if times else None
+
+
+def newest_first(partitions):
+    """Partition keys, the one observed last first; the key orders equal times."""
+    earliest = dt.datetime.min.replace(tzinfo=UTC)
+    return sorted(partitions, key=lambda key: (safe_iso(partitions[key].get("observed_at")) or earliest, key),
+                  reverse=True)
+
+
+def with_accounts(partitions):
+    """The limits file: the newest partition at the top level for readers that know nothing of accounts."""
+    order = newest_first(partitions)
+    top = dict(partitions[order[0]]) if order else {}
+    top["account"] = None if not order or order[0] == UNKNOWN_ACCOUNT else order[0]
+    top["accounts"] = {key: partitions[key] for key in sorted(partitions)}
+    return top
+
+
 def merge_step(sd, now, lock_wait=0.0):
     """One merge under limits.lock: read the inbox, merge, write rate-limits.json and its history.
+
+    Each account's readings merge into a partition of their own (accounts[<key>]); a partition no
+    reading has touched for INBOX_MAX_AGE is dropped. The top level mirrors the newest partition, and a
+    history line is one partition that changed, with its account (None when unknown).
 
     Returns (outcome, record): outcome is a short line for a log ("ok: written", "ok: nothing new" or
     SKIP_LOCK), record is rate-limits.json as it stands afterwards (None when absent).
@@ -384,16 +511,35 @@ def merge_step(sd, now, lock_wait=0.0):
             trace("merge.skip", sd, reason="lock busy")
             return SKIP_LOCK, read_json(sd / "rate-limits.json")
         previous = read_json(sd / "rate-limits.json")
-        merged = merge_readings(previous, read_inbox(sd), now)
-        if merged is None:
+        before = held_partitions(previous)
+        partitions = dict(before)
+        groups = {}
+        for reading in read_inbox(sd):
+            groups.setdefault(reading_account(reading), []).append(reading)
+        for key, readings in groups.items():
+            merged = merge_readings(partitions.get(key), readings, now)
+            if merged is not None:
+                partitions[key] = merged
+        ages = {key: partition_age(part, now) for key, part in partitions.items()}
+        # The newest partition outlives the limit, so readers keep showing its last figures as stale.
+        keep = next((key for key in newest_first(partitions) if ages[key] is not None), None)
+        for key in list(partitions):
+            if ages[key] is None or (ages[key] > INBOX_MAX_AGE and key != keep):
+                del partitions[key]
+        if not partitions and "accounts" not in (previous or {}):
             trace("merge.readings", sd, written=False)
             return "ok: nothing new", previous
-        write_json(sd / "rate-limits.json", merged, compact=True)
-        changed = limit_values(merged) != limit_values(previous)
-        if changed:
-            append_history(sd, merged)
-        trace("merge.readings", sd, written=True, history=changed)
-        return "ok: written", merged
+        record = with_accounts(partitions)
+        if record == previous:
+            trace("merge.readings", sd, written=False)
+            return "ok: nothing new", previous
+        write_json(sd / "rate-limits.json", record, compact=True)
+        changed = [key for key in newest_first(partitions)[::-1]
+                   if limit_values(partitions[key]) != limit_values(before.get(key))]
+        for key in changed:
+            append_history(sd, dict(partitions[key], account=None if key == UNKNOWN_ACCOUNT else key))
+        trace("merge.readings", sd, written=True, history=bool(changed))
+        return "ok: written", record
 
 
 # ---------------------------------------------------------------- python floor

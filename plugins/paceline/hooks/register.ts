@@ -18,10 +18,11 @@ import {
   writtenPaths,
 } from './context'
 import type { Fill, Settings } from './context'
-import { inboxKey, inboxPath, inboxReading, isDue, stateDirOf } from './inbox'
+import { accountFileOf, accountKeyOf } from './account'
+import { inboxKey, inboxPath, inboxReading, isDue, limitsKey, stateDirOf } from './inbox'
 import type { RateLimit, Sent } from './inbox'
 import { inboxFingerprint, PYTHONS, seenPath, WATCH_PERIOD_MS } from './watch'
-import { gateOpen, inboxObservedAt, readGate, readingFrom, switchOn, USAGE_TICK_MS, USAGE_URL, usageGatePath, usageInboxPath, usageSwitchPath } from './usage'
+import { gateOpen, inboxObservedAt, readGate, readingFrom, switchOn, tagOrDrop, USAGE_TICK_MS, USAGE_URL, usageGatePath, usageInboxPath, usageSwitchPath } from './usage'
 import type { Outcome } from './usage'
 
 // Every function that takes $, and every atom it reads, lives in this file: the engine follows $
@@ -86,18 +87,52 @@ async function snapshotPath($: EngineInterface) {
   return snapshotPaths(await $.session.root(), await $.session.id())
 }
 
+// The key of the account signed in now, from Claude Code's own state file, or null when it cannot be
+// told. Read at every use: a login in another session changes the file under this process. Claude Code
+// rewrites the file often, so a read that fails or does not parse is tried once more.
+async function accountOf($: EngineInterface): Promise<string | null> {
+  try {
+    const file = accountFileOf({
+      configDir: await $.env.get('CLAUDE_CONFIG_DIR'),
+      home: (await $.env.get('USERPROFILE')) ?? (await $.env.get('HOME')),
+    })
+    if (!(await $.fs.exists(file))) return null
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const account = accountKeyOf(await textAt($, file))
+      if (account.reason !== 'unreadable') return account.key
+      if (attempt === 0) await new Promise<void>(resolve => $.clock.after(50, () => resolve()))
+    }
+  } catch {
+    // Whatever failed, the account is unknown; nothing of the file or the error is kept.
+  }
+  return null
+}
+
 // The last reading written to the inbox; limits_merge.py merges the inbox into rate-limits.json.
 let sent: Sent | null = null
+// The limits of the latest payload this process saw, whether or not it was written.
+let seenLimits: string | null = null
+// What stood at the last /login or /logout: the engine may hand over the old account's limits for a
+// turn after the account changed, and a reading with those limits must not be tagged with the new one.
+let hold: { limits: string | null; account: string | null } | null = null
 
 async function writeInbox($: EngineInterface, limits: readonly RateLimit[]) {
-  const key = inboxKey(limits)
+  const limitsOnly = limitsKey(limits)
+  if (limitsOnly === null) return
+  seenLimits = limitsOnly
+  const account = await accountOf($)
+  if (hold) {
+    if (limitsOnly === hold.limits && account !== hold.account) return
+    hold = null
+  }
+  const key = inboxKey(limits, account)
   if (key === null) return
   const now = await $.clock.now()
   if (!isDue(key, sent, now)) return
   try {
     const [dir, id, model] = await Promise.all([stateDir($), $.session.id(), $.session.model()])
-    await $.fs.write(inboxPath(dir, id), JSON.stringify(inboxReading(limits, now, id, model ?? null)))
-    sent = { key, at: now }
+    await $.fs.write(inboxPath(dir, id), JSON.stringify(inboxReading(limits, now, id, model ?? null, account)))
+    sent = { key, limits: limitsOnly, at: now }
   } catch {
     // Nothing depends on one reading; the next one tries again.
   }
@@ -172,6 +207,7 @@ async function usageTick($: EngineInterface) {
     const gate = readGate(await textAt($, usageGatePath(dir)))
     const now = await $.clock.now()
     if (!gateOpen(gate, now, inboxObservedAt(await textAt($, usageInboxPath(dir))))) return
+    const before = await accountOf($)
     const auth = await $.session.authorize()
     if (!auth) return
     // Recorded before the request, so other sessions see the gate closed while it runs.
@@ -185,7 +221,10 @@ async function usageTick($: EngineInterface) {
       outcome = { error: 'network error' }
     }
     if ('reading' in outcome) {
-      await $.fs.write(usageInboxPath(dir), JSON.stringify(outcome.reading))
+      // A dropped reading leaves the gate as written before the request: the next try is one interval away.
+      const tagged = tagOrDrop(outcome.reading, before, await accountOf($))
+      if (!tagged) return
+      await $.fs.write(usageInboxPath(dir), JSON.stringify(tagged))
       await $.fs.write(usageGatePath(dir), JSON.stringify({ last_attempt: now, last_success: outcome.at, last_error: null }))
     } else {
       await $.fs.write(usageGatePath(dir), JSON.stringify({ ...gate, last_attempt: now, last_error: outcome.error }))
@@ -271,6 +310,18 @@ export const register: Register = on => {
     }
     return next(e)
   })
+
+  // The account in .claude.json has already changed when next(e) returns, so the hold starts before it.
+  for (const command of ['login', 'logout']) {
+    on('command.run', { command }, async ($, e, next) => {
+      try {
+        hold = { limits: seenLimits, account: await accountOf($) }
+      } catch {
+        hold = null
+      }
+      return next(e)
+    })
+  }
 
   on('session.start', async ($, e, next) => {
     const result = await next(e)
