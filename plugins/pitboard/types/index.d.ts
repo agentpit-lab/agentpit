@@ -10,6 +10,10 @@ export type StatusMeasure = {
   // Who set the compact window (the engine's ContextWindowSource); 'auto' is the model's own.
   compactSource?: string | null
   isAutoCompact: boolean
+  // Idle compaction as the settings and the environment set it: the `idleCompaction` setting and
+  // DISABLE_AUTO_COMPACT decide isOn, CLAUDE_CODE_IDLE_COMPACT_MIN_TOKENS (at least 100,000) the
+  // size from which it applies. Absent until read; the engine's defaults (on, 200,000) then apply.
+  idleCompact?: { isOn: boolean; minTokens: number } | null
   limits: StatusLimit[]
   costUsd: number | null
 }

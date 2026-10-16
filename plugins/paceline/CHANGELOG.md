@@ -1,10 +1,32 @@
 # Changelog
 
+## 0.3.2 - 2026-10-16
+
+### Changed
+
+- The pages link Anthropic's prices for the cache-write and cache-read ratio that the cache-watch
+  figures rest on.
+- The how-to and limitations pages say that idle compaction, expected at about 54 minutes in a
+  terminal session at or above its threshold, is expected to run before cache-watch's wake at about 55 minutes
+  and that a compaction turns cache-watch off.
+- The getting-started page and the README state that PaceLine works without PitBoard and what
+  PitBoard shows with and without it.
+- The documentation and this changelog write the plugin names PaceLine, PitBoard and dbWise in prose, and
+  code-format commands and skill names.
+
+## 0.3.1 - 2026-10-15
+
+### Changed
+
+- The five documents (how-to, reference, explanation, troubleshooting and limitations) are pages in
+  `docs/` beside the getting-started page and the simulator, readable from a local install
+  without the network. `docs/*.md` is generated from them.
+
 ## 0.3.0 - 2026-10-13
 
 ### Added
 
-- Each limit reading is tagged with a one-way key of the signed-in account. paceline reads only the
+- Each limit reading is tagged with a one-way key of the signed-in account. PaceLine reads only the
   account and organization ids from `.claude.json` and stores a 16-hex-digit key, never the ids.
 - `rate-limits.json` keeps one partition per account. Its top level mirrors the newest partition, so
   readers from before this version keep working.
@@ -61,12 +83,12 @@
 
 ### Added
 
-- `docs/limitations.md` lists what paceline cannot do, grouped by where you meet it, each entry with
+- `docs/limitations.md` lists what PaceLine cannot do, grouped by where you meet it, each entry with
   what you see and what still works. The cache-watch and usage-watch how-tos state their limits
   before the steps, and the docs check fails when a listed limit is no longer stated where its
   record says.
 - The getting-started page and the explanation have "Do you need pace?": five profiles by what
-  pitboard or `/usage` shows, and three questions that recommend a setup.
+  PitBoard or `/usage` shows, and three questions that recommend a setup.
 
 ### Changed
 
@@ -83,7 +105,7 @@
 ## 0.2.2 - 2026-10-12
 
 - The documentation pages draw the terminal in Claude Code's theme colours, light or dark with the
-  page, as pitboard's terminal row does.
+  page, as PitBoard's terminal row does.
 
 ## 0.2.1 - 2026-10-12
 
@@ -133,11 +155,11 @@ First release.
 - usage-watch: asks Claude Code for the account's usage, the figures `/usage` shows, at session
   start and every 125 seconds per configuration directory, and writes it with the model-scoped
   weekly limits as an exact reading to the inbox. Claude Code adds the session's login to the
-  request; paceline never sees a token. Off until `paceline usage-watch on`.
+  request; PaceLine never sees a token. Off until `paceline usage-watch on`.
 - The limits file `<state>/rate-limits.json`, written from the readings Claude Code reports to
   plugins and from the inbox `<state>/inbox/`, a documented input for other plugins. An inbox
   reading can be marked as an exact reading of the account's usage (`"source": "usage-endpoint"`)
   and carry model-scoped weekly limits (`scoped`).
-- While any session with paceline is open, busy or idle, a new or changed inbox reading reaches the
+- While any session with PaceLine is open, busy or idle, a new or changed inbox reading reaches the
   limits file within about 15 seconds.
 - One `paceline` command for all four functions.

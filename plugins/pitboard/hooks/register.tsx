@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import type { StatusCache, StatusLimit, StatusSample, StatusScoped } from '../types'
+import type { StatusCache, StatusLimit, StatusMeasure, StatusSample, StatusScoped } from '../types'
 import { accountFileOf, accountKeyOf } from './account'
 import { desktopKey } from './cards'
 import { drawDesktop, drawPane, drawTerminal } from './draw'
@@ -175,10 +175,29 @@ async function refreshAdvisor($: EngineInterface) {
   await update($, meta, m => (m && m.advisor !== advisor ? { ...m, advisor } : m))
 }
 
+// Idle compaction as the settings and the environment set it. The engine's floor for its threshold
+// is 100,000 tokens; its default is 200,000. A read that fails leaves the last reading in place.
+async function readIdleCompact($: EngineInterface): Promise<StatusMeasure['idleCompact']> {
+  try {
+    const settings = (await $.settings.read()) as Record<string, unknown>
+    const disabled = (await $.env.get('DISABLE_AUTO_COMPACT'))?.trim().toLowerCase()
+    // Claude Code takes a whole integer of at least 1 and raises it to its floor; anything else is the default.
+    const raw = ((await $.env.get('CLAUDE_CODE_IDLE_COMPACT_MIN_TOKENS')) ?? '').trim()
+    const min = /^[+-]?\d+$/.test(raw) ? Number(raw) : Number.NaN
+    return {
+      isOn: settings.idleCompaction !== false && !['1', 'true', 'yes', 'on'].includes(disabled ?? ''),
+      minTokens: Number.isFinite(min) && min > 0 ? Math.max(100_000, min) : 200_000,
+    }
+  } catch {
+    return undefined
+  }
+}
+
 // Returns /context's estimate of the whole window: system prompt, tools, memory and messages.
 async function refreshThreshold($: EngineInterface, count: 'summary' | 'full' = 'summary'): Promise<number | undefined> {
   const usage = await $.session.usage({ breakdown: count })
   const breakdown = usage.context.breakdown
+  const idleCompact = await readIdleCompact($)
   await update($, measure, prev => ({
     // Absent until the first response of a live window; a compaction's own size stays until then.
     tokens: usage.context.tokens ?? prev?.tokens ?? null,
@@ -187,6 +206,7 @@ async function refreshThreshold($: EngineInterface, count: 'summary' | 'full' = 
     compactWindow: breakdown?.rawMaxTokens ?? prev?.compactWindow ?? null,
     compactSource: breakdown?.autocompactSource ?? prev?.compactSource ?? null,
     isAutoCompact: breakdown?.isAutoCompactEnabled ?? true,
+    idleCompact: idleCompact ?? prev?.idleCompact ?? null,
     limits: usage.rateLimits.length ? usage.rateLimits.map(toLimit) : (prev?.limits ?? []),
     costUsd: usage.cost?.usd ?? prev?.costUsd ?? null,
   }))
@@ -651,6 +671,7 @@ export const register: Register = on => {
       compactWindow: prev?.compactWindow ?? null,
       compactSource: prev?.compactSource ?? null,
       isAutoCompact: prev?.isAutoCompact ?? true,
+      idleCompact: prev?.idleCompact ?? null,
       limits: e.rateLimits.length ? e.rateLimits.map(toLimit) : (prev?.limits ?? []),
       costUsd: e.cost?.usd ?? prev?.costUsd ?? null,
     }))

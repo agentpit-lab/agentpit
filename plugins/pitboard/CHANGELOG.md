@@ -1,5 +1,44 @@
 # Changelog
 
+## 0.1.10 - 2026-10-16
+
+### Added
+
+- The Ctx reading shows `↻ᶻ` (in Desktop, a drawn double arrow and sleep sign beside the pie) while
+  idle compaction is expected: auto-compact is on, the `idleCompaction` setting and
+  `DISABLE_AUTO_COMPACT` allow it, the cache lives an hour and the context has reached
+  `CLAUDE_CODE_IDLE_COMPACT_MIN_TOKENS` (200,000 by default, at least 100,000).
+  The Ctx card gains an `Idle compact` row under `Auto-compact`.
+
+### Changed
+
+- The Desktop auto-compact mark is a drawn icon instead of the `↻` text.
+- The terminal row draws `↻` and `ᶻ` before the percentage, as Desktop does.
+- The Cache and Ctx cards and their alerts state what a cold turn writes and what compaction does
+  instead of advising a step.
+- In Desktop, an advisor whose model matches none of the known families is drawn in sand italics
+  instead of white.
+- An inactive advisor's name is dimmed and struck through in Desktop, in the terminal row and in the
+  terminal info line; the `(inactive)` word stays plain.
+- The documentation states the cache-write and cache-read price ratios with a link to Anthropic's
+  prices, what `/compact` costs on a warm and a cold cache with a link to Claude Code's
+  documentation, and what the idle compaction mark and the `Idle compact` row mean, including that
+  PitBoard shows it as expected.
+- The documentation states that the weekly bar has no projection by design, that PitBoard works
+  without PaceLine, that weekday names use `LC_ALL`, `LC_TIME` and `LANG` before `pwsh` on every OS,
+  and what the Desktop survey does before and since Claude Desktop 2.37337.1. The formula names in
+  Try the formulas stand out, and the Colours section describes the model, effort and advisor styles.
+- The documentation and this changelog write the plugin names PitBoard, PaceLine and dbWise in prose, and
+  code-format commands, skill names and the `pitboard` button.
+
+## 0.1.9 - 2026-10-15
+
+### Changed
+
+- The five documents (how-to, reference, explanation, troubleshooting and limitations) are pages in
+  `docs/` beside the getting-started page and the row anatomy page, readable from a local install
+  without the network. `docs/*.md` is generated from them.
+
 ## 0.1.8 - 2026-10-13
 
 ### Changed
@@ -12,7 +51,7 @@
 
 ### Fixed
 
-- In the CLI row, a `·` separates ⓘ from the pitboard button.
+- In the CLI row, a `·` separates ⓘ from the `pitboard` button.
 - A failed read keeps the last samples. Overlapping refreshes run one after another, and a refresh
   that finishes after a newer one is dropped.
 
@@ -28,7 +67,7 @@
 ### Changed
 
 - `If cold` and the cache advice give the cold-turn ratio for the session's model, such as `~40×` on
-  Opus 5.5; `≥` marks a model whose cache-read price pitboard does not know.
+  Opus 5.5; `≥` marks a model whose cache-read price PitBoard does not know.
 
 ## 0.1.6 - 2026-10-12
 
@@ -48,7 +87,7 @@
 
 ### Added
 
-- `docs/limitations.md` lists what pitboard cannot do, grouped by where you meet it, each entry with
+- `docs/limitations.md` lists what PitBoard cannot do, grouped by where you meet it, each entry with
   what you see and what still works; the row anatomy page links it.
 
 ### Changed
@@ -68,7 +107,7 @@
 
 - The row anatomy page has a section on the `/pitboard` pane: for the moment chosen in the working
   day, the pane as the CLI and Desktop draw it, side by side on a wide screen. The getting-started
-  page has a step that opens it. Both are drawn from pitboard's own `drawPane`, and the docs check
+  page has a step that opens it. Both are drawn from PitBoard's own `drawPane`, and the docs check
   fails when the drawn pane no longer matches the code.
 
 ## 0.1.3 - 2026-10-12
@@ -84,7 +123,7 @@
 ### Added
 
 - Documentation in `docs/`: a getting-started page and a row anatomy page that draws the row with
-  pitboard's own code, also on GitHub Pages, and how-to, reference, explanation and troubleshooting
+  PitBoard's own code, also on GitHub Pages, and how-to, reference, explanation and troubleshooting
   guides.
 
 ### Changed
@@ -111,7 +150,7 @@ First release.
   to live and hit rate, the five-hour and weekly limits with their pace, and on a click or hover the
   model, effort, advisor, branch, session time and API cost.
 - `/pitboard` opens every reading in a pane, on every surface, the mobile app included.
-- Limits come from the session itself; paceline's limits file, when it exists, adds the readings
-  other sessions saw, the pace history and any model-scoped limits a writer adds. pitboard writes no
+- Limits come from the session itself; PaceLine's limits file, when it exists, adds the readings
+  other sessions saw, the pace history and any model-scoped limits a writer adds. PitBoard writes no
   file.
 - `docs/anatomy.html`: every reading, colour and threshold on one page.

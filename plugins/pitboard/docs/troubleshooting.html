@@ -1,0 +1,997 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>PitBoard troubleshooting</title>
+<style>
+/* Layout: page sections on the left, the reading column in the middle, the glossary on the right;
+   the column opens with a TL;DR and an instrument (the thing explained, live), then sections that
+   each answer one question. Page chrome stays quiet: the plugins' own signal
+   colours (calm, watch, act) are the only loud colours on a page. */
+:root {
+  --bg: #f8f7f3;
+  --surface: #ffffff;
+  --surface-2: #f1efe8;
+  --ink: #1d1f1c;
+  --muted: #67695f;
+  --line: #e2dfd5;
+  --accent: #0b6a88;
+  --accent-ink: #ffffff;
+  --accent-soft: #e1eef2;
+  --focus: #0b6a88;
+
+  /* Signal colours as Claude Code Desktop draws them (plugins/pitboard/hooks/desktop.ts). */
+  --calm: #8a8a85;
+  --watch: #c4841d;
+  --act: #e0483e;
+  --cold: #2a9db5;
+  --on: #3d9a5c;
+  --watch-soft: #f6ead6;
+  --act-soft: #fadedb;
+
+  /* The specimen surfaces: a terminal and the Desktop app, each in its own theme. */
+  --term-bg: #fbfbf9;
+  --term-fg: #000000;
+  --term-line: #dcdcd6;
+  /* Claude Code's theme keys as its light and dark themes resolve them: the terminal row draws in
+     these keys, so a specimen shows the colours a reader's own terminal would. */
+  --term-text: #000000;
+  --term-inactive: #666666;
+  --term-subtle: #afafaf;
+  --term-warning: #966c1e;
+  --term-error: #ab2b3f;
+  --term-success: #2c7a39;
+  --term-planMode: #006666;
+  --term-suggestion: #5769f7;
+  --term-autoAccept: #8700ff;
+  --term-bashBorder: #ff0087;
+  --desk-bg: #ffffff;
+  --desk-fg: #2b2b29;
+  --desk-line: #e4e4df;
+
+  /* System faces only: a page loads nothing from outside its file. */
+  --font-display: "Iowan Old Style", Charter, "Bitstream Charter", "Sitka Text", Cambria, Georgia, serif;
+  --font-ui: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "Cascadia Mono", "JetBrains Mono", "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+
+  --step--1: 0.8125rem;
+  --step-0: 1rem;
+  --step-1: 1.1875rem;
+  --step-2: 1.5rem;
+  --step-3: 2.125rem;
+
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2.25rem;
+  --space-7: 3.5rem;
+
+  --radius: 6px;
+  --measure: 720px;
+  --page: 1120px;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #121413;
+    --surface: #1a1d1b;
+    --surface-2: #20231f;
+    --ink: #e8e6df;
+    --muted: #9d9f96;
+    --line: #30332e;
+    --accent: #55b6d3;
+    --accent-ink: #0b1a20;
+    --accent-soft: #173039;
+    --focus: #55b6d3;
+    --watch-soft: #3a2d15;
+    --act-soft: #3d1c19;
+    --desk-bg: #1e1f1d;
+    --desk-fg: #e6e5df;
+    --desk-line: #33342f;
+    --term-bg: #15181b;
+    --term-fg: #ffffff;
+    --term-line: #2c3136;
+    --term-text: #ffffff;
+    --term-inactive: #999999;
+    --term-subtle: #505050;
+    --term-warning: #ffc107;
+    --term-error: #ff6b80;
+    --term-success: #4eba65;
+    --term-planMode: #48968c;
+    --term-suggestion: #b1b9f9;
+    --term-autoAccept: #af87ff;
+    --term-bashBorder: #fd5db1;
+    color-scheme: dark;
+  }
+}
+
+:root[data-theme="dark"] {
+  --bg: #121413;
+  --surface: #1a1d1b;
+  --surface-2: #20231f;
+  --ink: #e8e6df;
+  --muted: #9d9f96;
+  --line: #30332e;
+  --accent: #55b6d3;
+  --accent-ink: #0b1a20;
+  --accent-soft: #173039;
+  --focus: #55b6d3;
+  --watch-soft: #3a2d15;
+  --act-soft: #3d1c19;
+  --desk-bg: #1e1f1d;
+  --desk-fg: #e6e5df;
+  --desk-line: #33342f;
+  --term-bg: #15181b;
+  --term-fg: #ffffff;
+  --term-line: #2c3136;
+  --term-text: #ffffff;
+  --term-inactive: #999999;
+  --term-subtle: #505050;
+  --term-warning: #ffc107;
+  --term-error: #ff6b80;
+  --term-success: #4eba65;
+  --term-planMode: #48968c;
+  --term-suggestion: #b1b9f9;
+  --term-autoAccept: #af87ff;
+  --term-bashBorder: #fd5db1;
+  color-scheme: dark;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font: 400 var(--step-0)/1.6 var(--font-ui);
+}
+img, svg { max-width: 100%; }
+[hidden] { display: none !important; }
+
+
+h1, h2, h3 { line-height: 1.2; text-wrap: balance; overflow-wrap: break-word; margin: 0; }
+h1, h2 { font-family: var(--font-display); font-weight: 500; letter-spacing: -0.005em; }
+h1 { font-size: var(--step-3); }
+h2 { font-size: var(--step-2); }
+h3 { font-size: var(--step-1); font-weight: 600; }
+p { margin: 0; }
+a { color: var(--accent); text-underline-offset: 2px; }
+code, kbd, .mono { font-family: var(--font-mono); font-size: 0.92em; }
+code { background: var(--surface-2); border: 1px solid var(--line); border-radius: 4px; padding: 0 0.3em; overflow-wrap: anywhere; }
+td code, th code { overflow-wrap: normal; }
+.card-quote { font-family: var(--font-mono); font-size: var(--step--1); background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--radius); padding: var(--space-2) var(--space-3); overflow-wrap: anywhere; }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 3px; }
+
+.eyebrow { font: 500 0.6875rem/1.4 var(--font-mono); letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+.lede { font-size: var(--step-1); color: var(--muted); }
+.muted { color: var(--muted); }
+.stack { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-4); }
+.stack-lg { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-6); }
+.row { display: flex; flex-wrap: wrap; gap: var(--space-3); align-items: center; }
+
+
+
+section { scroll-margin-top: var(--space-4); }
+.section-head { display: grid; gap: var(--space-2); margin-bottom: var(--space-4); }
+
+/* Panels: used only where an element is a separate object (an instrument, a card). */
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: var(--space-4); min-width: 0; }
+.grid-auto { display: grid; gap: var(--space-4); grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); }
+.split { display: grid; gap: var(--space-5); }
+
+/* Segmented switch. */
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface-2); padding: 2px; gap: 2px; }
+.seg button { font: inherit; font-size: var(--step--1); border: 0; background: transparent; color: var(--muted); padding: 0.3em 0.8em; border-radius: 4px; cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--surface); color: var(--ink); box-shadow: 0 0 0 1px var(--line); font-weight: 600; }
+.control { display: grid; gap: var(--space-1); }
+.control > .label { font-size: var(--step--1); color: var(--muted); }
+
+/* Chips: a choice among named states. */
+.chips { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.chip { font: inherit; font-size: var(--step--1); border: 1px solid var(--line); background: var(--surface); color: var(--ink); padding: 0.3em 0.75em; border-radius: 999px; cursor: pointer; display: inline-flex; gap: 0.4em; align-items: center; }
+.chip[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); }
+.dot { width: 0.6em; height: 0.6em; border-radius: 50%; background: var(--calm); display: inline-block; flex: none; }
+.dot.watch { background: var(--watch); }
+.dot.act { background: var(--act); }
+.dot.cold { background: var(--cold); }
+
+/* Level pill: state in form as well as words. */
+.pill { display: inline-flex; align-items: center; gap: 0.35em; font-size: var(--step--1); font-weight: 600; padding: 0.05em 0.6em; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); }
+.pill.watch { color: var(--watch); border-color: var(--watch); background: var(--watch-soft); }
+.pill.act { color: var(--act); border-color: var(--act); background: var(--act-soft); }
+
+/* Glossary terms: dotted underline, popover on hover, focus or tap. */
+.term { border-bottom: 1px dotted currentColor; cursor: help; }
+.popover { position: absolute; z-index: 20; max-width: min(340px, calc(100vw - 32px)); background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: 0 8px 24px rgb(0 0 0 / 0.18); padding: var(--space-3); font-size: var(--step--1); line-height: 1.5; }
+.popover strong { display: block; margin-bottom: var(--space-1); }
+
+/* Disclosure: what to do first, detail on demand. */
+details.more { border-top: 1px solid var(--line); padding-block: var(--space-3); }
+details.more > summary { cursor: pointer; font-weight: 600; list-style: none; display: flex; gap: var(--space-2); align-items: center; }
+details.more > summary::-webkit-details-marker { display: none; }
+details.more > summary::before { content: "+"; font-family: var(--font-mono); color: var(--accent); width: 1ch; }
+details.more[open] > summary::before { content: "\2212"; }
+details.more > .body { padding-top: var(--space-3); display: grid; gap: var(--space-3); }
+
+/* Key-value lists aligned on one column. */
+.kv { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: var(--space-1) var(--space-4); font-size: var(--step--1); margin: 0; }
+.kv dt { color: var(--muted); }
+.kv dd { margin: 0; font-variant-numeric: tabular-nums; }
+
+/* Range slider. */
+input[type="range"] { width: 100%; accent-color: var(--accent); }
+.slider { display: grid; gap: var(--space-1); }
+.slider .readout { display: flex; justify-content: space-between; font-size: var(--step--1); color: var(--muted); font-variant-numeric: tabular-nums; }
+.slider .readout b { color: var(--ink); font-weight: 600; }
+
+/* Tables that may run wider than a phone scroll inside their own box. */
+.table-wrap { overflow-x: auto; }
+.facts-list { columns: 9rem; column-gap: var(--space-4); list-style: none; margin: 0; padding: 0; }
+.facts-list li { break-inside: avoid; }
+table { border-collapse: collapse; width: 100%; font-size: var(--step--1); }
+th, td { text-align: left; padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--line); vertical-align: top; }
+th { color: var(--muted); font-weight: 600; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+
+/* A transcript of what Claude Code shows: monospace on the terminal surface. */
+.transcript { background: var(--term-bg); color: var(--term-fg); border-radius: var(--radius); padding: var(--space-3) var(--space-4); font: 0.875rem/1.55 var(--font-mono); overflow-x: auto; white-space: pre; }
+.transcript .dim { color: var(--term-inactive); }
+.transcript .hl { color: #e0b000; }
+
+.callout { display: grid; gap: var(--space-1); border-left: 3px solid var(--accent); padding: var(--space-1) var(--space-3); }
+
+footer.page-foot { margin-top: var(--space-7); padding-top: var(--space-4); border-top: 1px solid var(--line); font-size: var(--step--1); color: var(--muted); display: flex; flex-wrap: wrap; gap: var(--space-4); justify-content: space-between; }
+
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; scroll-behavior: auto !important; } }
+
+/* Steps: a real sequence, so numbered. */
+.steps { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-6); counter-reset: step; }
+.steps > li { display: grid; grid-template-columns: 2.25rem minmax(0, 1fr); gap: var(--space-4); counter-increment: step; }
+.steps > li::before { content: counter(step); width: 2.25rem; height: 2.25rem; border-radius: 50%; display: grid; place-items: center; font-weight: 700; color: var(--accent-ink); background: var(--accent); font-variant-numeric: tabular-nums; }
+.steps > li > div { display: grid; gap: var(--space-3); min-width: 0; }
+.cmd { display: flex; gap: var(--space-2); align-items: center; background: var(--term-bg); color: var(--term-fg); border-radius: var(--radius); padding: var(--space-2) var(--space-3); font: 0.9375rem/1.4 var(--font-mono); overflow-x: auto; }
+.cmd::before { content: "›"; color: var(--term-inactive); }
+
+.annot { display: grid; gap: var(--space-2); font-size: var(--step--1); }
+.annot { margin: 0; padding-left: 1.2em; }
+
+/* One grid for the whole series: sections, a content column of one width, the glossary column.
+   Every block in the content column spans it, so all edges line up on every page. */
+.doc { max-width: calc(190px + var(--measure) + 260px + 2 * var(--space-6) + 2 * var(--space-6)); margin: 0 auto; padding-inline: 16px; padding-block: var(--space-5) var(--space-7); display: grid; gap: var(--space-6); }
+.doc > * { min-width: 0; }
+.doc > main { width: 100%; max-width: var(--measure); }
+@media (min-width: 1180px) { .doc { grid-template-columns: 190px var(--measure) 260px; padding-inline: var(--space-6); justify-content: center; } }
+@media (min-width: 900px) and (max-width: 1179px) { .doc { grid-template-columns: 180px minmax(0, var(--measure)); padding-inline: var(--space-5); } }
+.side { display: grid; gap: var(--space-5); align-content: start; font-size: var(--step--1); }
+@media (min-width: 900px) { .side { position: sticky; top: var(--space-4); max-height: calc(100vh - 2rem); overflow-y: auto; } }
+.side nav ol { list-style: none; margin: 0; padding: 0 0 0 var(--space-3); border-left: 1px solid var(--line); display: grid; gap: var(--space-2); }
+.side nav a { color: var(--muted); text-decoration: none; }
+.side nav a:hover, .side nav a[aria-current="true"] { color: var(--ink); }
+.side nav a[aria-current="true"] { font-weight: 600; }
+.sources { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-1); font: 0.75rem/1.4 var(--font-mono); color: var(--muted); word-break: break-all; }
+@media (max-width: 899px) { .side nav ol { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-4); border: 0; padding: 0; } .side .sources-block { display: none; } }
+
+.glossary { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: var(--space-4); display: grid; gap: var(--space-3); align-content: start; }
+.glossary dl { margin: 0; display: grid; gap: var(--space-3); }
+.glossary dt { font: 500 var(--step-0)/1.3 var(--font-display); }
+.glossary dd { margin: 0; font-size: var(--step--1); color: var(--muted); line-height: 1.5; }
+.glossary .entry { border-radius: 4px; padding: var(--space-1) var(--space-2); margin-inline: calc(-1 * var(--space-2)); transition: background-color 0.15s; }
+.glossary .entry.is-hot { background: var(--accent-soft); }
+.glossary .entry.is-hot dd { color: var(--ink); }
+
+/* TL;DR: the page's answer before its detail. */
+.tldr { border: 1px solid var(--line); border-left: 3px solid var(--accent); background: var(--surface); border-radius: var(--radius); padding: var(--space-3) var(--space-4); }
+.tldr strong:first-child { margin-right: 0.35em; }
+.brand { display: grid; gap: var(--space-2); }
+/* Navigation uses the interface face; the serif belongs to the document's own headings. */
+.brand .mono { font: 500 0.6875rem/1.4 var(--font-mono); letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+.series { display: grid; gap: 2px; }
+.series a { font-size: var(--step--1); color: var(--muted); text-decoration: none; padding: 0.15em 0 0.15em var(--space-3); border-left: 2px solid transparent; }
+.series a:hover { color: var(--ink); }
+.series a[aria-current="page"] { color: var(--ink); font-weight: 600; border-left-color: var(--accent); }
+.page-head { display: grid; gap: var(--space-4); padding-bottom: var(--space-2); }
+.changed { font-size: var(--step--1); color: var(--muted); min-height: 1.5em; }
+.changed b { color: var(--ink); font-weight: 600; }
+
+/* Theme switch: icons, named for screen readers and on hover. */
+.theme-switch button { display: grid; place-items: center; width: 2rem; height: 1.75rem; padding: 0; }
+.theme-switch svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* A pair of specimens: the same moment in the CLI and in Desktop. */
+.pair { display: grid; gap: var(--space-2); }
+.pair .surface-label { font: 500 0.6875rem/1 var(--font-mono); letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+
+/* The specimen: a terminal or the Desktop app, in its own theme whatever the page's. */
+.specimen { display: grid; gap: var(--space-2); }
+.specimen-frame { overflow-x: auto; border-radius: var(--radius); }
+.specimen-hint { font-size: var(--step--1); color: var(--muted); }
+.cli { background: var(--term-bg); color: var(--term-fg); font: 0.9375rem/1.5 var(--font-mono); padding: var(--space-3) var(--space-4); white-space: pre; width: max-content; min-width: 100%; }
+
+.desk { background: var(--desk-bg); color: var(--desk-fg); border: 1px solid var(--desk-line); border-radius: var(--radius); padding: var(--space-2) var(--space-3); width: max-content; min-width: 100%; }
+.svg { display: inline-flex; line-height: 0; }
+.svg svg { display: block; }
+
+.specimen, .specimen-frame, .pair { min-width: 0; }
+
+/* Terms with their meaning, read down one column. */
+.term-list { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: var(--space-3) var(--space-5); margin: 0; }
+.term-list dt { font: 500 var(--step-1)/1.3 var(--font-display); }
+.term-list dd { margin: 0; display: grid; gap: var(--space-1); }
+@media (max-width: 600px) { .term-list { grid-template-columns: minmax(0, 1fr); gap: var(--space-1); } .term-list dd { margin-bottom: var(--space-3); } }
+.side .theme-switch { justify-self: start; }
+
+/* List and detail: moments in order on the left, the chosen one in full on the right. */
+.md { display: grid; gap: var(--space-4); }
+@media (min-width: 640px) { .md { grid-template-columns: 172px minmax(0, 1fr); align-items: start; } }
+.md-list, .md-detail { display: grid; gap: var(--space-3); min-width: 0; }
+.sit-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; border-left: 1px solid var(--line); }
+.sit-item { display: grid; gap: 1px; padding: var(--space-2) var(--space-3); margin-left: -1px; border-left: 2px solid transparent; cursor: pointer; border-radius: 0 4px 4px 0; }
+.sit-item:hover { background: var(--surface-2); }
+.sit-item[aria-selected="true"] { border-left-color: var(--accent); background: var(--accent-soft); }
+.sit-time { font: 500 0.6875rem/1.2 var(--font-mono); color: var(--muted); font-variant-numeric: tabular-nums; }
+.sit-name { display: flex; gap: 0.45em; align-items: baseline; font-size: var(--step--1); line-height: 1.35; }
+.sit-name .dot { flex: none; transform: translateY(-1px); }
+.md-panel { display: grid; gap: var(--space-3); }
+.surface-head { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-3); align-items: center; justify-content: space-between; }
+.desk-fit { overflow: hidden; }
+.desk-fit > .desk { transform-origin: left top; width: max-content; }
+.small-seg button { font-size: 0.75rem; padding: 0.15em 0.6em; }
+/* Specimen trees: the plugin's boxes and runs. */
+.tbox { display: flex; min-width: 0; }
+.cli .tbox, .cli span { white-space: pre; }
+.cli .dim { opacity: 0.62; }
+.desk .dim { opacity: 0.62; }
+.cli .italic, .desk .italic { font-style: italic; }
+.cli .strike, .desk .strike { text-decoration: line-through; }
+.btn { cursor: pointer; }
+.reading { cursor: pointer; border-radius: 3px; }
+.reading[aria-pressed="true"] { outline: 1px solid var(--accent); outline-offset: 1px; }
+.reading:hover { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+/* Wide figures: text keeps the content column; a live row or a chart also takes the empty column on
+   its right, the same on every page of the series. */
+@media (min-width: 1180px) { .wide { margin-right: calc(-1 * (260px + var(--space-6))); } }
+
+/* The glossary drawer: over the page's right side, on demand. */
+.drawer { position: fixed; top: 0; right: 0; bottom: 0; width: min(360px, 100vw); z-index: 30; border-radius: 0; border-width: 0 0 0 1px; box-shadow: -12px 0 32px rgb(0 0 0 / 0.16); overflow-y: auto; padding-block: calc(var(--space-4) + env(safe-area-inset-top, 0px)) var(--space-6); }
+.drawer-head { display: flex; justify-content: space-between; align-items: center; }
+.drawer-close { font: 400 1.5rem/1 var(--font-ui); background: transparent; border: 0; color: var(--muted); cursor: pointer; padding: 0 var(--space-1); }
+.drawer-open { justify-self: start; font: 500 var(--step--1) var(--font-ui); color: var(--accent); background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 0.35em 0.9em; cursor: pointer; }
+.drawer-open[aria-expanded="true"] { border-color: var(--accent); background: var(--accent-soft); }
+
+/* Document components. Each works from its markup alone; the script only adds controls
+   (filter bar, copy buttons, walker, panel tabs), and every one of them is absent without scripts. */
+
+/* Entry card: one symptom, one limit, one term; parts carry their label as data-label. */
+article.entry { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-3); background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: var(--space-4); min-width: 0; }
+article.entry h3 { overflow-wrap: anywhere; }
+article.entry > .part { display: grid; gap: var(--space-1); min-width: 0; }
+.part[data-label]::before, .callout[data-label]::before, .seg-panel[data-label]::before { content: attr(data-label); font: 500 0.6875rem/1.4 var(--font-mono); letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+.part > ul, .part > ol { margin: 0; padding-left: 1.2em; }
+
+/* Filter bar over a list of entries: a search box, tag chips, a live count. */
+.filter-bar { display: grid; gap: var(--space-3); }
+.filter-box { font: inherit; font-size: var(--step--1); color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 0.4em 0.75em; width: 100%; max-width: 24rem; }
+.filter-count { font-size: var(--step--1); color: var(--muted); }
+
+/* Copy button over a block of commands or text. */
+.copy-wrap { position: relative; min-width: 0; }
+.copy-btn { position: absolute; top: var(--space-1); right: var(--space-1); font: 500 0.75rem/1 var(--font-ui); color: var(--term-fg); background: transparent; border: 1px solid var(--term-inactive); border-radius: 4px; padding: 0.35em 0.6em; cursor: pointer; opacity: 0.8; }
+.copy-btn:hover, .copy-btn:focus-visible { opacity: 1; }
+pre[data-lang] { background: var(--term-bg); color: var(--term-fg); border-radius: var(--radius); padding: var(--space-3) var(--space-4); font: 0.875rem/1.55 var(--font-mono); overflow-x: auto; margin: 0; }
+.copy-wrap > .cmd, .copy-wrap > pre, .copy-wrap > .transcript { padding-right: 5rem; }
+
+/* Figure: an inline SVG coloured through the theme tokens, its caption and its text form. */
+figure.diagram { margin: 0; display: grid; gap: var(--space-3); }
+figure.diagram svg { width: 100%; height: auto; }
+figure.diagram figcaption { font-size: var(--step--1); color: var(--muted); }
+figure.diagram .text-form { margin: 0; padding-left: 1.4em; font-size: var(--step--1); color: var(--muted); display: grid; gap: var(--space-1); }
+figure.diagram .node { fill: var(--surface); stroke: var(--line); stroke-width: 1.5; }
+figure.diagram .node.accent { stroke: var(--accent); fill: var(--accent-soft); }
+figure.diagram .edge { fill: none; stroke: var(--muted); stroke-width: 1.5; }
+figure.diagram text { fill: var(--ink); font: 400 13px var(--font-ui); }
+figure.diagram text.muted { fill: var(--muted); }
+
+/* Decision walker: the nested list stays for readers without scripts; with scripts one node at a time. */
+ol.walker, ol.walker ol { padding-left: 1.4em; display: grid; gap: var(--space-2); }
+.walker-view { display: grid; gap: var(--space-3); border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); padding: var(--space-4); }
+.walker-view:focus { outline: none; }
+.walker-text { display: grid; gap: var(--space-2); font-size: var(--step-1); }
+.walker-options, .walker-controls { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.walker-controls button { font: inherit; font-size: var(--step--1); color: var(--accent); background: transparent; border: 0; padding: 0.2em 0; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
+.walker-controls button:disabled { color: var(--muted); cursor: default; text-decoration: none; }
+
+/* Segmented panels: every panel shows without scripts, headed by its label; with scripts one at a time. */
+.seg-panels { display: grid; gap: var(--space-3); }
+.seg-panel { display: grid; gap: var(--space-2); min-width: 0; }
+.seg-panels.is-tabbed > .seg-panel::before { display: none; }
+.seg-panels > .seg { justify-self: start; }
+
+/* A decision walker's outcome takes the colour of its exit: start, wait or stop. */
+.walker-view[data-outcome] { border-left: 4px solid var(--outcome, var(--line)); }
+.walker-view[data-outcome="start"] { --outcome: var(--on); }
+.walker-view[data-outcome="wait"] { --outcome: var(--watch); }
+.walker-view[data-outcome="stop"] { --outcome: var(--act); }
+
+/* Count bar: one link per group, as wide as the group has entries. */
+.count-bar { display: flex; flex-wrap: wrap; gap: 2px; }
+.count-seg { flex-basis: 6rem; min-width: 0; display: grid; gap: 1px; padding: var(--space-2) var(--space-3); background: var(--accent-soft); border-bottom: 3px solid var(--accent); border-radius: 4px 4px 0 0; color: var(--ink); text-decoration: none; font-size: var(--step--1); line-height: 1.3; }
+.count-seg:hover { background: var(--surface-2); }
+.count-n { font: 600 var(--step-1)/1.1 var(--font-display); font-variant-numeric: tabular-nums; }
+.count-name { overflow-wrap: anywhere; }
+
+/* Level scale: a track per reading, zones calm, watch and act, the values where it changes marked under it. */
+.scale-list { display: grid; gap: var(--space-3); }
+.scale-row { display: grid; gap: var(--space-2); }
+@media (min-width: 720px) { .scale-row { grid-template-columns: 200px minmax(0, 1fr); align-items: center; } }
+.scale-name { font-size: var(--step--1); }
+.scale-track { position: relative; height: 34px; margin-right: 1.5rem; }
+.scale-zone { position: absolute; top: 0; height: 12px; }
+.scale-zone.calm { background: color-mix(in srgb, var(--calm) 35%, transparent); border-radius: 3px 0 0 3px; }
+.scale-zone.watch { background: var(--watch); }
+.scale-zone.act { background: var(--act); border-radius: 0 3px 3px 0; }
+.scale-mark { position: absolute; top: 14px; transform: translateX(-50%); font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.scale-mark::before { content: ""; position: absolute; left: 50%; top: -14px; height: 14px; border-left: 1px solid var(--ink); }
+.scale-legend { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-4); font-size: var(--step--1); color: var(--muted); }
+.scale-legend li { display: flex; align-items: center; gap: var(--space-2); }
+
+.symptoms { display: grid; gap: var(--space-2); }
+.symptoms ul.chips { list-style: none; margin: 0; padding: 0; }
+.symptoms .chip { text-decoration: none; }
+.symptoms .chip:hover { border-color: var(--accent); }
+</style>
+</head>
+<body>
+<div class="doc">
+  <aside class="side">
+    <div class="brand"><span class="mono">PitBoard</span><nav class="series" aria-label="pages in this series"><a href="getting-started.html">Getting started</a><a href="row-anatomy.html">Row anatomy</a><a href="how-to.html">How-to guides</a><a href="explanation.html">Explanation</a><a href="reference.html">Reference</a><a href="troubleshooting.html" aria-current="page">Troubleshooting</a><a href="limitations.html">Limitations</a></nav></div>
+    <nav data-pb-nav aria-label="Sections"><ol><li><a href="#the-row-does-not-appear">The row does not appear</a></li><li><a href="#the-branch-row-is-missing">The Branch row is missing</a></li><li><a href="#limits-stay-empty">Limits stay empty</a></li><li><a href="#the-numbers-lag">The numbers lag</a></li><li><a href="#a-desktop-card-stays-open">A Desktop card stays open</a></li><li><a href="#a-desktop-reading-shows-no-card">A Desktop reading shows no card</a></li><li><a href="#weekday-names-are-in-the-wrong-language">Weekday names are in the wrong language</a></li><li><a href="#a-model-scoped-limit-disappears">A model-scoped limit disappears</a></li></ol></nav>
+    <div data-pb-theme></div>
+  </aside>
+
+  <main class="stack-lg">
+    <header class="page-head stack">
+      <h1 id="pitboard-troubleshooting">PitBoard troubleshooting</h1>
+      <p>Problems by symptom. Each gives the cause, how to check it, and the fix. For how the numbers are made, see <a href="explanation.html">How PitBoard works</a>.</p>
+    </header>
+    <nav class="symptoms" aria-label="Symptoms" data-text="skip">
+      <p class="eyebrow">Symptoms</p>
+      <ul class="chips">
+        <li><a class="chip" href="#the-row-does-not-appear">The row does not appear</a></li>
+        <li><a class="chip" href="#the-branch-row-is-missing">The Branch row is missing</a></li>
+        <li><a class="chip" href="#limits-stay-empty">Limits stay empty</a></li>
+        <li><a class="chip" href="#the-numbers-lag">The numbers lag</a></li>
+        <li><a class="chip" href="#a-desktop-card-stays-open">A Desktop card stays open</a></li>
+        <li><a class="chip" href="#a-desktop-reading-shows-no-card">A Desktop reading shows no card</a></li>
+        <li><a class="chip" href="#weekday-names-are-in-the-wrong-language">Weekday names are in the wrong language</a></li>
+        <li><a class="chip" href="#a-model-scoped-limit-disappears">A model-scoped limit disappears</a></li>
+      </ul>
+    </nav>
+    <section class="stack" id="the-row-does-not-appear">
+      <h2>The row does not appear</h2>
+      <article class="entry">
+        <div class="part" data-label="Cause">
+          <p>Claude Code is older than 2.1.287, the plugin is not installed or not enabled, or the session started before the install. The row loads at session start, so a session that was already running when you installed PitBoard has no row.</p>
+        </div>
+        <div class="part" data-label="Check">
+          <ol>
+            <li>Run <code>claude --version</code> and compare with 2.1.287.</li>
+            <li>Run <code>/plugin</code> and look for <code>pitboard</code> among the installed, enabled plugins.</li>
+            <li>Run <code>/pitboard</code>. If Claude Code answers <code>pitboard pane opened.</code>, the plugin runs.</li>
+          </ol>
+        </div>
+        <div class="part" data-label="Fix">
+          <p>update Claude Code, install or enable the plugin, and start a new session. In the CLI the row sits under the prompt, below the mode and hint line; in Desktop, above the prompt, since Desktop offers a plugin no place under it. See <a href="explanation.html#where-the-row-sits">Where the row sits</a>.</p>
+        </div>
+      </article>
+    </section>
+    <section class="stack" id="the-branch-row-is-missing">
+      <h2>The Branch row is missing</h2>
+      <article class="entry">
+        <div class="part" data-label="Cause">
+          <p>PitBoard reads the branch with <code>git branch --show-current</code> in the start directory, and shows the <code>Branch</code> row in the <code>ⓘ</code> card only when that returns a name. The row is missing when:</p>
+          <ul>
+            <li><code>git</code> is not on the <code>PATH</code> of the environment Claude Code starts in.</li>
+            <li>The start directory is not in a git repository.</li>
+            <li><code>HEAD</code> is detached, so there is no current branch.</li>
+          </ul>
+        </div>
+        <div class="part" data-label="Check">
+          <p>in the start directory, run <code>git branch --show-current</code>.</p>
+        </div>
+        <div class="part" data-label="Fix">
+          <p>install <code>git</code> and put it on <code>PATH</code>, or check out a branch. The <code>Branch</code> row shows after the next turn.</p>
+        </div>
+      </article>
+    </section>
+    <section class="stack" id="limits-stay-empty">
+      <h2>Limits stay empty</h2>
+      <article class="entry">
+        <p>The <code>5h</code> gauge stays empty, <code>7d</code> is missing from the row, and the <code>5h limit</code> card says <code>No reading yet.</code></p>
+        <div class="part" data-label="Cause">
+          <ul>
+            <li>The session has had no reply yet. Claude Code reports limits with each reply, and no PaceLine file holds an earlier reading.</li>
+            <li>The session uses an API key, or a login without Pro or Max usage limits. Claude Code then reports no five-hour or weekly limits.</li>
+          </ul>
+        </div>
+        <div class="part" data-label="Check">
+          <p>send one message and wait for the reply. With PaceLine installed, look for <code>rate-limits.json</code> in PaceLine&#x27;s state directory; see <a href="reference.html#files-read">Files read</a>.</p>
+        </div>
+        <div class="part" data-label="Fix">
+          <p>after the first reply the limits appear. With an API key there are no subscription limits to show.</p>
+        </div>
+      </article>
+    </section>
+    <section class="stack" id="the-numbers-lag">
+      <h2>The numbers lag</h2>
+      <article class="entry">
+        <div class="part" data-label="Cause">
+          <ul>
+            <li>Limits move only when a session makes a request. With every session idle, nothing moves.</li>
+            <li>An idle session re-reads PaceLine&#x27;s limits file every 20 seconds, so it sees another session&#x27;s reading up to about 20 seconds after PaceLine writes it.</li>
+            <li>A Desktop card takes its paces and times at the start of the minute.</li>
+            <li><code>Pace</code> reads <code>n/a</code> until it has 10 minutes of readings for the five-hour limit, or an hour for the week.</li>
+          </ul>
+        </div>
+        <div class="part" data-label="Check">
+          <p>compare the row with <code>/usage</code>, and see <a href="explanation.html#why-the-row-can-differ-from-usage">Why the row can differ from <code>/usage</code></a>.</p>
+        </div>
+        <div class="part" data-label="Fix">
+          <p>to keep the limits current while sessions are idle, turn on PaceLine&#x27;s usage-watch; see <a href="how-to.html#use-pitboard-with-paceline">Use PitBoard with PaceLine</a>.</p>
+        </div>
+      </article>
+    </section>
+    <section class="stack" id="a-desktop-card-stays-open">
+      <h2>A Desktop card stays open</h2>
+      <article class="entry">
+        <div class="part" data-label="Cause">
+          <p>Desktop tells a plugin nothing about the pointer, so a card is Desktop&#x27;s own hover reveal. A redraw of the row while a card is up can keep Desktop from noticing the pointer leave. PitBoard redraws the Desktop row only when what it shows changes, and keys the cards on the start of the minute. Once the cache countdown drops under 5 minutes it shows seconds, and the row redraws every second, so a card opened then can stay up.</p>
+        </div>
+        <div class="part" data-label="Check">
+          <p>look at the cache reading. A countdown in <code>mm:ss</code> means the row redraws every second.</p>
+        </div>
+        <div class="part" data-label="Fix">
+          <p>PitBoard cannot close a Desktop card itself. To read the same values without hovering, click <code>pitboard</code> in the footer under the prompt, or run <code>/pitboard</code>.</p>
+        </div>
+      </article>
+    </section>
+    <section class="stack" id="a-desktop-reading-shows-no-card">
+      <h2>A Desktop reading shows no card</h2>
+      <article class="entry">
+        <div class="part" data-label="Cause">
+          <p>the <code>pitboard</code> pane is open. The pane holds every card, so while it is open the row shows none; the shading under the pointer stays.</p>
+        </div>
+        <div class="part" data-label="Check">
+          <p>look for the <code>pitboard</code> side pane at the right of the conversation.</p>
+        </div>
+        <div class="part" data-label="Fix">
+          <p>read the card in the pane, or close the pane with its close mark or Escape; the cards come back at once.</p>
+        </div>
+      </article>
+    </section>
+    <section class="stack" id="weekday-names-are-in-the-wrong-language">
+      <h2>Weekday names are in the wrong language</h2>
+      <article class="entry">
+        <p>The <code>Resets</code> rows of the <code>Week</code> card and of a model-scoped limit show a short weekday name, such as <code>Mon</code>, in a language you did not expect. PitBoard shows no month names.</p>
+        <div class="part" data-label="Cause">
+          <p>PitBoard takes the locale from <code>LC_ALL</code>, <code>LC_TIME</code>, or <code>LANG</code>, in this order, and skips <code>C</code> and <code>POSIX</code>. When none is set, as usual on Windows, it asks <code>pwsh</code> for the OS culture, once per session. Without either, the weekday uses the default locale of Claude Code&#x27;s plugin runtime.</p>
+        </div>
+        <div class="part" data-label="Check">
+          <p>in the environment that starts Claude Code, print <code>LC_ALL</code>, <code>LC_TIME</code>, and <code>LANG</code>. On Windows, run <code>pwsh -NoProfile -Command &quot;(Get-Culture).Name&quot;</code>.</p>
+        </div>
+        <div class="part" data-label="Fix">
+          <p>set <code>LC_TIME</code> to your locale, such as <code>en_GB.UTF-8</code>, where Claude Code starts, or install PowerShell 7 on Windows. Start a new session.</p>
+        </div>
+      </article>
+    </section>
+    <section class="stack" id="a-model-scoped-limit-disappears">
+      <h2>A model-scoped limit disappears</h2>
+      <article class="entry">
+        <p>A reading such as <code>Fable</code> leaves the limits group.</p>
+        <div class="part" data-label="Cause">
+          <p>PitBoard shows the model-scoped limits only from an exact reading by PaceLine&#x27;s usage-watch that is at most 15 minutes old, and only until the week they belong to resets. They disappear when:</p>
+          <ul>
+            <li>usage-watch is off, or every session with PaceLine is closed, so no new reading arrives.</li>
+            <li>usage-watch failed. After an error other than HTTP 429, it waits 10 minutes before it asks again, so the newest exact reading can pass 15 minutes.</li>
+            <li>The weekly window reset. The limits return with the next exact reading.</li>
+          </ul>
+        </div>
+        <div class="part" data-label="Check">
+          <p>run <code>/paceline:usage-watch status</code>. It shows the last attempt, the last success, and the last error.</p>
+        </div>
+        <div class="part" data-label="Fix">
+          <p>turn usage-watch on with <code>/paceline:usage-watch on</code>. After an error, the limits return with the next successful reading.</p>
+        </div>
+      </article>
+    </section>
+  </main>
+</div>
+<script type="application/json" id="pb-strings">{"a-desktop-card-stays-open.heading":"A Desktop card stays open","a-desktop-card-stays-open.p1":"Desktop tells a plugin nothing about the pointer, so a card is Desktop's own hover reveal. A redraw of the row while a card is up can keep Desktop from noticing the pointer leave. PitBoard redraws the Desktop row only when what it shows changes, and keys the cards on the start of the minute. Once the cache countdown drops under 5 minutes it shows seconds, and the row redraws every second, so a card opened then can stay up.","a-desktop-card-stays-open.p2":"look at the cache reading. A countdown in `mm:ss` means the row redraws every second.","a-desktop-card-stays-open.p3":"PitBoard cannot close a Desktop card itself. To read the same values without hovering, click `pitboard` in the footer under the prompt, or run `/pitboard`.","a-desktop-reading-shows-no-card.heading":"A Desktop reading shows no card","a-desktop-reading-shows-no-card.p1":"the `pitboard` pane is open. The pane holds every card, so while it is open the row shows none; the shading under the pointer stays.","a-desktop-reading-shows-no-card.p2":"look for the `pitboard` side pane at the right of the conversation.","a-desktop-reading-shows-no-card.p3":"read the card in the pane, or close the pane with its close mark or Escape; the cards come back at once.","a-model-scoped-limit-disappears.heading":"A model-scoped limit disappears","a-model-scoped-limit-disappears.li1":"usage-watch is off, or every session with PaceLine is closed, so no new reading arrives.","a-model-scoped-limit-disappears.li2":"usage-watch failed. After an error other than HTTP 429, it waits 10 minutes before it asks again, so the newest exact reading can pass 15 minutes.","a-model-scoped-limit-disappears.li3":"The weekly window reset. The limits return with the next exact reading.","a-model-scoped-limit-disappears.p1":"A reading such as `Fable` leaves the limits group.","a-model-scoped-limit-disappears.p2":"PitBoard shows the model-scoped limits only from an exact reading by PaceLine's usage-watch that is at most 15 minutes old, and only until the week they belong to resets. They disappear when:","a-model-scoped-limit-disappears.p3":"run `/paceline:usage-watch status`. It shows the last attempt, the last success, and the last error.","a-model-scoped-limit-disappears.p4":"turn usage-watch on with `/paceline:usage-watch on`. After an error, the limits return with the next successful reading.","copied_label":"Copied","copy_label":"Copy","intro.p1":"Problems by symptom. Each gives the cause, how to check it, and the fix. For how the numbers are made, see [How PitBoard works](explanation.html).","label_cause":"Cause","label_check":"Check","label_fix":"Fix","limits-stay-empty.heading":"Limits stay empty","limits-stay-empty.li1":"The session has had no reply yet. Claude Code reports limits with each reply, and no PaceLine file holds an earlier reading.","limits-stay-empty.li2":"The session uses an API key, or a login without Pro or Max usage limits. Claude Code then reports no five-hour or weekly limits.","limits-stay-empty.p1":"The `5h` gauge stays empty, `7d` is missing from the row, and the `5h limit` card says `No reading yet.`","limits-stay-empty.p3":"send one message and wait for the reply. With PaceLine installed, look for `rate-limits.json` in PaceLine's state directory; see [Files read](reference.html#files-read).","limits-stay-empty.p4":"after the first reply the limits appear. With an API key there are no subscription limits to show.","nav_label":"Troubleshooting","series_label":"pages in this series","symptoms_label":"Symptoms","the-branch-row-is-missing.heading":"The Branch row is missing","the-branch-row-is-missing.li1":"`git` is not on the `PATH` of the environment Claude Code starts in.","the-branch-row-is-missing.li2":"The start directory is not in a git repository.","the-branch-row-is-missing.li3":"`HEAD` is detached, so there is no current branch.","the-branch-row-is-missing.p1":"PitBoard reads the branch with `git branch --show-current` in the start directory, and shows the `Branch` row in the `ⓘ` card only when that returns a name. The row is missing when:","the-branch-row-is-missing.p2":"in the start directory, run `git branch --show-current`.","the-branch-row-is-missing.p3":"install `git` and put it on `PATH`, or check out a branch. The `Branch` row shows after the next turn.","the-numbers-lag.heading":"The numbers lag","the-numbers-lag.li1":"Limits move only when a session makes a request. With every session idle, nothing moves.","the-numbers-lag.li2":"An idle session re-reads PaceLine's limits file every 20 seconds, so it sees another session's reading up to about 20 seconds after PaceLine writes it.","the-numbers-lag.li3":"A Desktop card takes its paces and times at the start of the minute.","the-numbers-lag.li4":"`Pace` reads `n/a` until it has 10 minutes of readings for the five-hour limit, or an hour for the week.","the-numbers-lag.p2":"compare the row with `/usage`, and see [Why the row can differ from `/usage`](explanation.html#why-the-row-can-differ-from-usage).","the-numbers-lag.p3":"to keep the limits current while sessions are idle, turn on PaceLine's usage-watch; see [Use PitBoard with PaceLine](how-to.html#use-pitboard-with-paceline).","the-row-does-not-appear.heading":"The row does not appear","the-row-does-not-appear.li1":"Run `claude --version` and compare with 2.1.287.","the-row-does-not-appear.li2":"Run `/plugin` and look for `pitboard` among the installed, enabled plugins.","the-row-does-not-appear.li3":"Run `/pitboard`. If Claude Code answers `pitboard pane opened.`, the plugin runs.","the-row-does-not-appear.p1":"Claude Code is older than 2.1.287, the plugin is not installed or not enabled, or the session started before the install. The row loads at session start, so a session that was already running when you installed PitBoard has no row.","the-row-does-not-appear.p3":"update Claude Code, install or enable the plugin, and start a new session. In the CLI the row sits under the prompt, below the mode and hint line; in Desktop, above the prompt, since Desktop offers a plugin no place under it. See [Where the row sits](explanation.html#where-the-row-sits).","theme_dark":"Dark","theme_label":"Page theme","theme_light":"Light","theme_system":"System","title":"PitBoard troubleshooting","toc_label":"Sections","weekday-names-are-in-the-wrong-language.heading":"Weekday names are in the wrong language","weekday-names-are-in-the-wrong-language.p1":"The `Resets` rows of the `Week` card and of a model-scoped limit show a short weekday name, such as `Mon`, in a language you did not expect. PitBoard shows no month names.","weekday-names-are-in-the-wrong-language.p2":"PitBoard takes the locale from `LC_ALL`, `LC_TIME`, or `LANG`, in this order, and skips `C` and `POSIX`. When none is set, as usual on Windows, it asks `pwsh` for the OS culture, once per session. Without either, the weekday uses the default locale of Claude Code's plugin runtime.","weekday-names-are-in-the-wrong-language.p3":"in the environment that starts Claude Code, print `LC_ALL`, `LC_TIME`, and `LANG`. On Windows, run `pwsh -NoProfile -Command \"(Get-Culture).Name\"`.","weekday-names-are-in-the-wrong-language.p4":"set `LC_TIME` to your locale, such as `en_GB.UTF-8`, where Claude Code starts, or install PowerShell 7 on Windows. Start a new session."}</script>
+<script type="application/json" id="pb-glossary">{"5h":{"name":"5h limit","react":"Amber from 70%: keep subagents for work that needs them. Red from 90%, or when Pace is above Budget and it would run out before the reset: hold subagents.","short":"Use of the five-hour usage window, with a tick where an even pace to its reset would stand now."},"7d":{"name":"Weekly limit","react":"From 80% save it for work that needs it.","short":"Use of the weekly limit, with a tick where an even pace to its reset would stand now."},"API cost":{"name":"API cost","short":"What the session would cost at API prices. A subscription is not charged per token."},"Advisor":{"name":"Advisor","short":"The advisor model set with `/advisor`, and whether it is active. In Desktop its name is in sand italics when its model is of no known family, and dimmed and struck through when it is inactive."},"At reset":{"name":"At reset","short":"Where usage lands at the reset if the current Pace holds."},"Auto-compact":{"name":"Auto-compact","short":"Whether Claude Code compacts the context by itself, and who set a smaller compaction window."},"Branch":{"name":"Branch","short":"The git branch of that folder, when there is one."},"Budget":{"name":"Budget","react":"Pace above Budget means the limit runs out early if nothing changes.","short":"The pace that spends exactly what is left by the reset: remaining percent divided by hours to the reset."},"Cache":{"name":"Cache","react":"Amber and red mark the time left before it expires. After that, the next turn writes the context again: `If cold` shows the tokens and how many times a warm turn that costs.","short":"Time left before the prompt cache expires. A reply restarts it. The gauge fills as the time runs out."},"Claude Code":{"name":"Claude Code","short":"The running Claude Code version."},"Countdown":{"name":"Countdown","short":"Time left before the prompt cache expires: whole minutes while calm, seconds once it warns."},"Ctx":{"name":"Ctx (context)","react":"Amber from 60%, red from 80% or when `Turns left` reaches about three. With auto-compact off, nothing compacts the context by itself.","short":"How full the context is, measured against the point where Claude Code compacts it, or against the full window when auto-compact is off."},"Effort":{"name":"Effort","short":"The reasoning effort level of the session's model."},"Hit":{"name":"Hit","react":"Low right after a compaction is normal; the next turns rebuild it.","short":"Share of the last turn's input read from the cache: reads / (reads + writes)."},"Idle compact":{"name":"Idle compact","short":"Whether Claude Code is expected to compact a long idle conversation before its one-hour prompt cache expires: on from the threshold (200k unless `CLAUDE_CODE_IDLE_COMPACT_MIN_TOKENS` sets it), on but below it with the current size, off, or n/a with a five-minute cache or while the TTL is not yet known. PitBoard cannot see Claude Code's feature flag, so `on` means Claude Code is expected to compact."},"If cold":{"name":"If cold","short":"Tokens the next turn writes again once the cache expires, and how much dearer that turn is than a warm one."},"Last turn":{"name":"Last turn","short":"Cache hit rate of the last turn."},"Left":{"name":"Left","short":"Tokens left before auto-compact starts."},"Main":{"name":"Main","short":"The session's main model, which the advisor is compared with."},"Model":{"name":"Model","short":"The advisor's model, or off."},"Overspent":{"name":"Overspent","react":"Slow down until Week elapsed catches up.","short":"How far weekly usage is ahead of an even pace, in points and in hours of budget. Yellow, red past a day ahead."},"Pace":{"name":"Pace","react":"Compare it with Budget directly below it.","short":"How fast the limit is being spent now, in percent per hour: over the last 90 minutes for 5h, the last 6 hours for the week."},"Resets":{"name":"Resets","short":"Day and time the weekly limit resets, in your locale."},"Resets in":{"name":"Resets in","short":"Time until the five-hour window resets and its usage starts again at 0%."},"Running":{"name":"Running","short":"Time since the session started."},"Runs out":{"name":"Runs out","react":"Hold subagents and heavy work until the reset or until Pace drops.","short":"The clock time the limit reaches 100% at the current Pace, shown instead of At reset when that comes before the reset."},"Session":{"name":"Session","short":"Cache hit rate since the last compaction."},"Spare":{"name":"Spare","short":"How far weekly usage is below an even pace, in points and in hours of budget."},"Started in":{"name":"Started in","short":"The last part of the folder the session started in."},"State":{"name":"State","short":"Whether the advisor is active; it is inactive when its model ranks below the main one."},"TTL":{"name":"TTL","short":"The cache lifetime the last write used: 1h or 5m."},"Turns":{"name":"Turns","short":"Turns taken in this session."},"Turns left":{"name":"Turns left","short":"Turns left before auto-compact at the recent growth of the context per turn."},"Used":{"name":"Used","short":"Share of the limit or window already spent."},"Week elapsed":{"name":"Week elapsed","short":"Share of the week gone since the last weekly reset: where an even pace would stand now."},"Window":{"name":"Window","short":"The context window auto-compact measures against, and the model's full window when they differ."},"act":{"name":"Act","short":"Red. Changes what you do next."},"calm":{"name":"Calm","short":"Grey. Nothing to do."},"info":{"name":"Session (ⓘ)","short":"Model, effort, advisor, version, folder, running time, turns and API cost. Also the branch, when there is one. In the CLI it opens with a click, in Desktop on hover. The `pitboard` button opens the `/pitboard` pane: in the CLI it follows ⓘ, in Desktop it sits in the footer under the input, between the mode and the model."},"projection":{"name":"Projection","short":"The paler part of the five-hour bar: where usage reaches by the reset at the current Pace. The weekly bar has none."},"scoped":{"name":"Model limit","react":"From 80%, switch model for work that does not need this one.","short":"A weekly limit for one model family alone, shown next to 7d while PaceLine's usage-watch has read it in the last 15 minutes. Amber from 80%, red from 95%."},"tick":{"name":"Even-pace tick","short":"The mark on a limit bar where usage would stand now if it were spent evenly to the reset: the share of the window already gone."},"watch":{"name":"Watch","short":"Amber. Worth a glance, not a problem yet."}}</script>
+<script type="application/json" id="pb-facts">{"colours":{"efforts":[{"level":"low","theme":"warning"},{"level":"medium","theme":"success"},{"level":"high","theme":"suggestion"},{"level":"xhigh","theme":"autoAccept"},{"level":"max","theme":"error"}],"models":[{"desktop":"#d787ff","italic":false,"match":"opus","name":"Opus","theme":"autoAccept"},{"desktop":"#5fafff","italic":false,"match":"sonnet","name":"Sonnet","theme":"suggestion"},{"desktop":"#ff87d7","italic":false,"match":"fable","name":"Fable","theme":"bashBorder"},{"desktop":"#87d7af","italic":false,"match":"haiku","name":"Haiku","theme":"success"},{"desktop":"#b8925a","italic":true,"match":null,"name":"Other","theme":"text"}]},"env":["CLAUDE_CODE_IDLE_COMPACT_MIN_TOKENS","CLAUDE_CONFIG_DIR","DISABLE_AUTO_COMPACT","HOME","LANG","LC_ALL","LC_TIME","PACELINE_STATE_DIR","USERPROFILE"],"labels":["5h","7d","API cost","Advisor","At reset","Auto-compact","Branch","Budget","Cache","Claude Code","Countdown","Ctx","Effort","Hit","Idle compact","If cold","Last turn","Left","Main","Model","Overspent","Pace","Resets","Resets in","Running","Runs out","Session","Spare","Started in","State","TTL","Turns","Turns left","Used","Week elapsed","Window"],"levels":{"cache_1h_minutes_left":{"act":5,"watch":15},"cache_5m_minutes_left":{"act":1,"watch":2.5},"context_pct":{"act":80,"watch":60},"five_hour_pct":{"act":90,"watch":70},"week_pct":{"act":95,"watch":80}}}</script>
+<script type="application/json" id="pb-data">{}</script>
+<script>
+const __m = {}
+// Shared page behaviour: strings, glossary popovers, segmented switches, chips and the theme switch.
+// Pages read their data from the JSON script elements the build writes and call PB.* helpers.
+const PB = (() => {
+  const json = id => {
+    const el = document.getElementById(id)
+    return el ? JSON.parse(el.textContent) : {}
+  }
+  const strings = json('pb-strings')
+  const glossary = json('pb-glossary')
+  const facts = json('pb-facts')
+  const data = json('pb-data')
+
+  const t = (key, vars = {}) => {
+    const s = strings[key]
+    if (s === undefined) return `{{${key}}}`
+    return s.replace(/\{(\w+)\}/g, (_, k) => (vars[k] === undefined ? `{${k}}` : String(vars[k])))
+  }
+
+  const el = (tag, attrs = {}, ...children) => {
+    const node = document.createElement(tag)
+    for (const [k, v] of Object.entries(attrs)) {
+      if (v === null || v === undefined || v === false) continue
+      if (k === 'class') node.className = v
+      else if (k === 'text') node.textContent = v
+      else if (k === 'html') node.innerHTML = v
+      else if (k.startsWith('on')) node.addEventListener(k.slice(2), v)
+      else node.setAttribute(k, v === true ? '' : v)
+    }
+    for (const c of children.flat()) if (c !== null && c !== undefined && c !== false) node.append(c instanceof Node ? c : document.createTextNode(String(c)))
+    return node
+  }
+
+  // Text with backtick spans as nodes: code spans become <code>, the rest stays text, never markup.
+  // An unbalanced backtick leaves the whole string as text.
+  const rich = text => {
+    const s = text === undefined || text === null ? '' : String(text)
+    if (s === '') return []
+    const parts = s.split('`')
+    if (parts.length % 2 === 0) return [document.createTextNode(s)]
+    return parts.flatMap((part, i) => {
+      if (part === '') return []
+      return [i % 2 ? el('code', { text: part }) : document.createTextNode(part)]
+    })
+  }
+
+  const store = {
+    get(key) { try { return localStorage.getItem(`pb:${key}`) } catch { return null } },
+    set(key, value) { try { localStorage.setItem(`pb:${key}`, value) } catch { /* storage blocked */ } },
+  }
+
+  // Theme: system (no attribute), light or dark, remembered per viewer; an icon switch.
+  const ICONS = {
+    system: '<rect x="2.5" y="3.5" width="11" height="8" rx="1"/><path d="M6 14h4M8 11.5V14"/>',
+    light: '<circle cx="8" cy="8" r="3"/><path d="M8 1.5v1.5M8 13v1.5M1.5 8H3M13 8h1.5M3.4 3.4l1 1M11.6 11.6l1 1M3.4 12.6l1-1M11.6 4.4l1-1"/>',
+    dark: '<path d="M13 9.5A5.5 5.5 0 0 1 6.5 3a5.5 5.5 0 1 0 6.5 6.5z"/>',
+  }
+  function initTheme() {
+    const apply = v => {
+      if (v === 'light' || v === 'dark') document.documentElement.setAttribute('data-theme', v)
+      else document.documentElement.removeAttribute('data-theme')
+    }
+    apply(store.get('theme'))
+    for (const seg of document.querySelectorAll('[data-pb-theme]')) {
+      seg.classList.add('seg', 'theme-switch')
+      seg.setAttribute('role', 'group')
+      seg.setAttribute('aria-label', t('theme_label'))
+      // innerHTML parses the icon in the SVG namespace; createElement('svg') would not.
+      seg.replaceChildren(...['system', 'light', 'dark'].map(v => {
+        const b = el('button', { type: 'button', 'data-value': v, title: t(`theme_${v}`), html: `<svg viewBox="0 0 16 16" aria-hidden="true">${ICONS[v]}</svg>` })
+        b.append(el('span', { class: 'visually-hidden', text: t(`theme_${v}`) }))
+        return b
+      }))
+      seg.addEventListener('pb:change', e => { apply(e.detail); store.set('theme', e.detail); document.dispatchEvent(new CustomEvent('pb:theme')) })
+      setSeg(seg, store.get('theme') || 'system', false)
+    }
+  }
+
+  // Segmented switches and chip groups: one pressed button; a 'pb:change' event with its value.
+  function setSeg(group, value, notify = true) {
+    for (const b of group.querySelectorAll('button[data-value]')) b.setAttribute('aria-pressed', String(b.dataset.value === value))
+    group.dataset.current = value
+    if (notify) group.dispatchEvent(new CustomEvent('pb:change', { detail: value }))
+  }
+  function initSegs(root = document) {
+    for (const group of root.querySelectorAll('.seg, .chips[data-choice]')) {
+      if (group.dataset.bound) continue
+      group.dataset.bound = '1'
+      group.addEventListener('click', e => {
+        const b = e.target.closest('button[data-value]')
+        if (b && group.contains(b)) setSeg(group, b.dataset.value)
+      })
+      const pressed = group.querySelector('button[aria-pressed="true"]') || group.querySelector('button[data-value]')
+      if (pressed) setSeg(group, pressed.dataset.value, false)
+    }
+  }
+
+  // Glossary popovers: any element with data-term; hover and focus show it, a tap toggles it.
+  let pop = null
+  let owner = null
+  function hide() {
+    if (pop) pop.remove()
+    for (const hot of document.querySelectorAll('.glossary .is-hot')) hot.classList.remove('is-hot')
+    pop = null
+    owner = null
+  }
+  // With the glossary drawer open a term lights its entry there; otherwise it opens a popover.
+  function sideEntry(key) {
+    const entry = document.querySelector(`.glossary [data-entry="${CSS.escape(key)}"]`)
+    if (!entry) return null
+    return entry.closest('.glossary').hidden ? null : entry
+  }
+  function show(target) {
+    const key = target.dataset.term
+    const entry = glossary[key]
+    if (!entry) return
+    hide()
+    owner = target
+    const side = sideEntry(key)
+    if (side) {
+      side.classList.add('is-hot')
+      side.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+      return
+    }
+    pop = el('div', { class: 'popover', role: 'tooltip' }, el('strong', { text: entry.name || key }), el('span', {}, rich(entry.short || entry)))
+    document.body.append(pop)
+    const r = target.getBoundingClientRect()
+    const w = pop.offsetWidth
+    const left = Math.max(16, Math.min(window.scrollX + r.left, window.scrollX + document.documentElement.clientWidth - w - 16))
+    pop.style.left = `${left}px`
+    pop.style.top = `${window.scrollY + r.bottom + 6}px`
+  }
+  function initTerms() {
+    document.addEventListener('mouseover', e => { const x = e.target.closest('[data-term]'); if (x && x !== owner) show(x) })
+    document.addEventListener('mouseout', e => { const x = e.target.closest('[data-term]'); if (x && !x.contains(e.relatedTarget)) hide() })
+    document.addEventListener('focusin', e => { const x = e.target.closest('[data-term]'); if (x) show(x) })
+    document.addEventListener('focusout', e => { if (e.target.closest('[data-term]')) hide() })
+    document.addEventListener('click', e => {
+      const x = e.target.closest('[data-term]')
+      if (x) { if (owner === x) hide(); else show(x) } else if (!e.target.closest('.popover')) hide()
+    })
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') hide() })
+  }
+
+  function term(key, label) {
+    return el('span', { class: 'term', 'data-term': key, tabindex: '0', text: label ?? key })
+  }
+
+  // Section navigation with the current section marked. The build writes the list into the
+  // markup; a page built without one gets it here from its own section headings.
+  function initNav() {
+    const nav = document.querySelector('[data-pb-nav]')
+    if (!nav) return
+    if (!nav.querySelector('a')) {
+      const found = [...document.querySelectorAll('main section[id]')].filter(s => s.querySelector('h1, h2'))
+      const made = found.map(s => el('a', { href: `#${s.id}`, text: s.dataset.nav || s.querySelector('h1, h2').textContent }))
+      nav.replaceChildren(el('ol', {}, made.map(a => el('li', {}, a))))
+    }
+    const links = [...nav.querySelectorAll('a[href^="#"]')]
+    const sections = links.map(a => document.getElementById(a.getAttribute('href').slice(1))).filter(Boolean)
+    const mark = id => { for (const a of links) a.setAttribute('aria-current', String(a.getAttribute('href') === `#${id}`)) }
+    // A click names its target at once, and the scroll it starts (smooth, and often stopped short by the
+    // page end) must not move the mark until it has settled.
+    let locked = false
+    let settle = 0
+    const hold = () => { locked = true; clearTimeout(settle); settle = setTimeout(() => { locked = false }, 200) }
+    nav.addEventListener('click', e => {
+      const a = e.target.closest('a[href^="#"]')
+      if (a && nav.contains(a)) { mark(a.getAttribute('href').slice(1)); hold() }
+    })
+    // The last heading cannot reach the top of a page that ends first, so the page end marks it.
+    const last = sections[sections.length - 1]
+    const atEnd = () => window.scrollY + window.innerHeight >= document.documentElement.scrollHeight - 2
+    window.addEventListener('scroll', () => {
+      if (locked) { hold(); return }
+      if (last && atEnd()) mark(last.id)
+    }, { passive: true })
+    if (!('IntersectionObserver' in window)) return
+    const seen = new IntersectionObserver(entries => {
+      if (locked || (last && atEnd())) return
+      for (const e of entries) if (e.isIntersecting) mark(e.target.id)
+    }, { rootMargin: '-10% 0px -70% 0px' })
+    for (const s of sections) seen.observe(s)
+  }
+
+  // Filter bar (data-pb-filter="<selector of the items>"): items carry data-tags (single words); the bar shows a
+  // search box, one chip per tag and a live count. Its texts come from the bar's own attributes: data-label (search
+  // box), data-all (the chip for every item), data-count ("{shown} of {total}"). A tag's chip reads as the text of the
+  // bar's own [data-tag="<tag>"] element when it holds one (the markup a reader without scripts sees as a list of
+  // the groups), else as the tag. data-group="<selector>" also hides the group that holds no visible item.
+  function initFilters() {
+    for (const bar of document.querySelectorAll('[data-pb-filter]')) {
+      const items = [...document.querySelectorAll(bar.dataset.pbFilter)]
+      if (!items.length) continue
+      const names = new Map([...bar.querySelectorAll('[data-tag]')].map(x => [x.dataset.tag, x.textContent.trim()]))
+      const tagsOf = item => (item.dataset.tags || '').split(/\s+/).filter(Boolean)
+      const found = new Set(items.flatMap(tagsOf))
+      const tags = [...names.keys()].filter(x => found.has(x)).concat([...found].filter(x => !names.has(x)))
+      const box = el('input', { type: 'search', class: 'filter-box', 'aria-label': bar.dataset.label || '', placeholder: bar.dataset.label || '' })
+      const chips = el('div', { class: 'chips', 'data-choice': '', role: 'group' },
+        [['', bar.dataset.all || ''], ...tags.map(x => [x, names.get(x) || x])].map(([v, label]) => el('button', { type: 'button', class: 'chip', 'data-value': v, text: label })))
+      const count = el('p', { class: 'filter-count', 'aria-live': 'polite' })
+      bar.classList.add('filter-bar')
+      bar.replaceChildren(...[box, tags.length ? chips : null, count].filter(Boolean))
+      const groups = bar.dataset.group ? [...new Set(items.map(item => item.closest(bar.dataset.group)).filter(Boolean))] : []
+      const apply = () => {
+        const query = box.value.trim().toLowerCase()
+        const tag = chips.dataset.current || ''
+        let shown = 0
+        for (const item of items) {
+          const ok = (!tag || tagsOf(item).includes(tag)) && (!query || item.textContent.toLowerCase().includes(query))
+          item.hidden = !ok
+          if (ok) shown++
+        }
+        for (const g of groups) g.hidden = items.every(item => !g.contains(item) || item.hidden)
+        count.textContent = (bar.dataset.count || '').replace('{shown}', shown).replace('{total}', items.length)
+      }
+      initSegs(bar)
+      box.addEventListener('input', apply)
+      chips.addEventListener('pb:change', apply)
+      // A link to an entry or group the filter hides clears the filter, so the target can be shown. A link to the
+      // hash already in the address bar fires no hashchange, so a click covers it.
+      const reveal = hash => {
+        const target = hash.length > 1 ? document.getElementById(decodeURIComponent(hash.slice(1))) : null
+        if (!target || !target.closest('[hidden]') || ![...items, ...groups].some(x => x.contains(target))) return
+        box.value = ''
+        setSeg(chips, '')
+        target.scrollIntoView()
+      }
+      window.addEventListener('hashchange', () => reveal(location.hash))
+      document.addEventListener('click', e => {
+        const a = e.target.closest && e.target.closest('a[href^="#"]')
+        if (a && a.hash === location.hash) reveal(a.hash)
+      })
+      apply()
+    }
+  }
+
+  // Count bar (data-pb-counts="<selector of the items>"): one segment per group (the nearest section) in
+  // proportion to its items, each a link to the group with its heading and count.
+  function initCounts() {
+    for (const bar of document.querySelectorAll('[data-pb-counts]')) {
+      const groups = new Map()
+      for (const item of document.querySelectorAll(bar.dataset.pbCounts)) {
+        const g = item.closest('section[id]')
+        if (g) groups.set(g, (groups.get(g) || 0) + 1)
+      }
+      bar.classList.add('count-bar')
+      bar.replaceChildren(...[...groups].map(([g, n]) => el('a', { class: 'count-seg', href: `#${g.id}`, 'aria-label': `${g.querySelector('h2').textContent}: ${n}`, style: `flex-grow: ${n}` },
+        el('span', { class: 'count-n', text: String(n) }), el('span', { class: 'count-name', text: g.querySelector('h2').textContent }))))
+    }
+  }
+
+  // Copy button on commands, code blocks and transcripts, where the page defines copy_label and copied_label.
+  function initCopy() {
+    if (!navigator.clipboard || !strings.copy_label || !strings.copied_label) return
+    for (const block of document.querySelectorAll('main .cmd, main pre, main .transcript')) {
+      const wrap = el('div', { class: 'copy-wrap' })
+      block.replaceWith(wrap)
+      const button = el('button', { type: 'button', class: 'copy-btn', 'aria-live': 'polite', text: t('copy_label') })
+      button.addEventListener('click', () => {
+        navigator.clipboard.writeText(block.textContent.trim()).then(() => {
+          button.textContent = t('copied_label')
+          setTimeout(() => { button.textContent = t('copy_label') }, 1600)
+        }, () => {})
+      })
+      wrap.append(block, button)
+    }
+  }
+
+  // Decision walker (ol.walker): a question with its answers as a nested list. With scripts one node shows
+  // at a time, the answers as buttons (the answer's data-label, else its own text), with back and restart
+  // (walker_back, walker_restart). A node's data-outcome names its colour. Where the page lacks those strings the
+  // list stays as written.
+  function initWalkers() {
+    if (!strings.walker_back || !strings.walker_restart) return
+    for (const list of document.querySelectorAll('ol.walker')) {
+      const root = list.querySelector(':scope > li')
+      if (!root) continue
+      const trail = [root]
+      const view = el('div', { class: 'walker-view', tabindex: '-1', 'aria-live': 'polite' })
+      const own = li => {
+        const copy = li.cloneNode(true)
+        for (const inner of copy.querySelectorAll('ol')) inner.remove()
+        return copy
+      }
+      const go = change => { change(); render(); view.focus() }
+      const render = () => {
+        const li = trail[trail.length - 1]
+        view.dataset.outcome = li.dataset.outcome || ''
+        const options = [...li.querySelectorAll(':scope > ol > li')]
+        const answers = options.map(o => el('button', {
+          type: 'button', class: 'chip', text: o.dataset.label || own(o).textContent.trim(), onclick: () => go(() => trail.push(o)),
+        }))
+        view.replaceChildren(...[
+          el('div', { class: 'walker-text' }, el('p', {}, [...own(li).childNodes])),
+          answers.length ? el('div', { class: 'walker-options' }, answers) : null,
+          el('div', { class: 'walker-controls' },
+            el('button', { type: 'button', text: t('walker_back'), disabled: trail.length < 2, onclick: () => go(() => trail.pop()) }),
+            el('button', { type: 'button', text: t('walker_restart'), disabled: trail.length < 2, onclick: () => go(() => { trail.length = 1 }) })),
+        ].filter(Boolean))
+      }
+      list.hidden = true
+      list.after(view)
+      render()
+    }
+  }
+
+  // Segmented panels (div.seg-panels > div.seg-panel[data-label]): every panel shows without scripts; with
+  // scripts a segmented switch picks one.
+  function initPanels() {
+    for (const box of document.querySelectorAll('.seg-panels')) {
+      const panels = [...box.querySelectorAll(':scope > .seg-panel')]
+      if (panels.length < 2) continue
+      const seg = el('div', { class: 'seg', role: 'group' }, panels.map((p, i) => el('button', { type: 'button', 'data-value': String(i), text: p.dataset.label })))
+      seg.addEventListener('pb:change', e => panels.forEach((p, i) => { p.hidden = String(i) !== e.detail }))
+      box.classList.add('is-tabbed')
+      box.prepend(seg)
+      initSegs(box)
+      panels.forEach((p, i) => { p.hidden = i !== 0 })
+    }
+  }
+
+  // The glossary column: the entries a page lists in data-terms, or all of them.
+  function initGlossary() {
+    for (const aside of document.querySelectorAll('[data-pb-glossary]')) {
+      const keys = aside.dataset.terms ? aside.dataset.terms.split(',').map(k => k.trim()) : Object.keys(glossary)
+      aside.append(el('dl', {}, keys.filter(k => glossary[k]).map(k =>
+        el('div', { class: 'entry', 'data-entry': k }, el('dt', { text: glossary[k].name || k }), el('dd', {}, rich(glossary[k].short))))))
+    }
+  }
+
+  // List and detail built in markup (data-pb-md): an option shows the panel with the same data-panel.
+  function initMasterDetail() {
+    for (const box of document.querySelectorAll('[data-pb-md]')) {
+      const items = [...box.querySelectorAll('.sit-item[data-panel]')]
+      const panels = [...box.querySelectorAll('.md-panel[data-panel]')]
+      const choose = (i, focus) => {
+        items.forEach((it, j) => { it.setAttribute('aria-selected', String(i === j)); it.tabIndex = i === j ? 0 : -1 })
+        for (const p of panels) p.hidden = p.dataset.panel !== items[i].dataset.panel
+        if (focus) items[i].focus()
+      }
+      items.forEach((it, i) => it.addEventListener('click', () => choose(i, true)))
+      box.addEventListener('keydown', e => {
+        const at = items.findIndex(it => it.getAttribute('aria-selected') === 'true')
+        const next = { ArrowDown: at + 1, ArrowUp: at - 1, Home: 0, End: items.length - 1 }[e.key]
+        if (next === undefined || !e.target.closest('.sit-item')) return
+        e.preventDefault()
+        choose(Math.max(0, Math.min(items.length - 1, next)), true)
+      })
+      choose(0, false)
+    }
+  }
+
+  // Drawers: a button with data-pb-drawer opens the panel with that id; the close button, Escape
+  // or a second press closes it, and focus returns to the button.
+  function initDrawers() {
+    for (const opener of document.querySelectorAll('[data-pb-drawer]')) {
+      const panel = document.getElementById(opener.dataset.pbDrawer)
+      if (!panel) continue
+      const set = open => {
+        panel.hidden = !open
+        opener.setAttribute('aria-expanded', String(open))
+        document.body.classList.toggle('drawer-is-open', open)
+        if (open) panel.querySelector('button')?.focus()
+        else opener.focus()
+      }
+      opener.addEventListener('click', () => set(panel.hidden))
+      panel.querySelector('[data-pb-drawer-close]')?.addEventListener('click', () => set(false))
+      document.addEventListener('keydown', e => { if (e.key === 'Escape' && !panel.hidden) set(false) })
+    }
+  }
+
+  document.addEventListener('DOMContentLoaded', () => { initTheme(); initSegs(); initGlossary(); initNav(); initTerms(); initMasterDetail(); initDrawers(); initFilters(); initCounts(); initCopy(); initWalkers(); initPanels() })
+  return { t, el, rich, strings, glossary, facts, data, store, setSeg, initSegs, term }
+})()
+</script>
+</body>
+</html>

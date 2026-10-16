@@ -1,0 +1,87 @@
+{
+  "dbwise": 1,
+  "credentials": {
+    "staging-reader": {
+      "user": "reader"
+    },
+    "prod-reader": {
+      "user": "reader"
+    },
+    "prod-monitor": {
+      "user": "monitor"
+    },
+    "sandbox-owner": {
+      "user": "sandbox_owner"
+    }
+  },
+  "servers": {
+    "staging-db": {
+      "engine": "postgresql",
+      "host": "staging-db.example.internal",
+      "port": 5432,
+      "sslmode": "require",
+      "dbname": "postgres",
+      "databases": [
+        "app",
+        "audit"
+      ]
+    },
+    "prod-db": {
+      "engine": "postgresql",
+      "host": "prod-db.example.internal",
+      "port": 5432,
+      "sslmode": "require",
+      "dbname": "postgres",
+      "databases": [
+        "app",
+        "audit"
+      ]
+    },
+    "prod-replica-db": {
+      "engine": "postgresql",
+      "host": "prod-db-replica.example.internal",
+      "port": 5432,
+      "sslmode": "require",
+      "dbname": "postgres",
+      "databases": [
+        "app",
+        "audit"
+      ]
+    },
+    "sandbox-db": {
+      "engine": "postgresql",
+      "host": "sandbox-db.example.internal",
+      "port": 6432,
+      "sslmode": "verify-full",
+      "dbname": "postgres",
+      "databases": [
+        "scratch"
+      ]
+    }
+  },
+  "aliases": {
+    "staging": {
+      "server": "staging-db",
+      "level": "read",
+      "credential": "staging-reader"
+    },
+    "prod": {
+      "server": "prod-db",
+      "level": "diagnose",
+      "credential": {
+        "read": "prod-reader",
+        "diagnose": "prod-monitor"
+      }
+    },
+    "prod-replica": {
+      "server": "prod-replica-db",
+      "level": "read",
+      "credential": "prod-reader"
+    },
+    "sandbox": {
+      "server": "sandbox-db",
+      "level": "write",
+      "credential": "sandbox-owner"
+    }
+  }
+}

@@ -14,6 +14,11 @@ export type ContextView = {
   isAuto: boolean
   turnsLeft: number | null
   level: Level
+  // Idle compaction as far as PitBoard can see: on (every visible condition holds), below (on, but the
+  // context is under the threshold), off (the setting, the variable or auto-compact is off), n/a (the
+  // cache is not known to live an hour). The engine's feature flag is out of sight.
+  idle: 'on' | 'below' | 'off' | 'n/a'
+  idleMin: number | null
 }
 
 export type CacheView = {
@@ -227,7 +232,9 @@ export function mergeLimit(payload: StatusLimit | undefined, file: StatusLimit |
   return f > p ? file : payload
 }
 
-function contextView(m: StatusMeasure | null, samples: number[]): ContextView | null {
+const IDLE_DEFAULT = { isOn: true, minTokens: 200_000 }
+
+function contextView(m: StatusMeasure | null, samples: number[], regime: '1h' | '5m' | null): ContextView | null {
   // No response in this window yet: the fill is unknown, not empty.
   if (!m || m.tokens === null) return null
   const limit = m.isAutoCompact && m.threshold ? m.threshold : m.window
@@ -244,13 +251,17 @@ function contextView(m: StatusMeasure | null, samples: number[]): ContextView | 
   const turnsLeft = perTurn && m.isAutoCompact ? Math.max(0, Math.floor((limit - used) / perTurn)) : null
   const level: Level = pct >= 80 || (turnsLeft !== null && turnsLeft <= 3) ? 'act' : pct >= 60 ? 'watch' : 'calm'
   const compactWindow = m.compactWindow ?? null
-  return { pct, used, limit, window: m.window, compactWindow, compactSource: m.compactSource ?? null, isAuto: m.isAutoCompact, turnsLeft, level }
+  const idleSetting = m.idleCompact ?? IDLE_DEFAULT
+  // Only a one-hour cache is compacted while idle; a TTL not seen yet is not known to be one hour.
+  const idle: ContextView['idle'] = !idleSetting.isOn || !m.isAutoCompact ? 'off' : regime !== '1h' ? 'n/a' : used >= idleSetting.minTokens ? 'on' : 'below'
+  const idleMin = idle === 'on' || idle === 'below' ? idleSetting.minTokens : null
+  return { pct, used, limit, window: m.window, compactWindow, compactSource: m.compactSource ?? null, isAuto: m.isAutoCompact, turnsLeft, level, idle, idleMin }
 }
 
 // A cold turn writes the context again at 2x (one-hour TTL) or 1.25x (five-minute TTL) the base input
 // price, where a warm turn reads it at the cache-read price: 0.05x on Opus 5.5 and Sonnet 5.5, 0.025x
 // on Fable 5.1 and Mythos 5.1, 0.1x elsewhere. Prices from the Pricing section of
-// https://platform.claude.com/docs/en/build-with-claude/prompt-caching. A model not
+// https://platform.claude.com/docs/en/about-claude/pricing#prompt-caching. A model not
 // listed here may read cheaper than 0.1x, so its ratio is a lower bound.
 export function coldRatio(model: string | null, regime: '1h' | '5m' | null): { ratio: number; isFloor: boolean } {
   const id = (model ?? '').toLowerCase().replace(/[.\s]/g, '-')
@@ -348,7 +359,7 @@ export function buildView(i: ViewInput): View {
   const isUnknown = !!i.isFileAccountUnknown
   return {
     now: i.now,
-    context: contextView(i.measure, i.ctxSamples),
+    context: contextView(i.measure, i.ctxSamples, i.cache.regime),
     cache: cacheView(i.cache, i.now, i.measure?.tokens ?? null, i.meta?.model ?? null),
     five: fiveView(five.merged, five.isExact, five.isFromFile && isUnknown ? [] : i.fiveSamples, i.now),
     week:

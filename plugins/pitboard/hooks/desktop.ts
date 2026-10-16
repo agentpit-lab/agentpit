@@ -49,7 +49,7 @@ const clampPct = (pct: number) => Math.round(Math.max(0, Math.min(100, pct)))
 
 // A filled pie the size of the surface's own context ring: a light disc, the used share as a
 // sector from twelve o'clock, clockwise.
-export function pieSvg(pct: number, level: Level, size = 16): Piece {
+function pieBody(pct: number, level: Level, size: number): string {
   const p = clampPct(pct)
   const r = size / 2 - 0.5
   const mid = size / 2
@@ -61,8 +61,11 @@ export function pieSvg(pct: number, level: Level, size = 16): Piece {
     const y = (mid - r * Math.cos(a)).toFixed(2)
     sector = `<path class="fill-${level}" d="M${mid} ${mid} L${mid} ${(mid - r).toFixed(2)} A${r} ${r} 0 ${a > Math.PI ? 1 : 0} 1 ${x} ${y} Z"/>`
   }
-  const body = `<circle class="disc" cx="${mid}" cy="${mid}" r="${r}"/>${sector}`
-  return { source: doc(size, size, body), width: size, height: size, alt: `${p}%` }
+  return `<circle class="disc" cx="${mid}" cy="${mid}" r="${r}"/>${sector}`
+}
+
+export function pieSvg(pct: number, level: Level, size = 16): Piece {
+  return { source: doc(size, size, pieBody(pct, level, size)), width: size, height: size, alt: `${clampPct(pct)}%` }
 }
 
 // A limit as a bar with a tick where even pace would stand now: the share of the window gone.
@@ -92,6 +95,46 @@ export function ruleSvg(height = 14, width = 9): Piece {
 export type CardBar = { used: number; projected?: number; tick: number | null; level: Level }
 // advice: the first bullet when the reading needs a decision, also kept apart for the popover.
 export type Card = { title: string; level?: Level; rows: [string, string, Tone?][]; bullets: string[]; advice?: string; desktopBullets?: string[]; bar?: CardBar }
+
+// The state marks sit in the same image as the context pie, so no column gap parts them, and are
+// drawn large enough to read at 1x: the double arrow 12 px wide, the sleep sign 10 px wide and tall.
+export const PIE_PX = 16
+const MARK_GAP_PX = 2
+export const MARK_ARROW_PX = 12
+export const MARK_ZZ_PX = 10
+const MARK_HEIGHT_PX = PIE_PX
+
+// Width of the pie with its marks, in pixels. A reading without a pie starts at the first mark.
+export const ringMarksWidth = (hasPie: boolean, mark: boolean, idle: boolean): number => {
+  const parts = [...(hasPie ? [PIE_PX] : []), ...(mark ? [MARK_ARROW_PX] : []), ...(mark && idle ? [MARK_ZZ_PX] : [])]
+  return parts.reduce((sum, w) => sum + w, 0) + (parts.length - 1) * MARK_GAP_PX
+}
+
+// Auto-compact on: a circular double arrow in the `on` colour, drawn on a 16-unit grid at 0.75 scale.
+const ARROW_BODY =
+  '<path stroke-width="2.2" d="M2.5 8A5.5 5.5 0 0 1 12 4.3M12.5 1.8V4.6H9.7"/><path stroke-width="2.2" d="M13.5 8A5.5 5.5 0 0 1 4 11.7M3.5 14.2V11.4H6.3"/>'
+// Idle compaction expected: the usual sleep sign, two z letters, the second smaller and raised.
+const ZZ_BODY = '<path stroke-width="1.5" d="M0.9 5.6H6L0.9 11.2H6"/><path stroke-width="1.2" d="M6.9 0.9H9.4L6.9 4.1H9.4"/>'
+
+const markGroup = (x: number, y: number, scale: number, body: string) =>
+  `<g transform="translate(${x} ${y}) scale(${scale})" stroke="${DESKTOP_ON}" stroke-linecap="round" stroke-linejoin="round" fill="none">${body}</g>`
+
+// The context pie (when the reading has one) followed by the auto-compact arrow and, when idle
+// compaction is expected, the sleep sign, all in one image.
+export function ringMarksSvg(pie: { pct: number; level: Level } | null, idle: boolean): Piece {
+  const width = ringMarksWidth(pie !== null, true, idle)
+  let x = 0
+  let body = ''
+  if (pie) {
+    body += pieBody(pie.pct, pie.level, PIE_PX)
+    x = PIE_PX + MARK_GAP_PX
+  }
+  body += markGroup(x, 2, 0.75, ARROW_BODY)
+  x += MARK_ARROW_PX + MARK_GAP_PX
+  if (idle) body += markGroup(x, 2, 1, ZZ_BODY)
+  const alt = [...(pie ? [`${clampPct(pie.pct)}%`] : []), 'auto-compact on', ...(idle ? ['idle compaction expected'] : [])].join(', ')
+  return { source: doc(width, MARK_HEIGHT_PX, body), width, height: MARK_HEIGHT_PX, alt }
+}
 
 // A limit's wide bar from y down 6 px: used, the projection paler, the even-pace tick over both.
 function barParts(b: CardBar, y: number, w: number): string[] {

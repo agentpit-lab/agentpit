@@ -1,6 +1,6 @@
 import type { StatusMeta } from '../types'
-import type { Card, CardBar, Tone } from './desktop'
-import type { CacheView, Level, View } from './view'
+import { PIE_PX, ringMarksWidth, type Card, type CardBar, type Tone } from './desktop'
+import type { CacheView, ContextView, Level, View } from './view'
 
 // The terminal and the pane draw in theme keys: the engine resolves each against the person's
 // theme, light or dark, and a mod cannot read which one is active to pick a colour itself.
@@ -17,14 +17,17 @@ export const TRACK = 'subtle'
 export const CALM_FILL = 'inactive'
 // Marks a context reading whose auto-compact is on; nothing marks it off.
 const AUTO_MARK = '↻'
+// Follows AUTO_MARK while idle compaction is expected: a superscript z, one cell wide.
+export const IDLE_MARK = 'ᶻ'
 // Model and effort keys are picked by hue: they name a model or a level, never a state, so one may
-// share its key with a state.
-const MODEL_COLORS: [RegExp, string][] = [
-  [/opus/i, 'autoAccept'],
-  [/sonnet/i, 'suggestion'],
-  [/fable/i, 'bashBorder'],
-  [/haiku/i, 'success'],
-]
+// share its key with a state. The Desktop row keeps fixed hex, so its advisor name keeps these.
+const FAMILY_COLORS = [
+  { name: 'Opus', match: 'opus', theme: 'autoAccept', desktop: '#d787ff' },
+  { name: 'Sonnet', match: 'sonnet', theme: 'suggestion', desktop: '#5fafff' },
+  { name: 'Fable', match: 'fable', theme: 'bashBorder', desktop: '#ff87d7' },
+  { name: 'Haiku', match: 'haiku', theme: 'success', desktop: '#87d7af' },
+] as const
+const MODEL_COLORS: [RegExp, string][] = FAMILY_COLORS.map(f => [new RegExp(f.match, 'i'), f.theme])
 export const EFFORT_COLORS: Record<string, string> = {
   low: 'warning',
   medium: 'success',
@@ -32,13 +35,7 @@ export const EFFORT_COLORS: Record<string, string> = {
   xhigh: 'autoAccept',
   max: 'error',
 }
-// The desktop row keeps fixed hex, as DESKTOP_* do, so its advisor name keeps these.
-const DESKTOP_MODEL_COLORS: [RegExp, string][] = [
-  [/opus/i, '#d787ff'],
-  [/sonnet/i, '#5fafff'],
-  [/fable/i, '#ff87d7'],
-  [/haiku/i, '#87d7af'],
-]
+const DESKTOP_MODEL_COLORS: [RegExp, string][] = FAMILY_COLORS.map(f => [new RegExp(f.match, 'i'), f.desktop])
 // Every colour the terminal and the pane draw with, read-only, for tests.
 export const TERMINAL_PALETTE = Object.freeze({
   value: VALUE,
@@ -84,7 +81,20 @@ export const displayModel = (id: string) => {
 // main model's; an unknown rank means active.
 const rankOf = (model: string) => RANKS.find(([re]) => re.test(model.toLowerCase().replace(/\./g, '-')))?.[1]
 export const modelColor = (name: string) => MODEL_COLORS.find(([re]) => re.test(name))?.[1] ?? VALUE
-export const desktopModelColor = (name: string) => DESKTOP_MODEL_COLORS.find(([re]) => re.test(name))?.[1] ?? '#ffffff'
+// Sand marks a model of no known family; the draw code italicizes it, so it reads as unknown, not off.
+export const DESKTOP_OTHER = '#b8925a'
+// The model and effort colours with their Desktop values, read-only, for the documentation facts.
+// The fallback row has no match pattern: it applies when no family matches. It is drawn in italics on
+// Desktop; an effort level has no Desktop colour.
+export const COLOUR_FACTS = Object.freeze({
+  models: Object.freeze([
+    ...FAMILY_COLORS.map(f => Object.freeze({ ...f, italic: false })),
+    Object.freeze({ name: 'Other', match: null, theme: VALUE, desktop: DESKTOP_OTHER, italic: true }),
+  ]),
+  efforts: Object.freeze(Object.entries(EFFORT_COLORS).map(([level, theme]) => Object.freeze({ level, theme }))),
+})
+export const isKnownFamily = (name: string) => DESKTOP_MODEL_COLORS.some(([re]) => re.test(name))
+export const desktopModelColor = (name: string) => DESKTOP_MODEL_COLORS.find(([re]) => re.test(name))?.[1] ?? DESKTOP_OTHER
 
 const kilo = (n: number) =>
   n >= 1_000_000 ? `${Number((n / 1_000_000).toFixed(1))}M` : n >= 1000 ? `${Math.round(n / 1000)}k` : String(n)
@@ -149,21 +159,22 @@ export function alerts(v: View): { level: Level; head: string; advice: string }[
       advice: !c.isAuto
         ? 'auto-compact is off'
         : c.turnsLeft !== null
-          ? `~${c.turnsLeft} turns to auto-compact · finish the step, or /compact at a clean point`
-          : 'auto-compact is near · /compact at a clean point',
+          ? `~${c.turnsLeft} turns to auto-compact`
+          : 'auto-compact is near',
     })
   }
   const k = v.cache
   if (k.level !== 'calm') {
     const rewrite = k.rewrite !== null ? `${kilo(k.rewrite)} tokens` : 'the whole context'
-    if (k.state === 'cold') out.push({ level: k.level, head: 'Cache is cold', advice: `the next turn writes ${rewrite} again · batch what you send next` })
+    const ratio = `${k.isRatioFloor ? '≥' : '~'}${k.ratio}×`
+    if (k.state === 'cold') out.push({ level: k.level, head: 'Cache is cold', advice: `the next turn writes ${rewrite} again (${ratio} a warm one)` })
     else if (k.state === 'warm' && k.leftMs !== null)
       out.push({
         level: k.level,
         head: k.level === 'act' ? `Cache cools in ${mmss(k.leftMs)}` : `Cache ${mmss(k.leftMs)} left`,
         advice: k.isRebuilt
           ? rebuiltNote(k)
-          : `a reply now keeps it; a cold turn writes ${rewrite} again (${k.isRatioFloor ? '≥' : '~'}${k.ratio}× a warm one)`,
+          : `a reply now keeps it; a cold turn writes ${rewrite} again (${ratio} a warm one)`,
       })
   }
   const f = v.five
@@ -205,6 +216,8 @@ export type Gauge = {
   icon?: 'hot' | 'cold'
   // A state glyph after the gauge, in the `on` colour: auto-compact on.
   mark?: string
+  // Idle compaction is expected: a second glyph after the mark.
+  idle?: boolean
   opens?: string
   // A limit: desktop draws it as a bar with an even-pace tick at this share of the window gone,
   // null when the reset is unknown, and its value and time to reset always.
@@ -236,6 +249,12 @@ const bulletsOf = (advice: string | null, explain: string[]) => [...(advice ? [a
 // A card's bullets, and its advice apart: the popover shows only the advice, the pane every bullet.
 const noted = (advice: string | null, explain: string[]) => ({ bullets: bulletsOf(advice, explain), ...(advice ? { advice } : {}) })
 
+function idleText(c: ContextView): string {
+  if (c.idle === 'on') return `on · from ${kilo(c.idleMin ?? 0)}`
+  if (c.idle === 'below') return `on · below ${kilo(c.idleMin ?? 0)} (${kilo(c.used)})`
+  return c.idle
+}
+
 function contextCard(v: View): Card {
   const c = v.context
   if (!c) return { title: 'Context', rows: [], bullets: ['No response in this window yet.'] }
@@ -245,6 +264,7 @@ function contextCard(v: View): Card {
   const via = isNarrowed ? ` (${SOURCES[c.compactSource ?? ''] ?? c.compactSource ?? 'settings'})` : ''
   const rows: Rows = [
     ['Auto-compact', c.isAuto ? `on${via}` : 'off', c.isAuto ? 'on' : undefined],
+    ['Idle compact', idleText(c), c.idle === 'on' ? 'on' : undefined],
     // Used against what it counts toward: the compact point, or the full window.
     ['Used', `${kilo(c.used)} of ${kilo(c.limit)} (${c.pct.toFixed(1)}%)`, c.level],
     ...(hasTrigger
@@ -259,11 +279,11 @@ function contextCard(v: View): Card {
     c.level === 'calm'
       ? null
       : !c.isAuto
-        ? 'Auto-compact is off: /compact before the window fills.'
-        : 'Finish the step, or /compact at a clean point.'
+        ? 'Auto-compact is off: nothing compacts the context by itself.'
+        : 'Auto-compact summarizes the history at the compaction point.'
   const explain = hasTrigger
     ? [isNarrowed ? 'Auto-compact uses a smaller window than the model; % counts toward it.' : 'Compacts at the window minus the buffer; % counts toward it.']
-    : [c.isAuto ? '% counts the full window.' : '% counts the full window; /compact by hand.']
+    : ['% counts the full window.']
   return {
     title: 'Context',
     level: c.level,
@@ -276,6 +296,7 @@ function contextCard(v: View): Card {
 function cacheCard(v: View): Card {
   const k = v.cache
   const ratio = `${k.isRatioFloor ? '≥' : '~'}${k.ratio}×`
+  const rewrite = k.rewrite !== null ? `${kilo(k.rewrite)} tokens` : 'the whole context'
   // Whole minutes while calm: the card is redrawn only with the row, which a calm cache leaves alone,
   // so seconds would stand still; once it warns the row redraws every second and so does this.
   const expires =
@@ -296,7 +317,7 @@ function cacheCard(v: View): Card {
   ]
   const advice =
     k.state === 'cold'
-      ? 'The next turn rewrites the context: batch what you send.'
+      ? `The next turn writes ${rewrite} again (${ratio} a warm turn).`
       : k.state === 'warm' && k.level !== 'calm' && k.leftMs !== null
         ? `A reply within ${mmss(k.leftMs)} keeps it warm.`
         : null
@@ -437,6 +458,7 @@ export function readings(v: View): { gauges: Gauge[]; info: Card; advisor: Card 
       level: c?.level ?? 'calm',
       value: c ? pct0(c.pct) : null,
       mark: c?.isAuto ? AUTO_MARK : undefined,
+      idle: c?.idle === 'on' ? true : undefined,
       card: contextCard(v),
     },
     {
@@ -557,7 +579,7 @@ export function desktopKey(v: View, open: string | null, cards?: View, isPaneOpe
   const hidden = cards ? readings(cards) : shown
   return JSON.stringify([
     gauges.map(g => [g.key, g.pct === null ? null : Math.round(g.pct / 2), g.pace == null ? g.pace : Math.round(g.pace)]),
-    shown.gauges.map(g => [g.key, g.label, g.level, g.value, g.extra, g.tone, g.reset]),
+    shown.gauges.map(g => [g.key, g.label, g.level, g.value, g.extra, g.tone, g.reset, g.mark, g.idle]),
     shown.advisorOn,
     v.meta !== null,
     open,
@@ -570,7 +592,6 @@ export function desktopKey(v: View, open: string | null, cards?: View, isPaneOpe
 // the row without it fits.
 const PX_PER_CELL = 8
 const CELLS_PER_CHAR = 0.9
-const PIE_PX = 16
 const BAR_PX = 40
 const RULE_PX = 9
 
@@ -585,9 +606,8 @@ function desktopItems(g: Gauge, style: LimitStyle): (number | string)[] {
   const isLoud = g.level !== 'calm'
   return [
     g.label,
-    ...(g.pct !== null ? [PIE_PX] : []),
+    ...(g.mark && !g.icon ? [ringMarksWidth(g.pct !== null, true, !!g.idle)] : g.pct !== null ? [PIE_PX] : []),
     ...(isLoud && g.value && !g.icon ? [g.value] : []),
-    ...(g.mark ? [g.mark] : []),
     ...(g.extra ? [g.extra] : []),
     ...(isLoud && g.reset ? [g.reset] : []),
   ]

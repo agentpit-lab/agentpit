@@ -1,0 +1,23 @@
+{
+  "name": "dbwise",
+  "version": "0.1.0",
+  "description": "Gives Claude Code database access at three levels per alias: read (the default), diagnose and write. Each level can connect with its own credential, passwords stay in the OS keychain, and the first launch builds its own Python environment from a hash-locked requirements file. Needs Python 3.12 to 3.14.",
+  "author": {
+    "name": "agentpit-lab",
+    "url": "https://github.com/agentpit-lab"
+  },
+  "keywords": [
+    "database",
+    "postgresql",
+    "mcp",
+    "access-levels"
+  ],
+  "mcpServers": {
+    "postgres": {
+      "command": "${CLAUDE_PLUGIN_ROOT}/bin/dbwise-mcp",
+      "args": [
+        "postgres"
+      ]
+    }
+  }
+}

@@ -1,9 +1,10 @@
 {
   "name": "agentpit",
   "owner": {"name": "agentpit-lab", "url": "https://github.com/agentpit-lab"},
-  "description": "Claude Code plugins that keep a session's context and a subscription's usage limits in view: paceline and pitboard.",
+  "description": "Claude Code plugins that keep a session's context and a subscription's usage limits in view (PaceLine and PitBoard), and give database access at three levels (dbWise).",
   "plugins": [
     {"name": "paceline", "source": "./plugins/paceline"},
-    {"name": "pitboard", "source": "./plugins/pitboard"}
+    {"name": "pitboard", "source": "./plugins/pitboard"},
+    {"name": "dbwise", "source": "./plugins/dbwise"}
   ]
 }

@@ -2,8 +2,7 @@
 
 One report per night run. Fill it from `paceline queue report` plus the queue and pool state; do
 not hand-wave a section — every line traces to a queue item, a reservation, or a status
-timestamp. Delete a section only when it is genuinely empty (say so in one line, don't omit it
-silently).
+timestamp. Keep every section; when one has nothing to report, say so in one line.
 
 ## Done
 
@@ -39,5 +38,4 @@ the run's end). For each: `<item id>`, last known timestamp, what the queue did 
 
 - Allowance: `<run.allowance_pct>` % · Surplus: `<run.surplus_pct>` % · Pool spent:
   `<run.pool_spent_pct>` % (only if the leftover pool was approved for this window)
-- Stopped because: `<the global condition from the last `auto` call — commit floor, budget
-  exhausted, or every remaining item needs the owner>`
+- Stopped because: `<the reasons from the last paceline auto call, verbatim: the last | segment of its STOP line, or reasons with --json>`

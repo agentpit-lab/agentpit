@@ -1,0 +1,1123 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>PaceLine how-to guides</title>
+<style>
+/* Layout: page sections on the left, the reading column in the middle, the glossary on the right;
+   the column opens with a TL;DR and an instrument (the thing explained, live), then sections that
+   each answer one question. Page chrome stays quiet: the plugins' own signal
+   colours (calm, watch, act) are the only loud colours on a page. */
+:root {
+  --bg: #f8f7f3;
+  --surface: #ffffff;
+  --surface-2: #f1efe8;
+  --ink: #1d1f1c;
+  --muted: #67695f;
+  --line: #e2dfd5;
+  --accent: #0b6a88;
+  --accent-ink: #ffffff;
+  --accent-soft: #e1eef2;
+  --focus: #0b6a88;
+
+  /* Signal colours as Claude Code Desktop draws them (plugins/pitboard/hooks/desktop.ts). */
+  --calm: #8a8a85;
+  --watch: #c4841d;
+  --act: #e0483e;
+  --cold: #2a9db5;
+  --on: #3d9a5c;
+  --watch-soft: #f6ead6;
+  --act-soft: #fadedb;
+
+  /* The specimen surfaces: a terminal and the Desktop app, each in its own theme. */
+  --term-bg: #fbfbf9;
+  --term-fg: #000000;
+  --term-line: #dcdcd6;
+  /* Claude Code's theme keys as its light and dark themes resolve them: the terminal row draws in
+     these keys, so a specimen shows the colours a reader's own terminal would. */
+  --term-text: #000000;
+  --term-inactive: #666666;
+  --term-subtle: #afafaf;
+  --term-warning: #966c1e;
+  --term-error: #ab2b3f;
+  --term-success: #2c7a39;
+  --term-planMode: #006666;
+  --term-suggestion: #5769f7;
+  --term-autoAccept: #8700ff;
+  --term-bashBorder: #ff0087;
+  --desk-bg: #ffffff;
+  --desk-fg: #2b2b29;
+  --desk-line: #e4e4df;
+
+  /* System faces only: a page loads nothing from outside its file. */
+  --font-display: "Iowan Old Style", Charter, "Bitstream Charter", "Sitka Text", Cambria, Georgia, serif;
+  --font-ui: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "Cascadia Mono", "JetBrains Mono", "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+
+  --step--1: 0.8125rem;
+  --step-0: 1rem;
+  --step-1: 1.1875rem;
+  --step-2: 1.5rem;
+  --step-3: 2.125rem;
+
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2.25rem;
+  --space-7: 3.5rem;
+
+  --radius: 6px;
+  --measure: 720px;
+  --page: 1120px;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #121413;
+    --surface: #1a1d1b;
+    --surface-2: #20231f;
+    --ink: #e8e6df;
+    --muted: #9d9f96;
+    --line: #30332e;
+    --accent: #55b6d3;
+    --accent-ink: #0b1a20;
+    --accent-soft: #173039;
+    --focus: #55b6d3;
+    --watch-soft: #3a2d15;
+    --act-soft: #3d1c19;
+    --desk-bg: #1e1f1d;
+    --desk-fg: #e6e5df;
+    --desk-line: #33342f;
+    --term-bg: #15181b;
+    --term-fg: #ffffff;
+    --term-line: #2c3136;
+    --term-text: #ffffff;
+    --term-inactive: #999999;
+    --term-subtle: #505050;
+    --term-warning: #ffc107;
+    --term-error: #ff6b80;
+    --term-success: #4eba65;
+    --term-planMode: #48968c;
+    --term-suggestion: #b1b9f9;
+    --term-autoAccept: #af87ff;
+    --term-bashBorder: #fd5db1;
+    color-scheme: dark;
+  }
+}
+
+:root[data-theme="dark"] {
+  --bg: #121413;
+  --surface: #1a1d1b;
+  --surface-2: #20231f;
+  --ink: #e8e6df;
+  --muted: #9d9f96;
+  --line: #30332e;
+  --accent: #55b6d3;
+  --accent-ink: #0b1a20;
+  --accent-soft: #173039;
+  --focus: #55b6d3;
+  --watch-soft: #3a2d15;
+  --act-soft: #3d1c19;
+  --desk-bg: #1e1f1d;
+  --desk-fg: #e6e5df;
+  --desk-line: #33342f;
+  --term-bg: #15181b;
+  --term-fg: #ffffff;
+  --term-line: #2c3136;
+  --term-text: #ffffff;
+  --term-inactive: #999999;
+  --term-subtle: #505050;
+  --term-warning: #ffc107;
+  --term-error: #ff6b80;
+  --term-success: #4eba65;
+  --term-planMode: #48968c;
+  --term-suggestion: #b1b9f9;
+  --term-autoAccept: #af87ff;
+  --term-bashBorder: #fd5db1;
+  color-scheme: dark;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font: 400 var(--step-0)/1.6 var(--font-ui);
+}
+img, svg { max-width: 100%; }
+[hidden] { display: none !important; }
+
+
+h1, h2, h3 { line-height: 1.2; text-wrap: balance; overflow-wrap: break-word; margin: 0; }
+h1, h2 { font-family: var(--font-display); font-weight: 500; letter-spacing: -0.005em; }
+h1 { font-size: var(--step-3); }
+h2 { font-size: var(--step-2); }
+h3 { font-size: var(--step-1); font-weight: 600; }
+p { margin: 0; }
+a { color: var(--accent); text-underline-offset: 2px; }
+code, kbd, .mono { font-family: var(--font-mono); font-size: 0.92em; }
+code { background: var(--surface-2); border: 1px solid var(--line); border-radius: 4px; padding: 0 0.3em; overflow-wrap: anywhere; }
+td code, th code { overflow-wrap: normal; }
+.card-quote { font-family: var(--font-mono); font-size: var(--step--1); background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--radius); padding: var(--space-2) var(--space-3); overflow-wrap: anywhere; }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 3px; }
+
+.eyebrow { font: 500 0.6875rem/1.4 var(--font-mono); letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+.lede { font-size: var(--step-1); color: var(--muted); }
+.muted { color: var(--muted); }
+.stack { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-4); }
+.stack-lg { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-6); }
+.row { display: flex; flex-wrap: wrap; gap: var(--space-3); align-items: center; }
+
+
+
+section { scroll-margin-top: var(--space-4); }
+.section-head { display: grid; gap: var(--space-2); margin-bottom: var(--space-4); }
+
+/* Panels: used only where an element is a separate object (an instrument, a card). */
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: var(--space-4); min-width: 0; }
+.grid-auto { display: grid; gap: var(--space-4); grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); }
+.split { display: grid; gap: var(--space-5); }
+
+/* Segmented switch. */
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface-2); padding: 2px; gap: 2px; }
+.seg button { font: inherit; font-size: var(--step--1); border: 0; background: transparent; color: var(--muted); padding: 0.3em 0.8em; border-radius: 4px; cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--surface); color: var(--ink); box-shadow: 0 0 0 1px var(--line); font-weight: 600; }
+.control { display: grid; gap: var(--space-1); }
+.control > .label { font-size: var(--step--1); color: var(--muted); }
+
+/* Chips: a choice among named states. */
+.chips { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.chip { font: inherit; font-size: var(--step--1); border: 1px solid var(--line); background: var(--surface); color: var(--ink); padding: 0.3em 0.75em; border-radius: 999px; cursor: pointer; display: inline-flex; gap: 0.4em; align-items: center; }
+.chip[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); }
+.dot { width: 0.6em; height: 0.6em; border-radius: 50%; background: var(--calm); display: inline-block; flex: none; }
+.dot.watch { background: var(--watch); }
+.dot.act { background: var(--act); }
+.dot.cold { background: var(--cold); }
+
+/* Level pill: state in form as well as words. */
+.pill { display: inline-flex; align-items: center; gap: 0.35em; font-size: var(--step--1); font-weight: 600; padding: 0.05em 0.6em; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); }
+.pill.watch { color: var(--watch); border-color: var(--watch); background: var(--watch-soft); }
+.pill.act { color: var(--act); border-color: var(--act); background: var(--act-soft); }
+
+/* Glossary terms: dotted underline, popover on hover, focus or tap. */
+.term { border-bottom: 1px dotted currentColor; cursor: help; }
+.popover { position: absolute; z-index: 20; max-width: min(340px, calc(100vw - 32px)); background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: 0 8px 24px rgb(0 0 0 / 0.18); padding: var(--space-3); font-size: var(--step--1); line-height: 1.5; }
+.popover strong { display: block; margin-bottom: var(--space-1); }
+
+/* Disclosure: what to do first, detail on demand. */
+details.more { border-top: 1px solid var(--line); padding-block: var(--space-3); }
+details.more > summary { cursor: pointer; font-weight: 600; list-style: none; display: flex; gap: var(--space-2); align-items: center; }
+details.more > summary::-webkit-details-marker { display: none; }
+details.more > summary::before { content: "+"; font-family: var(--font-mono); color: var(--accent); width: 1ch; }
+details.more[open] > summary::before { content: "\2212"; }
+details.more > .body { padding-top: var(--space-3); display: grid; gap: var(--space-3); }
+
+/* Key-value lists aligned on one column. */
+.kv { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: var(--space-1) var(--space-4); font-size: var(--step--1); margin: 0; }
+.kv dt { color: var(--muted); }
+.kv dd { margin: 0; font-variant-numeric: tabular-nums; }
+
+/* Range slider. */
+input[type="range"] { width: 100%; accent-color: var(--accent); }
+.slider { display: grid; gap: var(--space-1); }
+.slider .readout { display: flex; justify-content: space-between; font-size: var(--step--1); color: var(--muted); font-variant-numeric: tabular-nums; }
+.slider .readout b { color: var(--ink); font-weight: 600; }
+
+/* Tables that may run wider than a phone scroll inside their own box. */
+.table-wrap { overflow-x: auto; }
+.facts-list { columns: 9rem; column-gap: var(--space-4); list-style: none; margin: 0; padding: 0; }
+.facts-list li { break-inside: avoid; }
+table { border-collapse: collapse; width: 100%; font-size: var(--step--1); }
+th, td { text-align: left; padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--line); vertical-align: top; }
+th { color: var(--muted); font-weight: 600; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+
+/* A transcript of what Claude Code shows: monospace on the terminal surface. */
+.transcript { background: var(--term-bg); color: var(--term-fg); border-radius: var(--radius); padding: var(--space-3) var(--space-4); font: 0.875rem/1.55 var(--font-mono); overflow-x: auto; white-space: pre; }
+.transcript .dim { color: var(--term-inactive); }
+.transcript .hl { color: #e0b000; }
+
+.callout { display: grid; gap: var(--space-1); border-left: 3px solid var(--accent); padding: var(--space-1) var(--space-3); }
+
+footer.page-foot { margin-top: var(--space-7); padding-top: var(--space-4); border-top: 1px solid var(--line); font-size: var(--step--1); color: var(--muted); display: flex; flex-wrap: wrap; gap: var(--space-4); justify-content: space-between; }
+
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; scroll-behavior: auto !important; } }
+
+/* Steps: a real sequence, so numbered. */
+.steps { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-6); counter-reset: step; }
+.steps > li { display: grid; grid-template-columns: 2.25rem minmax(0, 1fr); gap: var(--space-4); counter-increment: step; }
+.steps > li::before { content: counter(step); width: 2.25rem; height: 2.25rem; border-radius: 50%; display: grid; place-items: center; font-weight: 700; color: var(--accent-ink); background: var(--accent); font-variant-numeric: tabular-nums; }
+.steps > li > div { display: grid; gap: var(--space-3); min-width: 0; }
+.cmd { display: flex; gap: var(--space-2); align-items: center; background: var(--term-bg); color: var(--term-fg); border-radius: var(--radius); padding: var(--space-2) var(--space-3); font: 0.9375rem/1.4 var(--font-mono); overflow-x: auto; }
+.cmd::before { content: "›"; color: var(--term-inactive); }
+
+.annot { display: grid; gap: var(--space-2); font-size: var(--step--1); }
+.annot { margin: 0; padding-left: 1.2em; }
+
+/* One grid for the whole series: sections, a content column of one width, the glossary column.
+   Every block in the content column spans it, so all edges line up on every page. */
+.doc { max-width: calc(190px + var(--measure) + 260px + 2 * var(--space-6) + 2 * var(--space-6)); margin: 0 auto; padding-inline: 16px; padding-block: var(--space-5) var(--space-7); display: grid; gap: var(--space-6); }
+.doc > * { min-width: 0; }
+.doc > main { width: 100%; max-width: var(--measure); }
+@media (min-width: 1180px) { .doc { grid-template-columns: 190px var(--measure) 260px; padding-inline: var(--space-6); justify-content: center; } }
+@media (min-width: 900px) and (max-width: 1179px) { .doc { grid-template-columns: 180px minmax(0, var(--measure)); padding-inline: var(--space-5); } }
+.side { display: grid; gap: var(--space-5); align-content: start; font-size: var(--step--1); }
+@media (min-width: 900px) { .side { position: sticky; top: var(--space-4); max-height: calc(100vh - 2rem); overflow-y: auto; } }
+.side nav ol { list-style: none; margin: 0; padding: 0 0 0 var(--space-3); border-left: 1px solid var(--line); display: grid; gap: var(--space-2); }
+.side nav a { color: var(--muted); text-decoration: none; }
+.side nav a:hover, .side nav a[aria-current="true"] { color: var(--ink); }
+.side nav a[aria-current="true"] { font-weight: 600; }
+.sources { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-1); font: 0.75rem/1.4 var(--font-mono); color: var(--muted); word-break: break-all; }
+@media (max-width: 899px) { .side nav ol { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-4); border: 0; padding: 0; } .side .sources-block { display: none; } }
+
+.glossary { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: var(--space-4); display: grid; gap: var(--space-3); align-content: start; }
+.glossary dl { margin: 0; display: grid; gap: var(--space-3); }
+.glossary dt { font: 500 var(--step-0)/1.3 var(--font-display); }
+.glossary dd { margin: 0; font-size: var(--step--1); color: var(--muted); line-height: 1.5; }
+.glossary .entry { border-radius: 4px; padding: var(--space-1) var(--space-2); margin-inline: calc(-1 * var(--space-2)); transition: background-color 0.15s; }
+.glossary .entry.is-hot { background: var(--accent-soft); }
+.glossary .entry.is-hot dd { color: var(--ink); }
+
+/* TL;DR: the page's answer before its detail. */
+.tldr { border: 1px solid var(--line); border-left: 3px solid var(--accent); background: var(--surface); border-radius: var(--radius); padding: var(--space-3) var(--space-4); }
+.tldr strong:first-child { margin-right: 0.35em; }
+.brand { display: grid; gap: var(--space-2); }
+/* Navigation uses the interface face; the serif belongs to the document's own headings. */
+.brand .mono { font: 500 0.6875rem/1.4 var(--font-mono); letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+.series { display: grid; gap: 2px; }
+.series a { font-size: var(--step--1); color: var(--muted); text-decoration: none; padding: 0.15em 0 0.15em var(--space-3); border-left: 2px solid transparent; }
+.series a:hover { color: var(--ink); }
+.series a[aria-current="page"] { color: var(--ink); font-weight: 600; border-left-color: var(--accent); }
+.page-head { display: grid; gap: var(--space-4); padding-bottom: var(--space-2); }
+.changed { font-size: var(--step--1); color: var(--muted); min-height: 1.5em; }
+.changed b { color: var(--ink); font-weight: 600; }
+
+/* Theme switch: icons, named for screen readers and on hover. */
+.theme-switch button { display: grid; place-items: center; width: 2rem; height: 1.75rem; padding: 0; }
+.theme-switch svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* A pair of specimens: the same moment in the CLI and in Desktop. */
+.pair { display: grid; gap: var(--space-2); }
+.pair .surface-label { font: 500 0.6875rem/1 var(--font-mono); letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+
+/* The specimen: a terminal or the Desktop app, in its own theme whatever the page's. */
+.specimen { display: grid; gap: var(--space-2); }
+.specimen-frame { overflow-x: auto; border-radius: var(--radius); }
+.specimen-hint { font-size: var(--step--1); color: var(--muted); }
+.cli { background: var(--term-bg); color: var(--term-fg); font: 0.9375rem/1.5 var(--font-mono); padding: var(--space-3) var(--space-4); white-space: pre; width: max-content; min-width: 100%; }
+
+.desk { background: var(--desk-bg); color: var(--desk-fg); border: 1px solid var(--desk-line); border-radius: var(--radius); padding: var(--space-2) var(--space-3); width: max-content; min-width: 100%; }
+.svg { display: inline-flex; line-height: 0; }
+.svg svg { display: block; }
+
+.specimen, .specimen-frame, .pair { min-width: 0; }
+
+/* Terms with their meaning, read down one column. */
+.term-list { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: var(--space-3) var(--space-5); margin: 0; }
+.term-list dt { font: 500 var(--step-1)/1.3 var(--font-display); }
+.term-list dd { margin: 0; display: grid; gap: var(--space-1); }
+@media (max-width: 600px) { .term-list { grid-template-columns: minmax(0, 1fr); gap: var(--space-1); } .term-list dd { margin-bottom: var(--space-3); } }
+.side .theme-switch { justify-self: start; }
+
+/* List and detail: moments in order on the left, the chosen one in full on the right. */
+.md { display: grid; gap: var(--space-4); }
+@media (min-width: 640px) { .md { grid-template-columns: 172px minmax(0, 1fr); align-items: start; } }
+.md-list, .md-detail { display: grid; gap: var(--space-3); min-width: 0; }
+.sit-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; border-left: 1px solid var(--line); }
+.sit-item { display: grid; gap: 1px; padding: var(--space-2) var(--space-3); margin-left: -1px; border-left: 2px solid transparent; cursor: pointer; border-radius: 0 4px 4px 0; }
+.sit-item:hover { background: var(--surface-2); }
+.sit-item[aria-selected="true"] { border-left-color: var(--accent); background: var(--accent-soft); }
+.sit-time { font: 500 0.6875rem/1.2 var(--font-mono); color: var(--muted); font-variant-numeric: tabular-nums; }
+.sit-name { display: flex; gap: 0.45em; align-items: baseline; font-size: var(--step--1); line-height: 1.35; }
+.sit-name .dot { flex: none; transform: translateY(-1px); }
+.md-panel { display: grid; gap: var(--space-3); }
+.surface-head { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-3); align-items: center; justify-content: space-between; }
+.desk-fit { overflow: hidden; }
+.desk-fit > .desk { transform-origin: left top; width: max-content; }
+.small-seg button { font-size: 0.75rem; padding: 0.15em 0.6em; }
+/* Specimen trees: the plugin's boxes and runs. */
+.tbox { display: flex; min-width: 0; }
+.cli .tbox, .cli span { white-space: pre; }
+.cli .dim { opacity: 0.62; }
+.desk .dim { opacity: 0.62; }
+.cli .italic, .desk .italic { font-style: italic; }
+.cli .strike, .desk .strike { text-decoration: line-through; }
+.btn { cursor: pointer; }
+.reading { cursor: pointer; border-radius: 3px; }
+.reading[aria-pressed="true"] { outline: 1px solid var(--accent); outline-offset: 1px; }
+.reading:hover { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+/* Wide figures: text keeps the content column; a live row or a chart also takes the empty column on
+   its right, the same on every page of the series. */
+@media (min-width: 1180px) { .wide { margin-right: calc(-1 * (260px + var(--space-6))); } }
+
+/* The glossary drawer: over the page's right side, on demand. */
+.drawer { position: fixed; top: 0; right: 0; bottom: 0; width: min(360px, 100vw); z-index: 30; border-radius: 0; border-width: 0 0 0 1px; box-shadow: -12px 0 32px rgb(0 0 0 / 0.16); overflow-y: auto; padding-block: calc(var(--space-4) + env(safe-area-inset-top, 0px)) var(--space-6); }
+.drawer-head { display: flex; justify-content: space-between; align-items: center; }
+.drawer-close { font: 400 1.5rem/1 var(--font-ui); background: transparent; border: 0; color: var(--muted); cursor: pointer; padding: 0 var(--space-1); }
+.drawer-open { justify-self: start; font: 500 var(--step--1) var(--font-ui); color: var(--accent); background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 0.35em 0.9em; cursor: pointer; }
+.drawer-open[aria-expanded="true"] { border-color: var(--accent); background: var(--accent-soft); }
+
+/* Document components. Each works from its markup alone; the script only adds controls
+   (filter bar, copy buttons, walker, panel tabs), and every one of them is absent without scripts. */
+
+/* Entry card: one symptom, one limit, one term; parts carry their label as data-label. */
+article.entry { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-3); background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: var(--space-4); min-width: 0; }
+article.entry h3 { overflow-wrap: anywhere; }
+article.entry > .part { display: grid; gap: var(--space-1); min-width: 0; }
+.part[data-label]::before, .callout[data-label]::before, .seg-panel[data-label]::before { content: attr(data-label); font: 500 0.6875rem/1.4 var(--font-mono); letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+.part > ul, .part > ol { margin: 0; padding-left: 1.2em; }
+
+/* Filter bar over a list of entries: a search box, tag chips, a live count. */
+.filter-bar { display: grid; gap: var(--space-3); }
+.filter-box { font: inherit; font-size: var(--step--1); color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 0.4em 0.75em; width: 100%; max-width: 24rem; }
+.filter-count { font-size: var(--step--1); color: var(--muted); }
+
+/* Copy button over a block of commands or text. */
+.copy-wrap { position: relative; min-width: 0; }
+.copy-btn { position: absolute; top: var(--space-1); right: var(--space-1); font: 500 0.75rem/1 var(--font-ui); color: var(--term-fg); background: transparent; border: 1px solid var(--term-inactive); border-radius: 4px; padding: 0.35em 0.6em; cursor: pointer; opacity: 0.8; }
+.copy-btn:hover, .copy-btn:focus-visible { opacity: 1; }
+pre[data-lang] { background: var(--term-bg); color: var(--term-fg); border-radius: var(--radius); padding: var(--space-3) var(--space-4); font: 0.875rem/1.55 var(--font-mono); overflow-x: auto; margin: 0; }
+.copy-wrap > .cmd, .copy-wrap > pre, .copy-wrap > .transcript { padding-right: 5rem; }
+
+/* Figure: an inline SVG coloured through the theme tokens, its caption and its text form. */
+figure.diagram { margin: 0; display: grid; gap: var(--space-3); }
+figure.diagram svg { width: 100%; height: auto; }
+figure.diagram figcaption { font-size: var(--step--1); color: var(--muted); }
+figure.diagram .text-form { margin: 0; padding-left: 1.4em; font-size: var(--step--1); color: var(--muted); display: grid; gap: var(--space-1); }
+figure.diagram .node { fill: var(--surface); stroke: var(--line); stroke-width: 1.5; }
+figure.diagram .node.accent { stroke: var(--accent); fill: var(--accent-soft); }
+figure.diagram .edge { fill: none; stroke: var(--muted); stroke-width: 1.5; }
+figure.diagram text { fill: var(--ink); font: 400 13px var(--font-ui); }
+figure.diagram text.muted { fill: var(--muted); }
+
+/* Decision walker: the nested list stays for readers without scripts; with scripts one node at a time. */
+ol.walker, ol.walker ol { padding-left: 1.4em; display: grid; gap: var(--space-2); }
+.walker-view { display: grid; gap: var(--space-3); border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); padding: var(--space-4); }
+.walker-view:focus { outline: none; }
+.walker-text { display: grid; gap: var(--space-2); font-size: var(--step-1); }
+.walker-options, .walker-controls { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.walker-controls button { font: inherit; font-size: var(--step--1); color: var(--accent); background: transparent; border: 0; padding: 0.2em 0; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
+.walker-controls button:disabled { color: var(--muted); cursor: default; text-decoration: none; }
+
+/* Segmented panels: every panel shows without scripts, headed by its label; with scripts one at a time. */
+.seg-panels { display: grid; gap: var(--space-3); }
+.seg-panel { display: grid; gap: var(--space-2); min-width: 0; }
+.seg-panels.is-tabbed > .seg-panel::before { display: none; }
+.seg-panels > .seg { justify-self: start; }
+
+/* A decision walker's outcome takes the colour of its exit: start, wait or stop. */
+.walker-view[data-outcome] { border-left: 4px solid var(--outcome, var(--line)); }
+.walker-view[data-outcome="start"] { --outcome: var(--on); }
+.walker-view[data-outcome="wait"] { --outcome: var(--watch); }
+.walker-view[data-outcome="stop"] { --outcome: var(--act); }
+
+/* Count bar: one link per group, as wide as the group has entries. */
+.count-bar { display: flex; flex-wrap: wrap; gap: 2px; }
+.count-seg { flex-basis: 6rem; min-width: 0; display: grid; gap: 1px; padding: var(--space-2) var(--space-3); background: var(--accent-soft); border-bottom: 3px solid var(--accent); border-radius: 4px 4px 0 0; color: var(--ink); text-decoration: none; font-size: var(--step--1); line-height: 1.3; }
+.count-seg:hover { background: var(--surface-2); }
+.count-n { font: 600 var(--step-1)/1.1 var(--font-display); font-variant-numeric: tabular-nums; }
+.count-name { overflow-wrap: anywhere; }
+
+/* Level scale: a track per reading, zones calm, watch and act, the values where it changes marked under it. */
+.scale-list { display: grid; gap: var(--space-3); }
+.scale-row { display: grid; gap: var(--space-2); }
+@media (min-width: 720px) { .scale-row { grid-template-columns: 200px minmax(0, 1fr); align-items: center; } }
+.scale-name { font-size: var(--step--1); }
+.scale-track { position: relative; height: 34px; margin-right: 1.5rem; }
+.scale-zone { position: absolute; top: 0; height: 12px; }
+.scale-zone.calm { background: color-mix(in srgb, var(--calm) 35%, transparent); border-radius: 3px 0 0 3px; }
+.scale-zone.watch { background: var(--watch); }
+.scale-zone.act { background: var(--act); border-radius: 0 3px 3px 0; }
+.scale-mark { position: absolute; top: 14px; transform: translateX(-50%); font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.scale-mark::before { content: ""; position: absolute; left: 50%; top: -14px; height: 14px; border-left: 1px solid var(--ink); }
+.scale-legend { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-4); font-size: var(--step--1); color: var(--muted); }
+.scale-legend li { display: flex; align-items: center; gap: var(--space-2); }
+
+.guide-index { display: grid; gap: var(--space-2); }
+.guide-index ul { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-3); grid-template-columns: repeat(auto-fill, minmax(min(100%, 14rem), 1fr)); }
+.guide-card { position: relative; display: grid; gap: var(--space-1); align-content: start; height: 100%; padding: var(--space-3) var(--space-4); background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); color: var(--ink); text-decoration: none; }
+.guide-card:hover, .guide-card:focus-within { border-color: var(--accent); }
+.guide-name { font-weight: 600; color: var(--accent); overflow-wrap: anywhere; text-decoration: none; }
+.guide-name::after { content: ""; position: absolute; inset: 0; }
+.guide-when { font-size: var(--step--1); color: var(--muted); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+</style>
+</head>
+<body>
+<div class="doc">
+  <aside class="side">
+    <div class="brand"><span class="mono">PaceLine</span><nav class="series" aria-label="pages in this series"><a href="getting-started.html">Getting started</a><a href="budget-simulator.html">Budget simulator</a><a href="how-to.html" aria-current="page">How-to guides</a><a href="explanation.html">Explanation</a><a href="reference.html">Reference</a><a href="troubleshooting.html">Troubleshooting</a><a href="limitations.html">Limitations</a></nav></div>
+    <nav data-pb-nav aria-label="Sections"><ol><li><a href="#run-a-night-queue">Run a night queue</a></li><li><a href="#declare-move-or-cancel-a-plan">Declare, move, or cancel a plan</a></li><li><a href="#hold-the-cache-while-away">Hold the cache while away</a></li><li><a href="#recover-after-a-compaction">Recover after a compaction</a></li><li><a href="#keep-usage-current-while-idle">Keep usage current while idle</a></li><li><a href="#use-two-accounts-on-one-machine">Use two accounts on one machine</a></li><li><a href="#change-a-profile-setting">Change a profile setting</a></li></ol></nav>
+    <div data-pb-theme></div>
+  </aside>
+
+  <main class="stack-lg">
+    <header class="page-head stack">
+      <h1 id="paceline-how-to-guides">PaceLine how-to guides</h1>
+      <p>Task guides for PaceLine. Each guide says when you need it, the steps, and how to tell it worked. Type the <code>/paceline:</code> commands in a session. Run the <code>paceline</code> commands in a session&#x27;s Bash tool, or ask the agent to run them. The <a href="reference.html">reference</a> lists every option.</p>
+    </header>
+    <nav class="guide-index" aria-label="Guides" data-text="skip">
+      <p class="eyebrow">Guides</p>
+      <ul>
+        <li class="guide-card"><a class="guide-name" href="#run-a-night-queue">Run a night queue</a><span class="guide-when">you want the agent to work through a list of tasks while you sleep, within what the week can spare.</span></li>
+        <li class="guide-card"><a class="guide-name" href="#declare-move-or-cancel-a-plan">Declare, move, or cancel a plan</a><span class="guide-when">you know a day ahead that you will be away, or that a day will be heavy, and you want the budget to follow.</span></li>
+        <li class="guide-card"><a class="guide-name" href="#hold-the-cache-while-away">Hold the cache while away</a><span class="guide-when">you step away from a session with a long context and want to come back to a warm cache. When a session sits idle for an hour, its one-hour prompt cache expires, and the next turn writes the whole context to the cache again.</span></li>
+        <li class="guide-card"><a class="guide-name" href="#recover-after-a-compaction">Recover after a compaction</a><span class="guide-when">a session was compacted, and you or the agent need what the summary dropped. context-watch is on from install, so this works without setup.</span></li>
+        <li class="guide-card"><a class="guide-name" href="#keep-usage-current-while-idle">Keep usage current while idle</a><span class="guide-when">you want pace and status line plugins to show the exact figures <code>/usage</code> shows, including the model-scoped weekly limits, while no session makes requests.</span></li>
+        <li class="guide-card"><a class="guide-name" href="#use-two-accounts-on-one-machine">Use two accounts on one machine</a><span class="guide-when">you sign in to more than one Claude account on this computer and want pace to show the limits of the account you use now.</span></li>
+        <li class="guide-card"><a class="guide-name" href="#change-a-profile-setting">Change a profile setting</a><span class="guide-when">the budget counts in the wrong time zone, your working day is longer or shorter than 08:00 to 22:00, or a limit in the profile does not fit your machine.</span></li>
+      </ul>
+    </nav>
+    <section class="stack" id="run-a-night-queue">
+      <h2>Run a night queue</h2>
+      <div class="callout" data-label="When you need it">
+        <p>you want the agent to work through a list of tasks while you sleep, within what the week can spare.</p>
+      </div>
+      <ol class="steps">
+        <li>
+          <div>
+            <p>Keep the machine awake for the night.</p>
+            <div class="seg-panels">
+              <div class="seg-panel" data-label="Windows"><p><code>scripts/night-power.ps1</code> in the plugin directory turns off sleep on AC power and moves the Windows Update active hours over the night, so a restart does not land mid-queue. Without a switch it is a dry run that prints what it would change. Run it with <code>-Enable</code> before the night and with <code>-Disable</code> after it, in an elevated PowerShell. The previous values are saved in <code>&lt;state&gt;/night-power-state.json</code>. <code>-NightStart</code> and <code>-NightEnd</code> set the hours (default 0 and 8).</p></div>
+              <div class="seg-panel" data-label="macOS"><p>Start the session under <code>caffeinate -i -s</code>, for example <code>caffeinate -i -s claude</code>.</p></div>
+              <div class="seg-panel" data-label="Linux"><p>Start it under <code>systemd-inhibit --what=sleep</code>, for example <code>systemd-inhibit --what=sleep claude</code>.</p></div>
+            </div>
+          </div>
+        </li>
+        <li>
+          <div>
+              <p>Turn pace on, if it is off:</p>
+              <pre data-lang="">/paceline:pace on</pre>
+          </div>
+        </li>
+        <li>
+          <div>
+              <p>Add the items, each with an estimate in percent of the weekly limit:</p>
+              <pre data-lang="">paceline queue add --title "Update the release notes" --repo agentpit-dev --estimate 2
+paceline queue add --title "Rename the store keys" --repo agentpit-dev --estimate 3 --depends Q1</pre>
+              <p>Items get the IDs <code>Q1</code>, <code>Q2</code>, and so on. Add <code>--independent</code> to an item that may run beside other independent items.</p>
+          </div>
+        </li>
+        <li>
+          <div>
+              <p>Tell the agent to run the queue. It starts the run once:</p>
+              <pre data-lang="">paceline auto --start-run</pre>
+              <p>Then, before each item, it runs <code>paceline auto</code> and follows its exit code:</p>
+              <ul>
+                <li><code>0</code> (start): run <code>paceline queue start &lt;id&gt;</code> for the item named in the output, do the work, then <code>paceline queue done &lt;id&gt;</code>. When the item&#x27;s checks fail, run <code>paceline queue fail &lt;id&gt;</code> and fix them; after <code>gate_fix_attempts</code> (3) failures the item is deferred. When an item needs your permission, run <code>paceline queue defer &lt;id&gt;</code>. Deferring an item also defers the items that depend on it.</li>
+                <li><code>10</code> (wait): wait, then run <code>paceline auto</code> again. With <code>--json</code>, <code>wait_until</code> says until when.</li>
+                <li><code>11</code> (stop): end the run.</li>
+              </ul>
+          </div>
+        </li>
+        <li>
+          <div>
+            <p>In the morning, the agent fills the report template <code>templates/morning-report.md</code> from <code>paceline queue report</code> and the queue&#x27;s state.</p>
+          </div>
+        </li>
+      </ol>
+      <div class="callout" data-label="How to tell it worked">
+        <p><code>paceline queue report</code> prints the done, deferred, running, and pending items with their estimated and actual spend, for example <code>done 2 (est 5.00% act 4.10%), deferred 1, running 0, pending 0</code>. <code>paceline queue list</code> shows each item&#x27;s status and, for a deferred item, the reason.</p>
+      </div>
+      <p>The leftover pool works the same way with <code>--pool</code> (item IDs <code>L1</code>, <code>L2</code>, and so on). Approve it with <code>paceline queue --pool approve</code>; it runs only on the last night before the weekly reset. The <a href="explanation.html#the-night-queues-decisions">explanation</a> says how <code>auto</code> decides.</p>
+    </section>
+    <section class="stack" id="declare-move-or-cancel-a-plan">
+      <h2>Declare, move, or cancel a plan</h2>
+      <div class="callout" data-label="When you need it">
+        <p>you know a day ahead that you will be away, or that a day will be heavy, and you want the budget to follow.</p>
+      </div>
+      <ol class="steps">
+        <li>
+          <div>
+              <p>Declare the plan. Dates are in the profile&#x27;s time zone, and a bare <code>--to</code> date includes that day:</p>
+              <pre data-lang="">paceline plan add --type away --from 2026-10-16 --to 2026-10-16 --phrase "off on Friday"
+paceline plan add --type heavy --from tomorrow --to tomorrow --weight 1.5</pre>
+              <p>An <code>away</code> plan gives its day hours no budget; a <code>heavy</code> plan multiplies their weight by <code>--weight</code>, default <code>heavy_weight</code> (2).</p>
+          </div>
+        </li>
+        <li>
+          <div>
+              <p>To move or cancel a plan, find it first:</p>
+              <pre data-lang="">paceline plan find --text "friday"</pre>
+              <p>Exit code 0 means one match: use its ID. 3 means several: narrow the search with <code>--on DATE</code> or <code>--type</code>. 4 means none.</p>
+          </div>
+        </li>
+        <li>
+          <div>
+              <p>Move it, or cancel it:</p>
+              <pre data-lang="">paceline plan modify P3 --from 2026-10-17 --to 2026-10-17
+paceline plan cancel P3</pre>
+          </div>
+        </li>
+        <li>
+          <div>
+            <p>While pace is on, a session start the day before reminds the agent of a plan that is not confirmed. After you say it still holds, the agent runs <code>paceline plan confirm P3</code>. Confirming stops the reminder and leaves the budget as it is.</p>
+          </div>
+        </li>
+      </ol>
+      <div class="callout" data-label="How to tell it worked">
+        <p><code>add</code>, <code>modify</code>, and <code>cancel</code> end with the new budget, for example <code>plan P3 cancelled; budget 1.21%/h, night 5.0%</code>. <code>paceline plan list</code> shows every plan with its local start and end.</p>
+      </div>
+    </section>
+    <section class="stack" id="hold-the-cache-while-away">
+      <h2>Hold the cache while away</h2>
+      <div class="callout" data-label="When you need it">
+        <p>you step away from a session with a long context and want to come back to a warm cache. When a session sits idle for an hour, its one-hour prompt cache expires, and the next turn writes the whole context to the cache again.</p>
+      </div>
+      <ol class="steps">
+        <li>
+          <div>
+              <p>In that session, run:</p>
+              <pre data-lang="">/paceline:cache-watch on</pre>
+              <p>It starts only when the session&#x27;s main thread writes one-hour cache entries. It refuses a session with five-minute entries, or with no cache entry yet, and says why. cache-watch keeps only the main thread&#x27;s cache: a session whose main thread writes five-minute entries is refused even when its subagents write one-hour entries. The main thread&#x27;s TTL is Claude Code&#x27;s setting for the session; subagent TTL settings do not change the decision.</p>
+          </div>
+        </li>
+        <li>
+          <div>
+            <p>Leave the session idle. After every turn, a <code>Stop</code> hook waits in the background and wakes the session <code>lead</code> minutes (5 by default) before the cache would expire. The woken turn keeps the cache for another hour. The agent sends one line, such as <code>Cache kept until 15:30 · wake 1 of 5 · reply stop to stop keeping it</code>, as a push notification and ends the turn without a reply, so the line shows once. The push reaches your phone when the session has Remote Control on and &quot;Push when Claude decides&quot; enabled in <code>/config</code>. Only a session without the push tool gets the line as a reply instead. Wakes come every <code>60 - lead</code> minutes.</p>
+          </div>
+        </li>
+        <li>
+          <div>
+            <p>Any message you send in the session resets the count. After <code>max</code> wakes (5 by default) in a row without a message from you, watching stops. To stop earlier, reply <code>stop</code> or run <code>/paceline:cache-watch off</code>. Ending the session also stops it, and so does a compaction, manual or automatic: the compacted context starts a new cache, so a wake would keep nothing. <code>status</code> then shows <code>off (compacted)</code>; run <code>on</code> again to watch the compacted session.</p>
+          </div>
+        </li>
+      </ol>
+      <p>What it cannot do:</p>
+      <ul>
+        <li>It keeps only one-hour cache entries. When the main thread switches to five-minute entries, watching stops, one wake tells you so, and <code>status</code> shows <code>off (five-minute cache)</code>. See <a href="limitations.html#cache-watch-keeps-only-one-hour-cache-entries">one-hour entries only</a> and <a href="limitations.html#cache-watch-stops-itself-when-the-main-thread-switches-to-five-minute-entries">the self-stop</a>.</li>
+        <li>It keeps only the main thread&#x27;s cache. A finished subagent that you resume after its cache expired starts cold. See <a href="limitations.html#cache-watch-keeps-only-the-main-threads-cache">main thread only</a>.</li>
+        <li>It refuses a session with no cache entry yet. See <a href="limitations.html#cache-watch-needs-a-cache-entry-first">a cache entry first</a>.</li>
+        <li>A computer that sleeps past the cache&#x27;s expiry misses the wake and loses the cache. cache-watch then turns off, <code>status</code> shows <code>off (cache expired before the wake)</code>, and your next message brings a one-line notice. See <a href="limitations.html#a-computer-that-sleeps-past-the-caches-expiry-loses-the-cache">sleep</a>.</li>
+        <li>It keeps no cache in <code>claude -p</code> runs. See <a href="limitations.html#cache-watch-does-nothing-in-non-interactive-runs">non-interactive runs</a>.</li>
+        <li>Without Remote Control and &quot;Push when Claude decides&quot;, no push reaches your phone. See <a href="limitations.html#the-push-reaches-a-phone-only-with-remote-control">the push</a>.</li>
+        <li>In a terminal session whose context is at or above the idle compaction threshold, Claude Code is expected to compact the conversation about 54 minutes after the last request (<a href="https://code.claude.com/docs/en/settings-reference#idlecompaction">Claude Code, settings reference</a>, read 2026-10-15). With the default <code>lead</code> of 5, cache-watch wakes at about 55 minutes, so idle compaction is expected to run before cache-watch&#x27;s wake, and a compaction turns cache-watch off. See <a href="limitations.html#idle-compaction-can-run-before-cache-watchs-wake-and-turn-it-off">idle compaction before the wake</a>.</li>
+      </ul>
+      <p>A wake keeps the cache for far less than losing it costs. The woken turn reads the context from the cache; the first turn after the cache&#x27;s expiry writes the whole context to the cache again, which by <a href="https://platform.claude.com/docs/en/about-claude/pricing#prompt-caching">Anthropic&#x27;s API prices</a> costs at least 20 times the read (a one-hour cache write is 2 times the input price, a cache read 0.1 times or less). Each wake still counts against the five-hour limit; how much a cache read weighs in subscription limits is not published. With the defaults, that is at most five wakes per absence; see <a href="limitations.html#each-wake-counts-against-the-five-hour-limit">each wake counts against the five-hour limit</a>. To change the defaults, run <code>/paceline:cache-watch config --lead 10 --max 3</code>; to change them for one session, pass the same options to <code>on</code>.</p>
+      <div class="callout" data-label="How to tell it worked">
+        <p><code>/paceline:cache-watch status</code> shows the session as <code>on</code>, with the cache expiry and the next wake, for example <code>&lt;session id&gt; · on · lead 5 min · wakes 0/5 · cache 1h · expires 15:30 · next wake 15:25</code>.</p>
+      </div>
+    </section>
+    <section class="stack" id="recover-after-a-compaction">
+      <h2>Recover after a compaction</h2>
+      <div class="callout" data-label="When you need it">
+        <p>a session was compacted, and you or the agent need what the summary dropped. context-watch is on from install, so this works without setup.</p>
+      </div>
+      <ol class="steps">
+        <li>
+          <div>
+            <p>Before the compaction, context-watch puts a line such as <code>context: 612k / 967k auto-compact point (63%)</code> on every prompt. When the context first passes 85% and then 95% of the auto-compaction point, the agent is told once per level to write its recovery point to the task&#x27;s status file. The levels reset after each compaction.</p>
+          </div>
+        </li>
+        <li>
+          <div>
+            <p>At each compaction of the main conversation, automatic or <code>/compact</code>, PaceLine writes <code>.claude/paceline/&lt;session id&gt;.md</code> in the project. It holds your last 3 prompts, the agent&#x27;s last 2 replies, the last 5 tool calls with their inputs cut to 200 characters (without results), and every file the agent wrote or edited in the session.</p>
+          </div>
+        </li>
+        <li>
+          <div>
+            <p>The summary is told to keep the snapshot path. Right after the compaction, the agent is told to read the snapshot and the task&#x27;s status files before its next step.</p>
+          </div>
+        </li>
+        <li>
+          <div>
+            <p>To read a snapshot yourself, open the file. <code>/paceline:context-watch status</code> prints the project&#x27;s snapshot folder.</p>
+          </div>
+        </li>
+      </ol>
+      <p>context-watch never vetoes, delays, or starts a compaction, and leaves subagent compactions alone. An error in context-watch leaves the turn as it was. With auto-compaction off, the line measures against the context window, and no warnings come. Snapshots older than 14 days are removed when a session starts in the project.</p>
+      <p>To change it, run <code>/paceline:context-watch config</code>, for example <code>--levels 80,90</code> for earlier warnings, <code>--line off</code> to hide only the line, or <code>--days 30</code> to keep snapshots longer.</p>
+      <div class="callout" data-label="How to tell it worked">
+        <p>after a compaction, <code>/paceline:context-watch status</code> counts the snapshot, for example <code>snapshots: /home/me/project/.claude/paceline (1 file)</code>, and the agent&#x27;s next step starts by reading it.</p>
+      </div>
+    </section>
+    <section class="stack" id="keep-usage-current-while-idle">
+      <h2>Keep usage current while idle</h2>
+      <div class="callout" data-label="When you need it">
+        <p>you want pace and status line plugins to show the exact figures <code>/usage</code> shows, including the model-scoped weekly limits, while no session makes requests.</p>
+      </div>
+      <p><strong>Before you turn it on:</strong> usage-watch is off until you run <code>/paceline:usage-watch on</code>. It reads <code>https://api.anthropic.com/api/oauth/usage</code>, an endpoint outside Anthropic&#x27;s published API reference, through Claude Code with the session&#x27;s own login; its address, answer format, or availability can change without notice. It needs a claude.ai login and an open session with PaceLine, pauses while the computer sleeps, and sends nothing while <code>CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC</code> is set. When the endpoint fails, <code>/paceline:usage-watch status</code> shows <code>last error: HTTP &lt;status&gt;</code> or <code>unexpected response</code>, PitBoard&#x27;s model-scoped limits disappear after 15 minutes, and pace&#x27;s model-scoped rules stop applying. Without usage-watch, the limits writer, the five-hour and weekly readings from each session&#x27;s turns, pace&#x27;s budget, and the night queue keep working, with data as of the last turn. The <a href="limitations.html#usage-watch">limitations</a> list each case: <a href="limitations.html#limit-readings-need-a-claudeai-subscription-login">the login</a>, <a href="limitations.html#usage-watch-is-off-by-default">off by default</a>, <a href="limitations.html#usage-watch-reads-an-endpoint-outside-the-published-api">the endpoint</a>, <a href="limitations.html#usage-watch-needs-an-open-session">an open session</a>, <a href="limitations.html#a-sleeping-computer-pauses-usage-watch">sleep</a>, and <a href="limitations.html#claude_code_disable_nonessential_traffic-blocks-usage-watch">the traffic setting</a>.</p>
+      <ol class="steps">
+        <li>
+          <div>
+              <p>Turn usage-watch on:</p>
+              <pre data-lang="">/paceline:usage-watch on</pre>
+              <p>The switch holds for every session of the same Claude Code configuration directory and takes effect within 10 seconds.</p>
+          </div>
+        </li>
+        <li>
+          <div>
+            <p>Keep at least one session with PaceLine open, busy or idle. usage-watch reads the account&#x27;s usage every 125 seconds while a session is open. It needs a claude.ai login.</p>
+          </div>
+        </li>
+        <li>
+          <div>
+            <p>To let pace account for a model&#x27;s own weekly limit, pass the model with <code>--model</code>, or set <code>PACELINE_MODEL</code>.</p>
+          </div>
+        </li>
+      </ol>
+      <div class="callout" data-label="How to tell it worked">
+        <p><code>/paceline:usage-watch status</code> shows a recent <code>last success</code> and <code>last error: none</code>. <code>/paceline:pace status</code> shows a data age of a few minutes at most, and lists the model-scoped buckets after the weekly figure, for example <code>7d 34% (Fable 7%)</code>. If nothing shows, see <a href="troubleshooting.html#usage-watch-shows-nothing">usage-watch shows nothing</a>.</p>
+      </div>
+    </section>
+    <section class="stack" id="use-two-accounts-on-one-machine">
+      <h2>Use two accounts on one machine</h2>
+      <div class="callout" data-label="When you need it">
+        <p>you sign in to more than one Claude account on this computer and want pace to show the limits of the account you use now.</p>
+      </div>
+      <p><strong>Which setup:</strong> use one configuration directory and <code>/login</code> when you use one account at a time. PaceLine keeps each account&#x27;s readings in a partition of its own, and pace reads the partition of the account signed in now. Use a configuration directory per account (<code>CLAUDE_CONFIG_DIR</code>) when both accounts run sessions at the same time, or when each needs its own profile, plans, and night queue. See <a href="limitations.html#each-configuration-directory-keeps-its-own-state">Each configuration directory keeps its own state</a>.</p>
+      <ol class="steps">
+        <li>
+          <div>
+            <p>Update with <code>/plugin marketplace update agentpit</code> and restart every open session. A session still on PaceLine 0.2.5 does not tag its readings and mixes the accounts until it restarts.</p>
+          </div>
+        </li>
+        <li>
+          <div>
+            <p>Do not run <code>/login</code> during a night run. The run stops with <code>account changed during the run</code>.</p>
+          </div>
+        </li>
+        <li>
+          <div>
+            <p>Run <code>/login</code> and sign in to the other account.</p>
+          </div>
+        </li>
+        <li>
+          <div>
+            <p>Run <code>/paceline:pace status</code>. It shows the new account&#x27;s figures at once when that account has a partition from an earlier session. Otherwise it stops with <code>no usage data yet for the signed-in account</code> until the first reply in a session signed in to that account, or until the next usage-watch reading, which comes at most 125 seconds after the last one.</p>
+          </div>
+        </li>
+      </ol>
+      <div class="callout" data-label="How to tell it worked">
+        <p><code>status</code> does not end with <code>account unknown</code>, and <code>paceline status --json</code> shows <code>data.account.state</code> as <code>known</code>. A <code>/login</code> back to the first account shows its last figures at once.</p>
+      </div>
+      <p><strong>What the messages mean:</strong></p>
+      <ul>
+        <li><code>no usage data yet for the signed-in account</code>: the signed-in account has no readings yet. It fills after the first reply in a session with PaceLine loaded.</li>
+        <li><code>account unknown (&lt;reason&gt;)</code>: PaceLine cannot tell that the figures belong to the signed-in account. The reason is <code>untagged</code>, <code>no-file</code>, <code>unreadable</code>, or <code>no-account</code>. See <a href="troubleshooting.html#status-says-account-unknown">Status says account unknown</a>.</li>
+        <li>After an update from 0.2.5, the figures show <code>account unknown (untagged)</code> until the account&#x27;s first tagged reading arrives.</li>
+      </ul>
+    </section>
+    <section class="stack" id="change-a-profile-setting">
+      <h2>Change a profile setting</h2>
+      <div class="callout" data-label="When you need it">
+        <p>the budget counts in the wrong time zone, your working day is longer or shorter than 08:00 to 22:00, or a limit in the profile does not fit your machine.</p>
+      </div>
+      <ol class="steps">
+        <li>
+          <div>
+              <p>Look at the current values:</p>
+              <pre data-lang="">paceline profile</pre>
+          </div>
+        </li>
+        <li>
+          <div>
+              <p>Change one key. The value is read as JSON when it parses, else as text:</p>
+              <pre data-lang="">paceline profile set timezone America/New_York
+paceline profile set day_hours '[8, 24]'
+paceline profile set min_free_commit_mb 1024</pre>
+              <p>Set these first: <code>timezone</code>, <code>day_hours</code>, <code>night_hours</code>, <code>models</code>, and the memory floor (<code>min_free_commit_mb</code> and <code>commit_reserve_mb</code>). The defaults for the memory floor and the hours are starting points. If a confirmation prompt appears at most Agent launches, lower <code>min_free_commit_mb</code>; if your day is longer, widen <code>day_hours</code>.</p>
+          </div>
+        </li>
+        <li>
+          <div>
+            <p>To keep <code>UTC</code> while this machine is in another zone, run <code>paceline profile set timezone UTC</code>. That also silences the time zone hint at session start.</p>
+          </div>
+        </li>
+      </ol>
+      <div class="callout" data-label="How to tell it worked">
+        <p><code>profile set</code> prints <code>KEY: OLD -&gt; NEW</code> and the new <code>paceline status</code> line, for example <code>day_hours: [8, 22] -&gt; [8, 24]</code>. A refused value exits 2, prints the reason, and changes nothing. The <a href="reference.html#profile-keys">profile keys</a> list what each key does and its range.</p>
+      </div>
+    </section>
+  </main>
+</div>
+<script type="application/json" id="pb-strings">{"change-a-profile-setting.heading":"Change a profile setting","change-a-profile-setting.li1":"To keep `UTC` while this machine is in another zone, run `paceline profile set timezone UTC`. That also silences the time zone hint at session start.","change-a-profile-setting.p1":"the budget counts in the wrong time zone, your working day is longer or shorter than 08:00 to 22:00, or a limit in the profile does not fit your machine.","change-a-profile-setting.p2":"Look at the current values:","change-a-profile-setting.p3":"Change one key. The value is read as JSON when it parses, else as text:","change-a-profile-setting.p4":"Set these first: `timezone`, `day_hours`, `night_hours`, `models`, and the memory floor (`min_free_commit_mb` and `commit_reserve_mb`). The defaults for the memory floor and the hours are starting points. If a confirmation prompt appears at most Agent launches, lower `min_free_commit_mb`; if your day is longer, widen `day_hours`.","change-a-profile-setting.p5":"`profile set` prints `KEY: OLD -> NEW` and the new `paceline status` line, for example `day_hours: [8, 22] -> [8, 24]`. A refused value exits 2, prints the reason, and changes nothing. The [profile keys](reference.html#profile-keys) list what each key does and its range.","copied_label":"Copied","copy_label":"Copy","declare-move-or-cancel-a-plan.heading":"Declare, move, or cancel a plan","declare-move-or-cancel-a-plan.li1":"While pace is on, a session start the day before reminds the agent of a plan that is not confirmed. After you say it still holds, the agent runs `paceline plan confirm P3`. Confirming stops the reminder and leaves the budget as it is.","declare-move-or-cancel-a-plan.p1":"you know a day ahead that you will be away, or that a day will be heavy, and you want the budget to follow.","declare-move-or-cancel-a-plan.p2":"Declare the plan. Dates are in the profile's time zone, and a bare `--to` date includes that day:","declare-move-or-cancel-a-plan.p3":"An `away` plan gives its day hours no budget; a `heavy` plan multiplies their weight by `--weight`, default `heavy_weight` (2).","declare-move-or-cancel-a-plan.p4":"To move or cancel a plan, find it first:","declare-move-or-cancel-a-plan.p5":"Exit code 0 means one match: use its ID. 3 means several: narrow the search with `--on DATE` or `--type`. 4 means none.","declare-move-or-cancel-a-plan.p6":"Move it, or cancel it:","declare-move-or-cancel-a-plan.p7":"`add`, `modify`, and `cancel` end with the new budget, for example `plan P3 cancelled; budget 1.21%/h, night 5.0%`. `paceline plan list` shows every plan with its local start and end.","guides_label":"Guides","hold-the-cache-while-away.heading":"Hold the cache while away","hold-the-cache-while-away.li1":"Leave the session idle. After every turn, a `Stop` hook waits in the background and wakes the session `lead` minutes (5 by default) before the cache would expire. The woken turn keeps the cache for another hour. The agent sends one line, such as `Cache kept until 15:30 · wake 1 of 5 · reply stop to stop keeping it`, as a push notification and ends the turn without a reply, so the line shows once. The push reaches your phone when the session has Remote Control on and \"Push when Claude decides\" enabled in `/config`. Only a session without the push tool gets the line as a reply instead. Wakes come every `60 - lead` minutes.","hold-the-cache-while-away.li2":"Any message you send in the session resets the count. After `max` wakes (5 by default) in a row without a message from you, watching stops. To stop earlier, reply `stop` or run `/paceline:cache-watch off`. Ending the session also stops it, and so does a compaction, manual or automatic: the compacted context starts a new cache, so a wake would keep nothing. `status` then shows `off (compacted)`; run `on` again to watch the compacted session.","hold-the-cache-while-away.li3":"It keeps only one-hour cache entries. When the main thread switches to five-minute entries, watching stops, one wake tells you so, and `status` shows `off (five-minute cache)`. See [one-hour entries only](limitations.html#cache-watch-keeps-only-one-hour-cache-entries) and [the self-stop](limitations.html#cache-watch-stops-itself-when-the-main-thread-switches-to-five-minute-entries).","hold-the-cache-while-away.li4":"It keeps only the main thread's cache. A finished subagent that you resume after its cache expired starts cold. See [main thread only](limitations.html#cache-watch-keeps-only-the-main-threads-cache).","hold-the-cache-while-away.li5":"It refuses a session with no cache entry yet. See [a cache entry first](limitations.html#cache-watch-needs-a-cache-entry-first).","hold-the-cache-while-away.li6":"A computer that sleeps past the cache's expiry misses the wake and loses the cache. cache-watch then turns off, `status` shows `off (cache expired before the wake)`, and your next message brings a one-line notice. See [sleep](limitations.html#a-computer-that-sleeps-past-the-caches-expiry-loses-the-cache).","hold-the-cache-while-away.li7":"It keeps no cache in `claude -p` runs. See [non-interactive runs](limitations.html#cache-watch-does-nothing-in-non-interactive-runs).","hold-the-cache-while-away.li8":"Without Remote Control and \"Push when Claude decides\", no push reaches your phone. See [the push](limitations.html#the-push-reaches-a-phone-only-with-remote-control).","hold-the-cache-while-away.li9":"In a terminal session whose context is at or above the idle compaction threshold, Claude Code is expected to compact the conversation about 54 minutes after the last request ([Claude Code, settings reference](https://code.claude.com/docs/en/settings-reference#idlecompaction), read 2026-10-15). With the default `lead` of 5, cache-watch wakes at about 55 minutes, so idle compaction is expected to run before cache-watch's wake, and a compaction turns cache-watch off. See [idle compaction before the wake](limitations.html#idle-compaction-can-run-before-cache-watchs-wake-and-turn-it-off).","hold-the-cache-while-away.p1":"you step away from a session with a long context and want to come back to a warm cache. When a session sits idle for an hour, its one-hour prompt cache expires, and the next turn writes the whole context to the cache again.","hold-the-cache-while-away.p2":"In that session, run:","hold-the-cache-while-away.p3":"It starts only when the session's main thread writes one-hour cache entries. It refuses a session with five-minute entries, or with no cache entry yet, and says why. cache-watch keeps only the main thread's cache: a session whose main thread writes five-minute entries is refused even when its subagents write one-hour entries. The main thread's TTL is Claude Code's setting for the session; subagent TTL settings do not change the decision.","hold-the-cache-while-away.p4":"What it cannot do:","hold-the-cache-while-away.p5":"A wake keeps the cache for far less than losing it costs. The woken turn reads the context from the cache; the first turn after the cache's expiry writes the whole context to the cache again, which by [Anthropic's API prices](https://platform.claude.com/docs/en/about-claude/pricing#prompt-caching) costs at least 20 times the read (a one-hour cache write is 2 times the input price, a cache read 0.1 times or less). Each wake still counts against the five-hour limit; how much a cache read weighs in subscription limits is not published. With the defaults, that is at most five wakes per absence; see [each wake counts against the five-hour limit](limitations.html#each-wake-counts-against-the-five-hour-limit). To change the defaults, run `/paceline:cache-watch config --lead 10 --max 3`; to change them for one session, pass the same options to `on`.","hold-the-cache-while-away.p6":"`/paceline:cache-watch status` shows the session as `on`, with the cache expiry and the next wake, for example `<session id> · on · lead 5 min · wakes 0/5 · cache 1h · expires 15:30 · next wake 15:25`.","intro.p1":"Task guides for PaceLine. Each guide says when you need it, the steps, and how to tell it worked. Type the `/paceline:` commands in a session. Run the `paceline` commands in a session's Bash tool, or ask the agent to run them. The [reference](reference.html) lists every option.","keep-usage-current-while-idle.heading":"Keep usage current while idle","keep-usage-current-while-idle.li1":"Keep at least one session with PaceLine open, busy or idle. usage-watch reads the account's usage every 125 seconds while a session is open. It needs a claude.ai login.","keep-usage-current-while-idle.li2":"To let pace account for a model's own weekly limit, pass the model with `--model`, or set `PACELINE_MODEL`.","keep-usage-current-while-idle.p1":"you want pace and status line plugins to show the exact figures `/usage` shows, including the model-scoped weekly limits, while no session makes requests.","keep-usage-current-while-idle.p2":"**Before you turn it on:** usage-watch is off until you run `/paceline:usage-watch on`. It reads `https://api.anthropic.com/api/oauth/usage`, an endpoint outside Anthropic's published API reference, through Claude Code with the session's own login; its address, answer format, or availability can change without notice. It needs a claude.ai login and an open session with PaceLine, pauses while the computer sleeps, and sends nothing while `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC` is set. When the endpoint fails, `/paceline:usage-watch status` shows `last error: HTTP <status>` or `unexpected response`, PitBoard's model-scoped limits disappear after 15 minutes, and pace's model-scoped rules stop applying. Without usage-watch, the limits writer, the five-hour and weekly readings from each session's turns, pace's budget, and the night queue keep working, with data as of the last turn. The [limitations](limitations.html#usage-watch) list each case: [the login](limitations.html#limit-readings-need-a-claudeai-subscription-login), [off by default](limitations.html#usage-watch-is-off-by-default), [the endpoint](limitations.html#usage-watch-reads-an-endpoint-outside-the-published-api), [an open session](limitations.html#usage-watch-needs-an-open-session), [sleep](limitations.html#a-sleeping-computer-pauses-usage-watch), and [the traffic setting](limitations.html#claude_code_disable_nonessential_traffic-blocks-usage-watch).","keep-usage-current-while-idle.p3":"Turn usage-watch on:","keep-usage-current-while-idle.p4":"The switch holds for every session of the same Claude Code configuration directory and takes effect within 10 seconds.","keep-usage-current-while-idle.p5":"`/paceline:usage-watch status` shows a recent `last success` and `last error: none`. `/paceline:pace status` shows a data age of a few minutes at most, and lists the model-scoped buckets after the weekly figure, for example `7d 34% (Fable 7%)`. If nothing shows, see [usage-watch shows nothing](troubleshooting.html#usage-watch-shows-nothing).","label_when":"When you need it","label_worked":"How to tell it worked","nav_label":"How-to guides","recover-after-a-compaction.heading":"Recover after a compaction","recover-after-a-compaction.li1":"Before the compaction, context-watch puts a line such as `context: 612k / 967k auto-compact point (63%)` on every prompt. When the context first passes 85% and then 95% of the auto-compaction point, the agent is told once per level to write its recovery point to the task's status file. The levels reset after each compaction.","recover-after-a-compaction.li2":"At each compaction of the main conversation, automatic or `/compact`, PaceLine writes `.claude/paceline/<session id>.md` in the project. It holds your last 3 prompts, the agent's last 2 replies, the last 5 tool calls with their inputs cut to 200 characters (without results), and every file the agent wrote or edited in the session.","recover-after-a-compaction.li3":"The summary is told to keep the snapshot path. Right after the compaction, the agent is told to read the snapshot and the task's status files before its next step.","recover-after-a-compaction.li4":"To read a snapshot yourself, open the file. `/paceline:context-watch status` prints the project's snapshot folder.","recover-after-a-compaction.p1":"a session was compacted, and you or the agent need what the summary dropped. context-watch is on from install, so this works without setup.","recover-after-a-compaction.p2":"context-watch never vetoes, delays, or starts a compaction, and leaves subagent compactions alone. An error in context-watch leaves the turn as it was. With auto-compaction off, the line measures against the context window, and no warnings come. Snapshots older than 14 days are removed when a session starts in the project.","recover-after-a-compaction.p3":"To change it, run `/paceline:context-watch config`, for example `--levels 80,90` for earlier warnings, `--line off` to hide only the line, or `--days 30` to keep snapshots longer.","recover-after-a-compaction.p4":"after a compaction, `/paceline:context-watch status` counts the snapshot, for example `snapshots: /home/me/project/.claude/paceline (1 file)`, and the agent's next step starts by reading it.","run-a-night-queue.heading":"Run a night queue","run-a-night-queue.li1":"Keep the machine awake for the night.","run-a-night-queue.li2":"`scripts/night-power.ps1` in the plugin directory turns off sleep on AC power and moves the Windows Update active hours over the night, so a restart does not land mid-queue. Without a switch it is a dry run that prints what it would change. Run it with `-Enable` before the night and with `-Disable` after it, in an elevated PowerShell. The previous values are saved in `<state>/night-power-state.json`. `-NightStart` and `-NightEnd` set the hours (default 0 and 8).","run-a-night-queue.li3":"Start the session under `caffeinate -i -s`, for example `caffeinate -i -s claude`.","run-a-night-queue.li4":"Start it under `systemd-inhibit --what=sleep`, for example `systemd-inhibit --what=sleep claude`.","run-a-night-queue.li5":"`0` (start): run `paceline queue start <id>` for the item named in the output, do the work, then `paceline queue done <id>`. When the item's checks fail, run `paceline queue fail <id>` and fix them; after `gate_fix_attempts` (3) failures the item is deferred. When an item needs your permission, run `paceline queue defer <id>`. Deferring an item also defers the items that depend on it.","run-a-night-queue.li6":"`10` (wait): wait, then run `paceline auto` again. With `--json`, `wait_until` says until when.","run-a-night-queue.li7":"`11` (stop): end the run.","run-a-night-queue.li8":"In the morning, the agent fills the report template `templates/morning-report.md` from `paceline queue report` and the queue's state.","run-a-night-queue.p1":"you want the agent to work through a list of tasks while you sleep, within what the week can spare.","run-a-night-queue.p2":"Turn pace on, if it is off:","run-a-night-queue.p3":"Add the items, each with an estimate in percent of the weekly limit:","run-a-night-queue.p4":"Items get the IDs `Q1`, `Q2`, and so on. Add `--independent` to an item that may run beside other independent items.","run-a-night-queue.p5":"Tell the agent to run the queue. It starts the run once:","run-a-night-queue.p6":"Then, before each item, it runs `paceline auto` and follows its exit code:","run-a-night-queue.p7":"`paceline queue report` prints the done, deferred, running, and pending items with their estimated and actual spend, for example `done 2 (est 5.00% act 4.10%), deferred 1, running 0, pending 0`. `paceline queue list` shows each item's status and, for a deferred item, the reason.","run-a-night-queue.p8":"The leftover pool works the same way with `--pool` (item IDs `L1`, `L2`, and so on). Approve it with `paceline queue --pool approve`; it runs only on the last night before the weekly reset. The [explanation](explanation.html#the-night-queues-decisions) says how `auto` decides.","series_label":"pages in this series","theme_dark":"Dark","theme_label":"Page theme","theme_light":"Light","theme_system":"System","title":"PaceLine how-to guides","toc_label":"Sections","use-two-accounts-on-one-machine.heading":"Use two accounts on one machine","use-two-accounts-on-one-machine.li1":"Update with `/plugin marketplace update agentpit` and restart every open session. A session still on PaceLine 0.2.5 does not tag its readings and mixes the accounts until it restarts.","use-two-accounts-on-one-machine.li2":"Do not run `/login` during a night run. The run stops with `account changed during the run`.","use-two-accounts-on-one-machine.li3":"Run `/login` and sign in to the other account.","use-two-accounts-on-one-machine.li4":"Run `/paceline:pace status`. It shows the new account's figures at once when that account has a partition from an earlier session. Otherwise it stops with `no usage data yet for the signed-in account` until the first reply in a session signed in to that account, or until the next usage-watch reading, which comes at most 125 seconds after the last one.","use-two-accounts-on-one-machine.li5":"`no usage data yet for the signed-in account`: the signed-in account has no readings yet. It fills after the first reply in a session with PaceLine loaded.","use-two-accounts-on-one-machine.li6":"`account unknown (<reason>)`: PaceLine cannot tell that the figures belong to the signed-in account. The reason is `untagged`, `no-file`, `unreadable`, or `no-account`. See [Status says account unknown](troubleshooting.html#status-says-account-unknown).","use-two-accounts-on-one-machine.li7":"After an update from 0.2.5, the figures show `account unknown (untagged)` until the account's first tagged reading arrives.","use-two-accounts-on-one-machine.p1":"you sign in to more than one Claude account on this computer and want pace to show the limits of the account you use now.","use-two-accounts-on-one-machine.p2":"**Which setup:** use one configuration directory and `/login` when you use one account at a time. PaceLine keeps each account's readings in a partition of its own, and pace reads the partition of the account signed in now. Use a configuration directory per account (`CLAUDE_CONFIG_DIR`) when both accounts run sessions at the same time, or when each needs its own profile, plans, and night queue. See [Each configuration directory keeps its own state](limitations.html#each-configuration-directory-keeps-its-own-state).","use-two-accounts-on-one-machine.p3":"`status` does not end with `account unknown`, and `paceline status --json` shows `data.account.state` as `known`. A `/login` back to the first account shows its last figures at once.","use-two-accounts-on-one-machine.p4":"**What the messages mean:**"}</script>
+<script type="application/json" id="pb-glossary">{"budget":{"name":"Budget per hour","short":"The weekly percent pace may spend in the current day hour, or the next one at night, so the week lasts to its reset; weekday and weekend day hours are weighted by the profile."},"forecast":{"name":"Forecast unused","short":"The weekly percent likely left unspent at the reset at the recent pace."},"night":{"name":"Night allowance","short":"The weekly percent the night queue may spend tonight."},"plan":{"name":"Plan","short":"A declared change to a day: away (that day gets no budget) or heavy (its hours weigh more, 2x by default). It shifts the budget across the remaining days."},"reservation":{"name":"Reservation","short":"A share of the weekly limit held for a running subagent, gate or queue item. The night queue counts it before starting the next item; by day the launch line shows how many are active."},"threshold":{"name":"Five-hour threshold","short":"The five-hour usage above which pace advises against background work: lower by day, higher at night."}}</script>
+<script type="application/json" id="pb-facts">{"commands":[{"command":"paceline on","help":"turn the pace hooks on"},{"command":"paceline off","help":"turn the pace hooks off (every command still runs)"},{"command":"paceline status","help":"interactive one-line recommendation"},{"command":"paceline auto","help":"autonomous parameters for the next queue item"},{"command":"paceline calibrate","help":"propose parameter corrections from history"},{"command":"paceline profile","help":"print, change or check the profile (creates it with the detected time zone)"},{"command":"paceline profile show","help":"print the profile (the default)"},{"command":"paceline profile set","help":"change one key, with checks"},{"command":"paceline profile check","help":"the time zone against this machine's, with a hint"},{"command":"paceline doctor","help":"diagnose pace on this machine; read-only without --live"},{"command":"paceline merge","help":"merge the sessions' readings from the inbox into rate-limits.json"},{"command":"paceline plan","help":"declared future plan changes"},{"command":"paceline plan add","help":""},{"command":"paceline plan list","help":""},{"command":"paceline plan find","help":""},{"command":"paceline plan modify","help":""},{"command":"paceline plan cancel","help":""},{"command":"paceline plan confirm","help":""},{"command":"paceline plan tomorrow","help":""},{"command":"paceline reserve","help":"reservation registry"},{"command":"paceline reserve acquire","help":""},{"command":"paceline reserve renew","help":""},{"command":"paceline reserve release","help":""},{"command":"paceline reserve release-session","help":""},{"command":"paceline reserve prune","help":""},{"command":"paceline reserve list","help":""},{"command":"paceline reserve reconcile","help":""},{"command":"paceline queue","help":"night queue and leftover pool (--pool)"},{"command":"paceline queue add","help":""},{"command":"paceline queue list","help":""},{"command":"paceline queue report","help":""},{"command":"paceline queue approve","help":""},{"command":"paceline queue clear-done","help":""},{"command":"paceline queue start","help":""},{"command":"paceline queue done","help":""},{"command":"paceline queue defer","help":""},{"command":"paceline queue fail","help":""},{"command":"paceline queue retry","help":""},{"command":"paceline queue remove","help":""},{"command":"paceline cache-watch","help":"keep an idle session's one-hour prompt cache alive: on|off|status|config"},{"command":"paceline context-watch","help":"context against the auto-compaction point: config|status"},{"command":"paceline usage-watch","help":"read the account's exact usage through Claude Code: on|off|status"}],"env":["ANTHROPIC_MODEL","CLAUDE_CONFIG_DIR","CLAUDE_PLUGIN_DATA","CLAUDE_PROJECT_DIR","CLAUDE_SESSION_ID","HOME","PACELINE_DEBUG","PACELINE_FREE_COMMIT_MB","PACELINE_MODEL","PACELINE_NOW","PACELINE_NO_MERGE","PACELINE_SCRIPT","PACELINE_STATE_DIR","PACELINE_USAGE_FILE","USERPROFILE"],"exit_codes":{"EXIT_ERROR":1,"EXIT_NONE":4,"EXIT_OK":0,"EXIT_SEVERAL":3,"EXIT_STOP":11,"EXIT_USAGE":2,"EXIT_WAIT":10},"profile":[{"default":240,"internal":false,"key":"agent_lease_ttl_min"},{"default":125,"internal":false,"key":"auto_refresh_cache_sec"},{"default":85.0,"internal":false,"key":"auto_refresh_five_hour_pct"},{"default":14,"internal":false,"key":"calibration_min_days"},{"default":0.9,"internal":false,"key":"capacity_warn_ratio"},{"default":2048,"internal":false,"key":"commit_reserve_mb"},{"default":[8,22],"internal":false,"key":"day_hours"},{"default":95.0,"internal":false,"key":"five_hour_hard_stop"},{"default":80.0,"internal":false,"key":"five_hour_threshold_day"},{"default":95.0,"internal":false,"key":"five_hour_threshold_night"},{"default":10.0,"internal":false,"key":"five_hour_to_week_pct"},{"default":3,"internal":false,"key":"gate_fix_attempts"},{"default":6000,"internal":false,"key":"heavy_job_mb"},{"default":2.0,"internal":false,"key":"heavy_weight"},{"default":null,"internal":false,"key":"host_night_capacity_pct"},{"default":30,"internal":false,"key":"lease_ttl_min"},{"default":10.0,"internal":false,"key":"leftover_suggest_pct"},{"default":6,"internal":false,"key":"max_agents"},{"default":3,"internal":false,"key":"max_heavy_runs"},{"default":2048,"internal":false,"key":"min_free_commit_mb"},{"default":["opus","sonnet","haiku"],"internal":false,"key":"models"},{"default":1,"internal":true,"key":"next_plan_id"},{"default":5.0,"internal":false,"key":"night_base_pct"},{"default":[0,8],"internal":false,"key":"night_hours"},{"default":[],"internal":true,"key":"plans"},{"default":{"hour":18,"weekday":4},"internal":false,"key":"reserve_decay_start"},{"default":8.0,"internal":false,"key":"reserve_pct"},{"default":["sonnet","haiku"],"internal":false,"key":"routine_models"},{"default":95.0,"internal":false,"key":"scoped_exhausted_pct"},{"default":30,"internal":false,"key":"stale_threshold_min"},{"default":1.0,"internal":false,"key":"subagent_estimate_pct"},{"default":85.0,"internal":false,"key":"throttle_weekly_pct"},{"default":"UTC","internal":false,"key":"timezone"},{"default":false,"internal":true,"key":"timezone_confirmed"},{"default":300,"internal":false,"key":"usage_snapshot_max_age_sec"},{"default":1,"internal":true,"key":"version"},{"default":1.0,"internal":false,"key":"weekday_weight"},{"default":20.0,"internal":false,"key":"weekend_cap_pct"},{"default":1.0,"internal":false,"key":"weekend_weight"}]}</script>
+<script type="application/json" id="pb-data">{}</script>
+<script>
+const __m = {}
+// Shared page behaviour: strings, glossary popovers, segmented switches, chips and the theme switch.
+// Pages read their data from the JSON script elements the build writes and call PB.* helpers.
+const PB = (() => {
+  const json = id => {
+    const el = document.getElementById(id)
+    return el ? JSON.parse(el.textContent) : {}
+  }
+  const strings = json('pb-strings')
+  const glossary = json('pb-glossary')
+  const facts = json('pb-facts')
+  const data = json('pb-data')
+
+  const t = (key, vars = {}) => {
+    const s = strings[key]
+    if (s === undefined) return `{{${key}}}`
+    return s.replace(/\{(\w+)\}/g, (_, k) => (vars[k] === undefined ? `{${k}}` : String(vars[k])))
+  }
+
+  const el = (tag, attrs = {}, ...children) => {
+    const node = document.createElement(tag)
+    for (const [k, v] of Object.entries(attrs)) {
+      if (v === null || v === undefined || v === false) continue
+      if (k === 'class') node.className = v
+      else if (k === 'text') node.textContent = v
+      else if (k === 'html') node.innerHTML = v
+      else if (k.startsWith('on')) node.addEventListener(k.slice(2), v)
+      else node.setAttribute(k, v === true ? '' : v)
+    }
+    for (const c of children.flat()) if (c !== null && c !== undefined && c !== false) node.append(c instanceof Node ? c : document.createTextNode(String(c)))
+    return node
+  }
+
+  // Text with backtick spans as nodes: code spans become <code>, the rest stays text, never markup.
+  // An unbalanced backtick leaves the whole string as text.
+  const rich = text => {
+    const s = text === undefined || text === null ? '' : String(text)
+    if (s === '') return []
+    const parts = s.split('`')
+    if (parts.length % 2 === 0) return [document.createTextNode(s)]
+    return parts.flatMap((part, i) => {
+      if (part === '') return []
+      return [i % 2 ? el('code', { text: part }) : document.createTextNode(part)]
+    })
+  }
+
+  const store = {
+    get(key) { try { return localStorage.getItem(`pb:${key}`) } catch { return null } },
+    set(key, value) { try { localStorage.setItem(`pb:${key}`, value) } catch { /* storage blocked */ } },
+  }
+
+  // Theme: system (no attribute), light or dark, remembered per viewer; an icon switch.
+  const ICONS = {
+    system: '<rect x="2.5" y="3.5" width="11" height="8" rx="1"/><path d="M6 14h4M8 11.5V14"/>',
+    light: '<circle cx="8" cy="8" r="3"/><path d="M8 1.5v1.5M8 13v1.5M1.5 8H3M13 8h1.5M3.4 3.4l1 1M11.6 11.6l1 1M3.4 12.6l1-1M11.6 4.4l1-1"/>',
+    dark: '<path d="M13 9.5A5.5 5.5 0 0 1 6.5 3a5.5 5.5 0 1 0 6.5 6.5z"/>',
+  }
+  function initTheme() {
+    const apply = v => {
+      if (v === 'light' || v === 'dark') document.documentElement.setAttribute('data-theme', v)
+      else document.documentElement.removeAttribute('data-theme')
+    }
+    apply(store.get('theme'))
+    for (const seg of document.querySelectorAll('[data-pb-theme]')) {
+      seg.classList.add('seg', 'theme-switch')
+      seg.setAttribute('role', 'group')
+      seg.setAttribute('aria-label', t('theme_label'))
+      // innerHTML parses the icon in the SVG namespace; createElement('svg') would not.
+      seg.replaceChildren(...['system', 'light', 'dark'].map(v => {
+        const b = el('button', { type: 'button', 'data-value': v, title: t(`theme_${v}`), html: `<svg viewBox="0 0 16 16" aria-hidden="true">${ICONS[v]}</svg>` })
+        b.append(el('span', { class: 'visually-hidden', text: t(`theme_${v}`) }))
+        return b
+      }))
+      seg.addEventListener('pb:change', e => { apply(e.detail); store.set('theme', e.detail); document.dispatchEvent(new CustomEvent('pb:theme')) })
+      setSeg(seg, store.get('theme') || 'system', false)
+    }
+  }
+
+  // Segmented switches and chip groups: one pressed button; a 'pb:change' event with its value.
+  function setSeg(group, value, notify = true) {
+    for (const b of group.querySelectorAll('button[data-value]')) b.setAttribute('aria-pressed', String(b.dataset.value === value))
+    group.dataset.current = value
+    if (notify) group.dispatchEvent(new CustomEvent('pb:change', { detail: value }))
+  }
+  function initSegs(root = document) {
+    for (const group of root.querySelectorAll('.seg, .chips[data-choice]')) {
+      if (group.dataset.bound) continue
+      group.dataset.bound = '1'
+      group.addEventListener('click', e => {
+        const b = e.target.closest('button[data-value]')
+        if (b && group.contains(b)) setSeg(group, b.dataset.value)
+      })
+      const pressed = group.querySelector('button[aria-pressed="true"]') || group.querySelector('button[data-value]')
+      if (pressed) setSeg(group, pressed.dataset.value, false)
+    }
+  }
+
+  // Glossary popovers: any element with data-term; hover and focus show it, a tap toggles it.
+  let pop = null
+  let owner = null
+  function hide() {
+    if (pop) pop.remove()
+    for (const hot of document.querySelectorAll('.glossary .is-hot')) hot.classList.remove('is-hot')
+    pop = null
+    owner = null
+  }
+  // With the glossary drawer open a term lights its entry there; otherwise it opens a popover.
+  function sideEntry(key) {
+    const entry = document.querySelector(`.glossary [data-entry="${CSS.escape(key)}"]`)
+    if (!entry) return null
+    return entry.closest('.glossary').hidden ? null : entry
+  }
+  function show(target) {
+    const key = target.dataset.term
+    const entry = glossary[key]
+    if (!entry) return
+    hide()
+    owner = target
+    const side = sideEntry(key)
+    if (side) {
+      side.classList.add('is-hot')
+      side.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+      return
+    }
+    pop = el('div', { class: 'popover', role: 'tooltip' }, el('strong', { text: entry.name || key }), el('span', {}, rich(entry.short || entry)))
+    document.body.append(pop)
+    const r = target.getBoundingClientRect()
+    const w = pop.offsetWidth
+    const left = Math.max(16, Math.min(window.scrollX + r.left, window.scrollX + document.documentElement.clientWidth - w - 16))
+    pop.style.left = `${left}px`
+    pop.style.top = `${window.scrollY + r.bottom + 6}px`
+  }
+  function initTerms() {
+    document.addEventListener('mouseover', e => { const x = e.target.closest('[data-term]'); if (x && x !== owner) show(x) })
+    document.addEventListener('mouseout', e => { const x = e.target.closest('[data-term]'); if (x && !x.contains(e.relatedTarget)) hide() })
+    document.addEventListener('focusin', e => { const x = e.target.closest('[data-term]'); if (x) show(x) })
+    document.addEventListener('focusout', e => { if (e.target.closest('[data-term]')) hide() })
+    document.addEventListener('click', e => {
+      const x = e.target.closest('[data-term]')
+      if (x) { if (owner === x) hide(); else show(x) } else if (!e.target.closest('.popover')) hide()
+    })
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') hide() })
+  }
+
+  function term(key, label) {
+    return el('span', { class: 'term', 'data-term': key, tabindex: '0', text: label ?? key })
+  }
+
+  // Section navigation with the current section marked. The build writes the list into the
+  // markup; a page built without one gets it here from its own section headings.
+  function initNav() {
+    const nav = document.querySelector('[data-pb-nav]')
+    if (!nav) return
+    if (!nav.querySelector('a')) {
+      const found = [...document.querySelectorAll('main section[id]')].filter(s => s.querySelector('h1, h2'))
+      const made = found.map(s => el('a', { href: `#${s.id}`, text: s.dataset.nav || s.querySelector('h1, h2').textContent }))
+      nav.replaceChildren(el('ol', {}, made.map(a => el('li', {}, a))))
+    }
+    const links = [...nav.querySelectorAll('a[href^="#"]')]
+    const sections = links.map(a => document.getElementById(a.getAttribute('href').slice(1))).filter(Boolean)
+    const mark = id => { for (const a of links) a.setAttribute('aria-current', String(a.getAttribute('href') === `#${id}`)) }
+    // A click names its target at once, and the scroll it starts (smooth, and often stopped short by the
+    // page end) must not move the mark until it has settled.
+    let locked = false
+    let settle = 0
+    const hold = () => { locked = true; clearTimeout(settle); settle = setTimeout(() => { locked = false }, 200) }
+    nav.addEventListener('click', e => {
+      const a = e.target.closest('a[href^="#"]')
+      if (a && nav.contains(a)) { mark(a.getAttribute('href').slice(1)); hold() }
+    })
+    // The last heading cannot reach the top of a page that ends first, so the page end marks it.
+    const last = sections[sections.length - 1]
+    const atEnd = () => window.scrollY + window.innerHeight >= document.documentElement.scrollHeight - 2
+    window.addEventListener('scroll', () => {
+      if (locked) { hold(); return }
+      if (last && atEnd()) mark(last.id)
+    }, { passive: true })
+    if (!('IntersectionObserver' in window)) return
+    const seen = new IntersectionObserver(entries => {
+      if (locked || (last && atEnd())) return
+      for (const e of entries) if (e.isIntersecting) mark(e.target.id)
+    }, { rootMargin: '-10% 0px -70% 0px' })
+    for (const s of sections) seen.observe(s)
+  }
+
+  // Filter bar (data-pb-filter="<selector of the items>"): items carry data-tags (single words); the bar shows a
+  // search box, one chip per tag and a live count. Its texts come from the bar's own attributes: data-label (search
+  // box), data-all (the chip for every item), data-count ("{shown} of {total}"). A tag's chip reads as the text of the
+  // bar's own [data-tag="<tag>"] element when it holds one (the markup a reader without scripts sees as a list of
+  // the groups), else as the tag. data-group="<selector>" also hides the group that holds no visible item.
+  function initFilters() {
+    for (const bar of document.querySelectorAll('[data-pb-filter]')) {
+      const items = [...document.querySelectorAll(bar.dataset.pbFilter)]
+      if (!items.length) continue
+      const names = new Map([...bar.querySelectorAll('[data-tag]')].map(x => [x.dataset.tag, x.textContent.trim()]))
+      const tagsOf = item => (item.dataset.tags || '').split(/\s+/).filter(Boolean)
+      const found = new Set(items.flatMap(tagsOf))
+      const tags = [...names.keys()].filter(x => found.has(x)).concat([...found].filter(x => !names.has(x)))
+      const box = el('input', { type: 'search', class: 'filter-box', 'aria-label': bar.dataset.label || '', placeholder: bar.dataset.label || '' })
+      const chips = el('div', { class: 'chips', 'data-choice': '', role: 'group' },
+        [['', bar.dataset.all || ''], ...tags.map(x => [x, names.get(x) || x])].map(([v, label]) => el('button', { type: 'button', class: 'chip', 'data-value': v, text: label })))
+      const count = el('p', { class: 'filter-count', 'aria-live': 'polite' })
+      bar.classList.add('filter-bar')
+      bar.replaceChildren(...[box, tags.length ? chips : null, count].filter(Boolean))
+      const groups = bar.dataset.group ? [...new Set(items.map(item => item.closest(bar.dataset.group)).filter(Boolean))] : []
+      const apply = () => {
+        const query = box.value.trim().toLowerCase()
+        const tag = chips.dataset.current || ''
+        let shown = 0
+        for (const item of items) {
+          const ok = (!tag || tagsOf(item).includes(tag)) && (!query || item.textContent.toLowerCase().includes(query))
+          item.hidden = !ok
+          if (ok) shown++
+        }
+        for (const g of groups) g.hidden = items.every(item => !g.contains(item) || item.hidden)
+        count.textContent = (bar.dataset.count || '').replace('{shown}', shown).replace('{total}', items.length)
+      }
+      initSegs(bar)
+      box.addEventListener('input', apply)
+      chips.addEventListener('pb:change', apply)
+      // A link to an entry or group the filter hides clears the filter, so the target can be shown. A link to the
+      // hash already in the address bar fires no hashchange, so a click covers it.
+      const reveal = hash => {
+        const target = hash.length > 1 ? document.getElementById(decodeURIComponent(hash.slice(1))) : null
+        if (!target || !target.closest('[hidden]') || ![...items, ...groups].some(x => x.contains(target))) return
+        box.value = ''
+        setSeg(chips, '')
+        target.scrollIntoView()
+      }
+      window.addEventListener('hashchange', () => reveal(location.hash))
+      document.addEventListener('click', e => {
+        const a = e.target.closest && e.target.closest('a[href^="#"]')
+        if (a && a.hash === location.hash) reveal(a.hash)
+      })
+      apply()
+    }
+  }
+
+  // Count bar (data-pb-counts="<selector of the items>"): one segment per group (the nearest section) in
+  // proportion to its items, each a link to the group with its heading and count.
+  function initCounts() {
+    for (const bar of document.querySelectorAll('[data-pb-counts]')) {
+      const groups = new Map()
+      for (const item of document.querySelectorAll(bar.dataset.pbCounts)) {
+        const g = item.closest('section[id]')
+        if (g) groups.set(g, (groups.get(g) || 0) + 1)
+      }
+      bar.classList.add('count-bar')
+      bar.replaceChildren(...[...groups].map(([g, n]) => el('a', { class: 'count-seg', href: `#${g.id}`, 'aria-label': `${g.querySelector('h2').textContent}: ${n}`, style: `flex-grow: ${n}` },
+        el('span', { class: 'count-n', text: String(n) }), el('span', { class: 'count-name', text: g.querySelector('h2').textContent }))))
+    }
+  }
+
+  // Copy button on commands, code blocks and transcripts, where the page defines copy_label and copied_label.
+  function initCopy() {
+    if (!navigator.clipboard || !strings.copy_label || !strings.copied_label) return
+    for (const block of document.querySelectorAll('main .cmd, main pre, main .transcript')) {
+      const wrap = el('div', { class: 'copy-wrap' })
+      block.replaceWith(wrap)
+      const button = el('button', { type: 'button', class: 'copy-btn', 'aria-live': 'polite', text: t('copy_label') })
+      button.addEventListener('click', () => {
+        navigator.clipboard.writeText(block.textContent.trim()).then(() => {
+          button.textContent = t('copied_label')
+          setTimeout(() => { button.textContent = t('copy_label') }, 1600)
+        }, () => {})
+      })
+      wrap.append(block, button)
+    }
+  }
+
+  // Decision walker (ol.walker): a question with its answers as a nested list. With scripts one node shows
+  // at a time, the answers as buttons (the answer's data-label, else its own text), with back and restart
+  // (walker_back, walker_restart). A node's data-outcome names its colour. Where the page lacks those strings the
+  // list stays as written.
+  function initWalkers() {
+    if (!strings.walker_back || !strings.walker_restart) return
+    for (const list of document.querySelectorAll('ol.walker')) {
+      const root = list.querySelector(':scope > li')
+      if (!root) continue
+      const trail = [root]
+      const view = el('div', { class: 'walker-view', tabindex: '-1', 'aria-live': 'polite' })
+      const own = li => {
+        const copy = li.cloneNode(true)
+        for (const inner of copy.querySelectorAll('ol')) inner.remove()
+        return copy
+      }
+      const go = change => { change(); render(); view.focus() }
+      const render = () => {
+        const li = trail[trail.length - 1]
+        view.dataset.outcome = li.dataset.outcome || ''
+        const options = [...li.querySelectorAll(':scope > ol > li')]
+        const answers = options.map(o => el('button', {
+          type: 'button', class: 'chip', text: o.dataset.label || own(o).textContent.trim(), onclick: () => go(() => trail.push(o)),
+        }))
+        view.replaceChildren(...[
+          el('div', { class: 'walker-text' }, el('p', {}, [...own(li).childNodes])),
+          answers.length ? el('div', { class: 'walker-options' }, answers) : null,
+          el('div', { class: 'walker-controls' },
+            el('button', { type: 'button', text: t('walker_back'), disabled: trail.length < 2, onclick: () => go(() => trail.pop()) }),
+            el('button', { type: 'button', text: t('walker_restart'), disabled: trail.length < 2, onclick: () => go(() => { trail.length = 1 }) })),
+        ].filter(Boolean))
+      }
+      list.hidden = true
+      list.after(view)
+      render()
+    }
+  }
+
+  // Segmented panels (div.seg-panels > div.seg-panel[data-label]): every panel shows without scripts; with
+  // scripts a segmented switch picks one.
+  function initPanels() {
+    for (const box of document.querySelectorAll('.seg-panels')) {
+      const panels = [...box.querySelectorAll(':scope > .seg-panel')]
+      if (panels.length < 2) continue
+      const seg = el('div', { class: 'seg', role: 'group' }, panels.map((p, i) => el('button', { type: 'button', 'data-value': String(i), text: p.dataset.label })))
+      seg.addEventListener('pb:change', e => panels.forEach((p, i) => { p.hidden = String(i) !== e.detail }))
+      box.classList.add('is-tabbed')
+      box.prepend(seg)
+      initSegs(box)
+      panels.forEach((p, i) => { p.hidden = i !== 0 })
+    }
+  }
+
+  // The glossary column: the entries a page lists in data-terms, or all of them.
+  function initGlossary() {
+    for (const aside of document.querySelectorAll('[data-pb-glossary]')) {
+      const keys = aside.dataset.terms ? aside.dataset.terms.split(',').map(k => k.trim()) : Object.keys(glossary)
+      aside.append(el('dl', {}, keys.filter(k => glossary[k]).map(k =>
+        el('div', { class: 'entry', 'data-entry': k }, el('dt', { text: glossary[k].name || k }), el('dd', {}, rich(glossary[k].short))))))
+    }
+  }
+
+  // List and detail built in markup (data-pb-md): an option shows the panel with the same data-panel.
+  function initMasterDetail() {
+    for (const box of document.querySelectorAll('[data-pb-md]')) {
+      const items = [...box.querySelectorAll('.sit-item[data-panel]')]
+      const panels = [...box.querySelectorAll('.md-panel[data-panel]')]
+      const choose = (i, focus) => {
+        items.forEach((it, j) => { it.setAttribute('aria-selected', String(i === j)); it.tabIndex = i === j ? 0 : -1 })
+        for (const p of panels) p.hidden = p.dataset.panel !== items[i].dataset.panel
+        if (focus) items[i].focus()
+      }
+      items.forEach((it, i) => it.addEventListener('click', () => choose(i, true)))
+      box.addEventListener('keydown', e => {
+        const at = items.findIndex(it => it.getAttribute('aria-selected') === 'true')
+        const next = { ArrowDown: at + 1, ArrowUp: at - 1, Home: 0, End: items.length - 1 }[e.key]
+        if (next === undefined || !e.target.closest('.sit-item')) return
+        e.preventDefault()
+        choose(Math.max(0, Math.min(items.length - 1, next)), true)
+      })
+      choose(0, false)
+    }
+  }
+
+  // Drawers: a button with data-pb-drawer opens the panel with that id; the close button, Escape
+  // or a second press closes it, and focus returns to the button.
+  function initDrawers() {
+    for (const opener of document.querySelectorAll('[data-pb-drawer]')) {
+      const panel = document.getElementById(opener.dataset.pbDrawer)
+      if (!panel) continue
+      const set = open => {
+        panel.hidden = !open
+        opener.setAttribute('aria-expanded', String(open))
+        document.body.classList.toggle('drawer-is-open', open)
+        if (open) panel.querySelector('button')?.focus()
+        else opener.focus()
+      }
+      opener.addEventListener('click', () => set(panel.hidden))
+      panel.querySelector('[data-pb-drawer-close]')?.addEventListener('click', () => set(false))
+      document.addEventListener('keydown', e => { if (e.key === 'Escape' && !panel.hidden) set(false) })
+    }
+  }
+
+  document.addEventListener('DOMContentLoaded', () => { initTheme(); initSegs(); initGlossary(); initNav(); initTerms(); initMasterDetail(); initDrawers(); initFilters(); initCounts(); initCopy(); initWalkers(); initPanels() })
+  return { t, el, rich, strings, glossary, facts, data, store, setSeg, initSegs, term }
+})()
+</script>
+</body>
+</html>

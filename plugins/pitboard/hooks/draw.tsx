@@ -1,5 +1,5 @@
-import { advisorView, alerts, BAR, CALM_FILL, cardFor, COLD, desktopModelColor, DIM, dim, displayModel, EFFORT_COLORS, type Gauge, GROUPS, LABEL, label, LEVEL, limitStyle, listOrder, modelColor, ON, type Part, readings, type Row, RULE, t, TRACK, VALUE } from './cards'
-import { barSvg, cacheIconSvg, type Card, type CardBar, DESKTOP_COLD, DESKTOP_LEVEL, DESKTOP_ON, pieSvg, ruleSvg, type Tone, wideBarSvg } from './desktop'
+import { advisorView, alerts, BAR, CALM_FILL, cardFor, COLD, desktopModelColor, DIM, dim, displayModel, EFFORT_COLORS, type Gauge, GROUPS, IDLE_MARK, isKnownFamily, LABEL, label, LEVEL, limitStyle, listOrder, modelColor, ON, type Part, readings, type Row, RULE, t, TRACK, VALUE } from './cards'
+import { barSvg, cacheIconSvg, type Card, type CardBar, DESKTOP_COLD, DESKTOP_LEVEL, DESKTOP_ON, pieSvg, ringMarksSvg, ruleSvg, type Tone, wideBarSvg } from './desktop'
 import type { View } from './view'
 
 // The element tables differ per surface; these trees use only what all of them share,
@@ -162,7 +162,7 @@ export function drawPane(els: Els, v: View, isRemote: boolean) {
     sections.push({ key, rows })
   }
   for (const g of gauges) {
-    const head: Row = g.icon ? [t(` ${g.icon === 'hot' ? '🔥' : '❄'}`, g.icon === 'cold' ? COLD : LEVEL.act)] : g.mark ? [t(` ${g.mark}`, ON)] : []
+    const head: Row = g.icon ? [t(` ${g.icon === 'hot' ? '🔥' : '❄'}`, g.icon === 'cold' ? COLD : LEVEL.act)] : g.mark ? [t(` ${markText(g)}`, ON)] : []
     unfold(g.key, g.card, head)
     if (g.key === 'context' && advisor && m?.advisor) unfold('advisor', advisor, [])
   }
@@ -216,6 +216,8 @@ export function drawDesktop(els: Els, v: View, open: string | null, toggle: (key
     ) : (
       <Text dimColor>{label}</Text>
     )
+  // Without Svg the marks are glyphs before the value; with it they share the pie's image.
+  const glyphMarks = (g: Gauge) => (g.mark && !Svg ? [<Text key={`m-${g.key}`} color={DESKTOP_ON}>{markText(g)}</Text>] : [])
   const content = (g: Gauge) => {
     if (bars && g.pace !== undefined) {
       const bar = barSvg(g.pct ?? 0, g.level, g.pace)
@@ -234,18 +236,20 @@ export function drawDesktop(els: Els, v: View, open: string | null, toggle: (key
         ) : null,
       ]
     }
-    const ring = g.icon ? cacheIconSvg(g.icon) : g.pct === null ? null : pieSvg(g.pct, g.level)
+    const ring = g.icon
+      ? cacheIconSvg(g.icon)
+      : g.mark && Svg
+        ? ringMarksSvg(g.pct === null ? null : { pct: g.pct, level: g.level }, !!g.idle)
+        : g.pct === null
+          ? null
+          : pieSvg(g.pct, g.level)
     return [
       name(g.key, g.label),
-      ring && Svg ? <Svg key={`pie-${g.key}`} source={ring.source} alt={`${g.label} ${g.icon ? ring.alt : (g.value ?? 'n/a')}`} width={ring.width} height={ring.height} /> : null,
+      ring && Svg ? <Svg key={`pie-${g.key}`} source={ring.source} alt={`${g.label} ${g.icon || (g.mark && Svg) ? ring.alt : (g.value ?? 'n/a')}`} width={ring.width} height={ring.height} /> : null,
+      ...glyphMarks(g),
       g.level !== 'calm' && g.value && !g.icon ? (
         <Text key={`v-${g.key}`} bold color={g.tone === 'cold' ? DESKTOP_COLD : DESKTOP_LEVEL[g.level]}>
           {g.value}
-        </Text>
-      ) : null,
-      g.mark ? (
-        <Text key={`m-${g.key}`} color={DESKTOP_ON}>
-          {g.mark}
         </Text>
       ) : null,
       g.extra ? (
@@ -327,7 +331,7 @@ export function drawDesktop(els: Els, v: View, open: string | null, toggle: (key
     <Box key="group-advisor" position="relative" flexDirection="row" alignItems="center" columnGap={1} paddingX={1} flexShrink={0} hover={HOVER_FRAME}>
       <Text dimColor>Advisor</Text>
       {adv.name ? (
-        <Text color={desktopModelColor(adv.name)} dimColor={adv.isInactive}>
+        <Text color={desktopModelColor(adv.name)} dimColor={adv.isInactive} italic={!isKnownFamily(adv.name)} strikethrough={adv.isInactive}>
           {adv.name}
         </Text>
       ) : (
@@ -379,6 +383,9 @@ const shownValue = (g: Gauge) => g.level !== 'calm' && g.value !== null && !g.ic
 // The pane button beside ⓘ, drawn as plainly as the row's other names.
 const PANE_BUTTON = 'pitboard'
 
+// The state glyphs drawn between a reading's gauge and its value: ↻, and ᶻ (one cell) while idle compaction is expected.
+const markText = (g: Gauge) => `${g.mark ?? ''}${g.idle ? IDLE_MARK : ''}`
+
 // The terminal row's width in cells, from the same pieces drawTerminal draws, so the rule above spans
 // the row alone. Gaps: 1 inside a reading, 1 + · + 1 between readings, 1 + │ + 1 between groups; the
 // last part is ⓘ (2), 1 + · + 1 and the pane button, and the rule runs 1 past it so the button sits as far
@@ -386,7 +393,7 @@ const PANE_BUTTON = 'pitboard'
 export function terminalCells(v: View): number {
   const { gauges, advisorOn } = readings(v)
   const readingWidth = (g: Gauge) =>
-    [g.label.length, g.pct !== null || g.icon ? 2 : null, shownValue(g) && g.value ? g.value.length : null, g.mark ? 1 : null, g.extra?.length ?? null]
+    [g.label.length, g.pct !== null || g.icon ? 2 : null, g.mark ? markText(g).length : null, shownValue(g) && g.value ? g.value.length : null, g.extra?.length ?? null]
       .filter((n): n is number => n !== null)
       .reduce((sum, n, i) => sum + n + (i > 0 ? 1 : 0), 0)
   const groups = GROUPS.map(id => gauges.filter(g => g.group === id)).filter(gs => gs.length)
@@ -429,12 +436,12 @@ export function drawTerminal(els: Els, v: View, open: string | null, toggle: (ke
           {gaugeCells(g.pct)}
         </Text>
       ) : null}
+      {g.mark ? <Text color={ON}>{markText(g)}</Text> : null}
       {shownValue(g) ? (
         <Text bold color={g.tone === 'cold' ? COLD : LEVEL[g.level]}>
           {g.value}
         </Text>
       ) : null}
-      {g.mark ? <Text color={ON}>{g.mark}</Text> : null}
       {g.extra ? <Text color={LABEL}>{g.extra}</Text> : null}
     </Box>
       {pointer(g.key, Math.floor((g.label.length - 1) / 2))}
@@ -445,10 +452,11 @@ export function drawTerminal(els: Els, v: View, open: string | null, toggle: (ke
   // while one is set, and in ⓘ always. In ⓘ each takes its own colour, the advisor its model's.
   const { name: advisorName, isInactive } = advisorView(advisorOn)
   const isInfoOf = (key: string) => key === 'info' && m !== null && model !== null
-  const infoColor = (key: string, label: string): { color?: string; dimColor?: boolean } => {
+  const INACTIVE_SUFFIX = ' (inactive)'
+  const infoColor = (key: string, label: string): { color?: string; dimColor?: boolean; strikethrough?: boolean } => {
     if (!isInfoOf(key) || !m) return {}
     if (label === 'Effort' && m.effort) return { color: EFFORT_COLORS[m.effort] ?? DIM }
-    if (label === 'Advisor' && advisorName) return { color: modelColor(advisorName), dimColor: isInactive }
+    if (label === 'Advisor' && advisorName) return { color: modelColor(advisorName), dimColor: isInactive, strikethrough: isInactive }
     return {}
   }
   const parts = groups.map(gs => (
@@ -465,7 +473,7 @@ export function drawTerminal(els: Els, v: View, open: string | null, toggle: (ke
         <Box flexDirection="row" columnGap={1}>
           {name('advisor', 'Advisor')}
           {advisorName ? (
-            <Text color={modelColor(advisorName)} dimColor={isInactive}>
+            <Text color={modelColor(advisorName)} dimColor={isInactive} strikethrough={isInactive}>
               {advisorName}
             </Text>
           ) : (
@@ -501,9 +509,16 @@ export function drawTerminal(els: Els, v: View, open: string | null, toggle: (ke
             {line.rows.map(([label, value, level], i) => (
               <Text key={String(i)}>
                 <Text color={DIM}>{`${n === 0 || i > 0 ? ' · ' : ''}${label} `}</Text>
-                <Text color={level === 'on' ? ON : level && level !== 'calm' ? LEVEL[level] : VALUE} {...infoColor(key, label)}>
-                  {value}
-                </Text>
+                {isInfoOf(key) && label === 'Advisor' && isInactive && value.endsWith(INACTIVE_SUFFIX) ? (
+                  <>
+                    <Text {...infoColor(key, label)}>{value.slice(0, -INACTIVE_SUFFIX.length)}</Text>
+                    <Text dimColor>{INACTIVE_SUFFIX}</Text>
+                  </>
+                ) : (
+                  <Text color={level === 'on' ? ON : level && level !== 'calm' ? LEVEL[level] : VALUE} {...infoColor(key, label)}>
+                    {value}
+                  </Text>
+                )}
               </Text>
             ))}
           </Text>

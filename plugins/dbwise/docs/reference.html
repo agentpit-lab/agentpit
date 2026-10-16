@@ -1,0 +1,1017 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>dbWise reference</title>
+<style>
+/* Layout: page sections on the left, the reading column in the middle, the glossary on the right;
+   the column opens with a TL;DR and an instrument (the thing explained, live), then sections that
+   each answer one question. Page chrome stays quiet: the plugins' own signal
+   colours (calm, watch, act) are the only loud colours on a page. */
+:root {
+  --bg: #f8f7f3;
+  --surface: #ffffff;
+  --surface-2: #f1efe8;
+  --ink: #1d1f1c;
+  --muted: #67695f;
+  --line: #e2dfd5;
+  --accent: #0b6a88;
+  --accent-ink: #ffffff;
+  --accent-soft: #e1eef2;
+  --focus: #0b6a88;
+
+  /* Signal colours as Claude Code Desktop draws them (plugins/pitboard/hooks/desktop.ts). */
+  --calm: #8a8a85;
+  --watch: #c4841d;
+  --act: #e0483e;
+  --cold: #2a9db5;
+  --on: #3d9a5c;
+  --watch-soft: #f6ead6;
+  --act-soft: #fadedb;
+
+  /* The specimen surfaces: a terminal and the Desktop app, each in its own theme. */
+  --term-bg: #fbfbf9;
+  --term-fg: #000000;
+  --term-line: #dcdcd6;
+  /* Claude Code's theme keys as its light and dark themes resolve them: the terminal row draws in
+     these keys, so a specimen shows the colours a reader's own terminal would. */
+  --term-text: #000000;
+  --term-inactive: #666666;
+  --term-subtle: #afafaf;
+  --term-warning: #966c1e;
+  --term-error: #ab2b3f;
+  --term-success: #2c7a39;
+  --term-planMode: #006666;
+  --term-suggestion: #5769f7;
+  --term-autoAccept: #8700ff;
+  --term-bashBorder: #ff0087;
+  --desk-bg: #ffffff;
+  --desk-fg: #2b2b29;
+  --desk-line: #e4e4df;
+
+  /* System faces only: a page loads nothing from outside its file. */
+  --font-display: "Iowan Old Style", Charter, "Bitstream Charter", "Sitka Text", Cambria, Georgia, serif;
+  --font-ui: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "Cascadia Mono", "JetBrains Mono", "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+
+  --step--1: 0.8125rem;
+  --step-0: 1rem;
+  --step-1: 1.1875rem;
+  --step-2: 1.5rem;
+  --step-3: 2.125rem;
+
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2.25rem;
+  --space-7: 3.5rem;
+
+  --radius: 6px;
+  --measure: 720px;
+  --page: 1120px;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #121413;
+    --surface: #1a1d1b;
+    --surface-2: #20231f;
+    --ink: #e8e6df;
+    --muted: #9d9f96;
+    --line: #30332e;
+    --accent: #55b6d3;
+    --accent-ink: #0b1a20;
+    --accent-soft: #173039;
+    --focus: #55b6d3;
+    --watch-soft: #3a2d15;
+    --act-soft: #3d1c19;
+    --desk-bg: #1e1f1d;
+    --desk-fg: #e6e5df;
+    --desk-line: #33342f;
+    --term-bg: #15181b;
+    --term-fg: #ffffff;
+    --term-line: #2c3136;
+    --term-text: #ffffff;
+    --term-inactive: #999999;
+    --term-subtle: #505050;
+    --term-warning: #ffc107;
+    --term-error: #ff6b80;
+    --term-success: #4eba65;
+    --term-planMode: #48968c;
+    --term-suggestion: #b1b9f9;
+    --term-autoAccept: #af87ff;
+    --term-bashBorder: #fd5db1;
+    color-scheme: dark;
+  }
+}
+
+:root[data-theme="dark"] {
+  --bg: #121413;
+  --surface: #1a1d1b;
+  --surface-2: #20231f;
+  --ink: #e8e6df;
+  --muted: #9d9f96;
+  --line: #30332e;
+  --accent: #55b6d3;
+  --accent-ink: #0b1a20;
+  --accent-soft: #173039;
+  --focus: #55b6d3;
+  --watch-soft: #3a2d15;
+  --act-soft: #3d1c19;
+  --desk-bg: #1e1f1d;
+  --desk-fg: #e6e5df;
+  --desk-line: #33342f;
+  --term-bg: #15181b;
+  --term-fg: #ffffff;
+  --term-line: #2c3136;
+  --term-text: #ffffff;
+  --term-inactive: #999999;
+  --term-subtle: #505050;
+  --term-warning: #ffc107;
+  --term-error: #ff6b80;
+  --term-success: #4eba65;
+  --term-planMode: #48968c;
+  --term-suggestion: #b1b9f9;
+  --term-autoAccept: #af87ff;
+  --term-bashBorder: #fd5db1;
+  color-scheme: dark;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font: 400 var(--step-0)/1.6 var(--font-ui);
+}
+img, svg { max-width: 100%; }
+[hidden] { display: none !important; }
+
+
+h1, h2, h3 { line-height: 1.2; text-wrap: balance; overflow-wrap: break-word; margin: 0; }
+h1, h2 { font-family: var(--font-display); font-weight: 500; letter-spacing: -0.005em; }
+h1 { font-size: var(--step-3); }
+h2 { font-size: var(--step-2); }
+h3 { font-size: var(--step-1); font-weight: 600; }
+p { margin: 0; }
+a { color: var(--accent); text-underline-offset: 2px; }
+code, kbd, .mono { font-family: var(--font-mono); font-size: 0.92em; }
+code { background: var(--surface-2); border: 1px solid var(--line); border-radius: 4px; padding: 0 0.3em; overflow-wrap: anywhere; }
+td code, th code { overflow-wrap: normal; }
+.card-quote { font-family: var(--font-mono); font-size: var(--step--1); background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--radius); padding: var(--space-2) var(--space-3); overflow-wrap: anywhere; }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 3px; }
+
+.eyebrow { font: 500 0.6875rem/1.4 var(--font-mono); letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+.lede { font-size: var(--step-1); color: var(--muted); }
+.muted { color: var(--muted); }
+.stack { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-4); }
+.stack-lg { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-6); }
+.row { display: flex; flex-wrap: wrap; gap: var(--space-3); align-items: center; }
+
+
+
+section { scroll-margin-top: var(--space-4); }
+.section-head { display: grid; gap: var(--space-2); margin-bottom: var(--space-4); }
+
+/* Panels: used only where an element is a separate object (an instrument, a card). */
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: var(--space-4); min-width: 0; }
+.grid-auto { display: grid; gap: var(--space-4); grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); }
+.split { display: grid; gap: var(--space-5); }
+
+/* Segmented switch. */
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface-2); padding: 2px; gap: 2px; }
+.seg button { font: inherit; font-size: var(--step--1); border: 0; background: transparent; color: var(--muted); padding: 0.3em 0.8em; border-radius: 4px; cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--surface); color: var(--ink); box-shadow: 0 0 0 1px var(--line); font-weight: 600; }
+.control { display: grid; gap: var(--space-1); }
+.control > .label { font-size: var(--step--1); color: var(--muted); }
+
+/* Chips: a choice among named states. */
+.chips { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.chip { font: inherit; font-size: var(--step--1); border: 1px solid var(--line); background: var(--surface); color: var(--ink); padding: 0.3em 0.75em; border-radius: 999px; cursor: pointer; display: inline-flex; gap: 0.4em; align-items: center; }
+.chip[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); }
+.dot { width: 0.6em; height: 0.6em; border-radius: 50%; background: var(--calm); display: inline-block; flex: none; }
+.dot.watch { background: var(--watch); }
+.dot.act { background: var(--act); }
+.dot.cold { background: var(--cold); }
+
+/* Level pill: state in form as well as words. */
+.pill { display: inline-flex; align-items: center; gap: 0.35em; font-size: var(--step--1); font-weight: 600; padding: 0.05em 0.6em; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); }
+.pill.watch { color: var(--watch); border-color: var(--watch); background: var(--watch-soft); }
+.pill.act { color: var(--act); border-color: var(--act); background: var(--act-soft); }
+
+/* Glossary terms: dotted underline, popover on hover, focus or tap. */
+.term { border-bottom: 1px dotted currentColor; cursor: help; }
+.popover { position: absolute; z-index: 20; max-width: min(340px, calc(100vw - 32px)); background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: 0 8px 24px rgb(0 0 0 / 0.18); padding: var(--space-3); font-size: var(--step--1); line-height: 1.5; }
+.popover strong { display: block; margin-bottom: var(--space-1); }
+
+/* Disclosure: what to do first, detail on demand. */
+details.more { border-top: 1px solid var(--line); padding-block: var(--space-3); }
+details.more > summary { cursor: pointer; font-weight: 600; list-style: none; display: flex; gap: var(--space-2); align-items: center; }
+details.more > summary::-webkit-details-marker { display: none; }
+details.more > summary::before { content: "+"; font-family: var(--font-mono); color: var(--accent); width: 1ch; }
+details.more[open] > summary::before { content: "\2212"; }
+details.more > .body { padding-top: var(--space-3); display: grid; gap: var(--space-3); }
+
+/* Key-value lists aligned on one column. */
+.kv { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: var(--space-1) var(--space-4); font-size: var(--step--1); margin: 0; }
+.kv dt { color: var(--muted); }
+.kv dd { margin: 0; font-variant-numeric: tabular-nums; }
+
+/* Range slider. */
+input[type="range"] { width: 100%; accent-color: var(--accent); }
+.slider { display: grid; gap: var(--space-1); }
+.slider .readout { display: flex; justify-content: space-between; font-size: var(--step--1); color: var(--muted); font-variant-numeric: tabular-nums; }
+.slider .readout b { color: var(--ink); font-weight: 600; }
+
+/* Tables that may run wider than a phone scroll inside their own box. */
+.table-wrap { overflow-x: auto; }
+.facts-list { columns: 9rem; column-gap: var(--space-4); list-style: none; margin: 0; padding: 0; }
+.facts-list li { break-inside: avoid; }
+table { border-collapse: collapse; width: 100%; font-size: var(--step--1); }
+th, td { text-align: left; padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--line); vertical-align: top; }
+th { color: var(--muted); font-weight: 600; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+
+/* A transcript of what Claude Code shows: monospace on the terminal surface. */
+.transcript { background: var(--term-bg); color: var(--term-fg); border-radius: var(--radius); padding: var(--space-3) var(--space-4); font: 0.875rem/1.55 var(--font-mono); overflow-x: auto; white-space: pre; }
+.transcript .dim { color: var(--term-inactive); }
+.transcript .hl { color: #e0b000; }
+
+.callout { display: grid; gap: var(--space-1); border-left: 3px solid var(--accent); padding: var(--space-1) var(--space-3); }
+
+footer.page-foot { margin-top: var(--space-7); padding-top: var(--space-4); border-top: 1px solid var(--line); font-size: var(--step--1); color: var(--muted); display: flex; flex-wrap: wrap; gap: var(--space-4); justify-content: space-between; }
+
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; scroll-behavior: auto !important; } }
+
+/* Steps: a real sequence, so numbered. */
+.steps { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-6); counter-reset: step; }
+.steps > li { display: grid; grid-template-columns: 2.25rem minmax(0, 1fr); gap: var(--space-4); counter-increment: step; }
+.steps > li::before { content: counter(step); width: 2.25rem; height: 2.25rem; border-radius: 50%; display: grid; place-items: center; font-weight: 700; color: var(--accent-ink); background: var(--accent); font-variant-numeric: tabular-nums; }
+.steps > li > div { display: grid; gap: var(--space-3); min-width: 0; }
+.cmd { display: flex; gap: var(--space-2); align-items: center; background: var(--term-bg); color: var(--term-fg); border-radius: var(--radius); padding: var(--space-2) var(--space-3); font: 0.9375rem/1.4 var(--font-mono); overflow-x: auto; }
+.cmd::before { content: "›"; color: var(--term-inactive); }
+
+.annot { display: grid; gap: var(--space-2); font-size: var(--step--1); }
+.annot { margin: 0; padding-left: 1.2em; }
+
+/* One grid for the whole series: sections, a content column of one width, the glossary column.
+   Every block in the content column spans it, so all edges line up on every page. */
+.doc { max-width: calc(190px + var(--measure) + 260px + 2 * var(--space-6) + 2 * var(--space-6)); margin: 0 auto; padding-inline: 16px; padding-block: var(--space-5) var(--space-7); display: grid; gap: var(--space-6); }
+.doc > * { min-width: 0; }
+.doc > main { width: 100%; max-width: var(--measure); }
+@media (min-width: 1180px) { .doc { grid-template-columns: 190px var(--measure) 260px; padding-inline: var(--space-6); justify-content: center; } }
+@media (min-width: 900px) and (max-width: 1179px) { .doc { grid-template-columns: 180px minmax(0, var(--measure)); padding-inline: var(--space-5); } }
+.side { display: grid; gap: var(--space-5); align-content: start; font-size: var(--step--1); }
+@media (min-width: 900px) { .side { position: sticky; top: var(--space-4); max-height: calc(100vh - 2rem); overflow-y: auto; } }
+.side nav ol { list-style: none; margin: 0; padding: 0 0 0 var(--space-3); border-left: 1px solid var(--line); display: grid; gap: var(--space-2); }
+.side nav a { color: var(--muted); text-decoration: none; }
+.side nav a:hover, .side nav a[aria-current="true"] { color: var(--ink); }
+.side nav a[aria-current="true"] { font-weight: 600; }
+.sources { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-1); font: 0.75rem/1.4 var(--font-mono); color: var(--muted); word-break: break-all; }
+@media (max-width: 899px) { .side nav ol { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-4); border: 0; padding: 0; } .side .sources-block { display: none; } }
+
+.glossary { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: var(--space-4); display: grid; gap: var(--space-3); align-content: start; }
+.glossary dl { margin: 0; display: grid; gap: var(--space-3); }
+.glossary dt { font: 500 var(--step-0)/1.3 var(--font-display); }
+.glossary dd { margin: 0; font-size: var(--step--1); color: var(--muted); line-height: 1.5; }
+.glossary .entry { border-radius: 4px; padding: var(--space-1) var(--space-2); margin-inline: calc(-1 * var(--space-2)); transition: background-color 0.15s; }
+.glossary .entry.is-hot { background: var(--accent-soft); }
+.glossary .entry.is-hot dd { color: var(--ink); }
+
+/* TL;DR: the page's answer before its detail. */
+.tldr { border: 1px solid var(--line); border-left: 3px solid var(--accent); background: var(--surface); border-radius: var(--radius); padding: var(--space-3) var(--space-4); }
+.tldr strong:first-child { margin-right: 0.35em; }
+.brand { display: grid; gap: var(--space-2); }
+/* Navigation uses the interface face; the serif belongs to the document's own headings. */
+.brand .mono { font: 500 0.6875rem/1.4 var(--font-mono); letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+.series { display: grid; gap: 2px; }
+.series a { font-size: var(--step--1); color: var(--muted); text-decoration: none; padding: 0.15em 0 0.15em var(--space-3); border-left: 2px solid transparent; }
+.series a:hover { color: var(--ink); }
+.series a[aria-current="page"] { color: var(--ink); font-weight: 600; border-left-color: var(--accent); }
+.page-head { display: grid; gap: var(--space-4); padding-bottom: var(--space-2); }
+.changed { font-size: var(--step--1); color: var(--muted); min-height: 1.5em; }
+.changed b { color: var(--ink); font-weight: 600; }
+
+/* Theme switch: icons, named for screen readers and on hover. */
+.theme-switch button { display: grid; place-items: center; width: 2rem; height: 1.75rem; padding: 0; }
+.theme-switch svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* A pair of specimens: the same moment in the CLI and in Desktop. */
+.pair { display: grid; gap: var(--space-2); }
+.pair .surface-label { font: 500 0.6875rem/1 var(--font-mono); letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+
+/* The specimen: a terminal or the Desktop app, in its own theme whatever the page's. */
+.specimen { display: grid; gap: var(--space-2); }
+.specimen-frame { overflow-x: auto; border-radius: var(--radius); }
+.specimen-hint { font-size: var(--step--1); color: var(--muted); }
+.cli { background: var(--term-bg); color: var(--term-fg); font: 0.9375rem/1.5 var(--font-mono); padding: var(--space-3) var(--space-4); white-space: pre; width: max-content; min-width: 100%; }
+
+.desk { background: var(--desk-bg); color: var(--desk-fg); border: 1px solid var(--desk-line); border-radius: var(--radius); padding: var(--space-2) var(--space-3); width: max-content; min-width: 100%; }
+.svg { display: inline-flex; line-height: 0; }
+.svg svg { display: block; }
+
+.specimen, .specimen-frame, .pair { min-width: 0; }
+
+/* Terms with their meaning, read down one column. */
+.term-list { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: var(--space-3) var(--space-5); margin: 0; }
+.term-list dt { font: 500 var(--step-1)/1.3 var(--font-display); }
+.term-list dd { margin: 0; display: grid; gap: var(--space-1); }
+@media (max-width: 600px) { .term-list { grid-template-columns: minmax(0, 1fr); gap: var(--space-1); } .term-list dd { margin-bottom: var(--space-3); } }
+.side .theme-switch { justify-self: start; }
+
+/* List and detail: moments in order on the left, the chosen one in full on the right. */
+.md { display: grid; gap: var(--space-4); }
+@media (min-width: 640px) { .md { grid-template-columns: 172px minmax(0, 1fr); align-items: start; } }
+.md-list, .md-detail { display: grid; gap: var(--space-3); min-width: 0; }
+.sit-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; border-left: 1px solid var(--line); }
+.sit-item { display: grid; gap: 1px; padding: var(--space-2) var(--space-3); margin-left: -1px; border-left: 2px solid transparent; cursor: pointer; border-radius: 0 4px 4px 0; }
+.sit-item:hover { background: var(--surface-2); }
+.sit-item[aria-selected="true"] { border-left-color: var(--accent); background: var(--accent-soft); }
+.sit-time { font: 500 0.6875rem/1.2 var(--font-mono); color: var(--muted); font-variant-numeric: tabular-nums; }
+.sit-name { display: flex; gap: 0.45em; align-items: baseline; font-size: var(--step--1); line-height: 1.35; }
+.sit-name .dot { flex: none; transform: translateY(-1px); }
+.md-panel { display: grid; gap: var(--space-3); }
+.surface-head { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-3); align-items: center; justify-content: space-between; }
+.desk-fit { overflow: hidden; }
+.desk-fit > .desk { transform-origin: left top; width: max-content; }
+.small-seg button { font-size: 0.75rem; padding: 0.15em 0.6em; }
+/* Specimen trees: the plugin's boxes and runs. */
+.tbox { display: flex; min-width: 0; }
+.cli .tbox, .cli span { white-space: pre; }
+.cli .dim { opacity: 0.62; }
+.desk .dim { opacity: 0.62; }
+.cli .italic, .desk .italic { font-style: italic; }
+.cli .strike, .desk .strike { text-decoration: line-through; }
+.btn { cursor: pointer; }
+.reading { cursor: pointer; border-radius: 3px; }
+.reading[aria-pressed="true"] { outline: 1px solid var(--accent); outline-offset: 1px; }
+.reading:hover { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+/* Wide figures: text keeps the content column; a live row or a chart also takes the empty column on
+   its right, the same on every page of the series. */
+@media (min-width: 1180px) { .wide { margin-right: calc(-1 * (260px + var(--space-6))); } }
+
+/* The glossary drawer: over the page's right side, on demand. */
+.drawer { position: fixed; top: 0; right: 0; bottom: 0; width: min(360px, 100vw); z-index: 30; border-radius: 0; border-width: 0 0 0 1px; box-shadow: -12px 0 32px rgb(0 0 0 / 0.16); overflow-y: auto; padding-block: calc(var(--space-4) + env(safe-area-inset-top, 0px)) var(--space-6); }
+.drawer-head { display: flex; justify-content: space-between; align-items: center; }
+.drawer-close { font: 400 1.5rem/1 var(--font-ui); background: transparent; border: 0; color: var(--muted); cursor: pointer; padding: 0 var(--space-1); }
+.drawer-open { justify-self: start; font: 500 var(--step--1) var(--font-ui); color: var(--accent); background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 0.35em 0.9em; cursor: pointer; }
+.drawer-open[aria-expanded="true"] { border-color: var(--accent); background: var(--accent-soft); }
+
+/* Document components. Each works from its markup alone; the script only adds controls
+   (filter bar, copy buttons, walker, panel tabs), and every one of them is absent without scripts. */
+
+/* Entry card: one symptom, one limit, one term; parts carry their label as data-label. */
+article.entry { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-3); background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: var(--space-4); min-width: 0; }
+article.entry h3 { overflow-wrap: anywhere; }
+article.entry > .part { display: grid; gap: var(--space-1); min-width: 0; }
+.part[data-label]::before, .callout[data-label]::before, .seg-panel[data-label]::before { content: attr(data-label); font: 500 0.6875rem/1.4 var(--font-mono); letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+.part > ul, .part > ol { margin: 0; padding-left: 1.2em; }
+
+/* Filter bar over a list of entries: a search box, tag chips, a live count. */
+.filter-bar { display: grid; gap: var(--space-3); }
+.filter-box { font: inherit; font-size: var(--step--1); color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 0.4em 0.75em; width: 100%; max-width: 24rem; }
+.filter-count { font-size: var(--step--1); color: var(--muted); }
+
+/* Copy button over a block of commands or text. */
+.copy-wrap { position: relative; min-width: 0; }
+.copy-btn { position: absolute; top: var(--space-1); right: var(--space-1); font: 500 0.75rem/1 var(--font-ui); color: var(--term-fg); background: transparent; border: 1px solid var(--term-inactive); border-radius: 4px; padding: 0.35em 0.6em; cursor: pointer; opacity: 0.8; }
+.copy-btn:hover, .copy-btn:focus-visible { opacity: 1; }
+pre[data-lang] { background: var(--term-bg); color: var(--term-fg); border-radius: var(--radius); padding: var(--space-3) var(--space-4); font: 0.875rem/1.55 var(--font-mono); overflow-x: auto; margin: 0; }
+.copy-wrap > .cmd, .copy-wrap > pre, .copy-wrap > .transcript { padding-right: 5rem; }
+
+/* Figure: an inline SVG coloured through the theme tokens, its caption and its text form. */
+figure.diagram { margin: 0; display: grid; gap: var(--space-3); }
+figure.diagram svg { width: 100%; height: auto; }
+figure.diagram figcaption { font-size: var(--step--1); color: var(--muted); }
+figure.diagram .text-form { margin: 0; padding-left: 1.4em; font-size: var(--step--1); color: var(--muted); display: grid; gap: var(--space-1); }
+figure.diagram .node { fill: var(--surface); stroke: var(--line); stroke-width: 1.5; }
+figure.diagram .node.accent { stroke: var(--accent); fill: var(--accent-soft); }
+figure.diagram .edge { fill: none; stroke: var(--muted); stroke-width: 1.5; }
+figure.diagram text { fill: var(--ink); font: 400 13px var(--font-ui); }
+figure.diagram text.muted { fill: var(--muted); }
+
+/* Decision walker: the nested list stays for readers without scripts; with scripts one node at a time. */
+ol.walker, ol.walker ol { padding-left: 1.4em; display: grid; gap: var(--space-2); }
+.walker-view { display: grid; gap: var(--space-3); border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); padding: var(--space-4); }
+.walker-view:focus { outline: none; }
+.walker-text { display: grid; gap: var(--space-2); font-size: var(--step-1); }
+.walker-options, .walker-controls { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.walker-controls button { font: inherit; font-size: var(--step--1); color: var(--accent); background: transparent; border: 0; padding: 0.2em 0; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
+.walker-controls button:disabled { color: var(--muted); cursor: default; text-decoration: none; }
+
+/* Segmented panels: every panel shows without scripts, headed by its label; with scripts one at a time. */
+.seg-panels { display: grid; gap: var(--space-3); }
+.seg-panel { display: grid; gap: var(--space-2); min-width: 0; }
+.seg-panels.is-tabbed > .seg-panel::before { display: none; }
+.seg-panels > .seg { justify-self: start; }
+
+/* A decision walker's outcome takes the colour of its exit: start, wait or stop. */
+.walker-view[data-outcome] { border-left: 4px solid var(--outcome, var(--line)); }
+.walker-view[data-outcome="start"] { --outcome: var(--on); }
+.walker-view[data-outcome="wait"] { --outcome: var(--watch); }
+.walker-view[data-outcome="stop"] { --outcome: var(--act); }
+
+/* Count bar: one link per group, as wide as the group has entries. */
+.count-bar { display: flex; flex-wrap: wrap; gap: 2px; }
+.count-seg { flex-basis: 6rem; min-width: 0; display: grid; gap: 1px; padding: var(--space-2) var(--space-3); background: var(--accent-soft); border-bottom: 3px solid var(--accent); border-radius: 4px 4px 0 0; color: var(--ink); text-decoration: none; font-size: var(--step--1); line-height: 1.3; }
+.count-seg:hover { background: var(--surface-2); }
+.count-n { font: 600 var(--step-1)/1.1 var(--font-display); font-variant-numeric: tabular-nums; }
+.count-name { overflow-wrap: anywhere; }
+
+/* Level scale: a track per reading, zones calm, watch and act, the values where it changes marked under it. */
+.scale-list { display: grid; gap: var(--space-3); }
+.scale-row { display: grid; gap: var(--space-2); }
+@media (min-width: 720px) { .scale-row { grid-template-columns: 200px minmax(0, 1fr); align-items: center; } }
+.scale-name { font-size: var(--step--1); }
+.scale-track { position: relative; height: 34px; margin-right: 1.5rem; }
+.scale-zone { position: absolute; top: 0; height: 12px; }
+.scale-zone.calm { background: color-mix(in srgb, var(--calm) 35%, transparent); border-radius: 3px 0 0 3px; }
+.scale-zone.watch { background: var(--watch); }
+.scale-zone.act { background: var(--act); border-radius: 0 3px 3px 0; }
+.scale-mark { position: absolute; top: 14px; transform: translateX(-50%); font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.scale-mark::before { content: ""; position: absolute; left: 50%; top: -14px; height: 14px; border-left: 1px solid var(--ink); }
+.scale-legend { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-4); font-size: var(--step--1); color: var(--muted); }
+.scale-legend li { display: flex; align-items: center; gap: var(--space-2); }
+</style>
+</head>
+<body>
+<div class="doc">
+  <aside class="side">
+    <div class="brand"><span class="mono">dbWise</span><nav class="series" aria-label="pages in this series"><a href="getting-started.html">Getting started</a><a href="how-to.html">How-to guides</a><a href="explanation.html">Explanation</a><a href="reference.html" aria-current="page">Reference</a><a href="troubleshooting.html">Troubleshooting</a><a href="limitations.html">Limitations</a></nav></div>
+    <nav data-pb-nav aria-label="Sections"><ol><li><a href="#commands">Commands</a></li><li><a href="#levels-and-tools">Levels and tools</a></li><li><a href="#configuration-format">Configuration format</a></li><li><a href="#files">Files</a></li><li><a href="#environment-variables">Environment variables</a></li><li><a href="#exit-codes">Exit codes</a></li><li><a href="#the-role-gate">The role gate</a></li><li><a href="#vault">Vault</a></li><li><a href="#requirements">Requirements</a></li></ol></nav>
+    <div data-pb-theme></div>
+  </aside>
+
+  <main class="stack-lg">
+    <header class="page-head stack">
+      <h1 id="dbwise-reference">dbWise reference</h1>
+      <p>The commands, the tools and their levels, the configuration format, the files and environment variables dbWise uses, the exit codes, and the texts the role gate and the tools answer with. The tables come from the plugin&#x27;s code: <code>python .ci/docs_facts.py build</code> writes its facts, and <code>python .ci/pages.py build</code> writes the tables from them. What dbWise cannot do is in <a href="limitations.html">Limitations</a>.</p>
+      <p>In this page, <code>&lt;home&gt;</code> is dbWise&#x27;s home directory: <code>$DBWISE_HOME</code>, else <code>~/.dbwise</code>.</p>
+    </header>
+    <section class="stack" id="commands">
+      <h2>Commands</h2>
+      <p>Run the commands in a terminal, or let the agent run them through its Bash tool, except where a password is typed. Inside a session, the plugin&#x27;s <code>bin/</code> directory is on the <code>PATH</code> of the Bash tool.</p>
+      <div class="table-wrap"><table><thead><tr><th scope="col">Command</th><th scope="col">What it does</th></tr></thead><tbody><tr><td><code>dbwise alias</code></td><td>the names a tool call uses to pick a server and a level</td></tr><tr><td><code>dbwise alias add</code></td><td>add or replace an alias</td></tr><tr><td><code>dbwise alias rm</code></td><td>remove an alias</td></tr><tr><td><code>dbwise alias list</code></td><td>list aliases with their level and credential per level</td></tr><tr><td><code>dbwise server</code></td><td>database endpoints</td></tr><tr><td><code>dbwise server add</code></td><td>add or replace a server</td></tr><tr><td><code>dbwise server rm</code></td><td>remove a server no alias uses</td></tr><tr><td><code>dbwise server list</code></td><td>list servers</td></tr><tr><td><code>dbwise credential</code></td><td>database logins</td></tr><tr><td><code>dbwise credential add</code></td><td>add or replace a credential (keychain password by default)</td></tr><tr><td><code>dbwise credential rm</code></td><td>remove a credential no alias uses</td></tr><tr><td><code>dbwise credential list</code></td><td>list credentials and their password sources</td></tr><tr><td><code>dbwise import</code></td><td>merge a team file into the local config, then ask missing passwords</td></tr><tr><td><code>dbwise export</code></td><td>write the local config, or part of it, as a team file</td></tr><tr><td><code>dbwise set-password</code></td><td>type a credential&#x27;s password into the OS keychain, or point the credential to an env or file source</td></tr><tr><td><code>dbwise doctor</code></td><td>check the keychain, the venv and every alias, and name the fix for each problem</td></tr></tbody></table></div>
+      <ul>
+        <li><code>dbwise credential add NAME --user U</code> leaves the password to <code>dbwise set-password NAME</code>, which asks for it in a terminal that hides typed input and stores it in the OS keychain. With <code>--password-env VAR</code> or <code>--password-file PATH</code> the credential reads its password from the environment of the Claude Code process or from a file instead.</li>
+        <li><code>dbwise alias add ALIAS SERVER --level LEVEL --credential NAME</code> takes one <code>--credential NAME</code>, which serves every level up to the alias&#x27;s level, or <code>--credential LEVEL=NAME</code> once for each level from <code>read</code> up to the alias&#x27;s level.</li>
+        <li><code>dbwise import FILE</code> merges a team file into the local config. With <code>--from-vault</code> it also fills the values the file maps to Vault. With <code>--prune</code> it removes what the file does not list. Every command that changes the config keeps the previous file as <code>config.json.bak</code>.</li>
+        <li>The server reads the config once when it starts: after a change, reconnect <code>plugin:dbwise:postgres</code> in <code>/mcp</code> or start a new session.</li>
+      </ul>
+    </section>
+    <section class="stack" id="levels-and-tools">
+      <h2>Levels and tools</h2>
+      <p>An alias has one of three levels, <code>read</code> (the default), <code>diagnose</code> and <code>write</code>. A tool has a level, or none. A call is allowed when the tool&#x27;s level is at or below the alias&#x27;s level, and it connects with the alias&#x27;s credential for the tool&#x27;s level. A tool without a level is offered on every alias and uses the <code>read</code> credential.</p>
+      <div class="table-wrap"><table><thead><tr><th scope="col">Tool</th><th scope="col">Level</th><th scope="col">Callable on aliases at</th></tr></thead><tbody><tr><td><code>list_databases</code></td><td>any</td><td>read, diagnose, write</td></tr><tr><td><code>reconnect</code></td><td>any</td><td>read, diagnose, write</td></tr><tr><td><code>list_schemas</code></td><td>read</td><td>read, diagnose, write</td></tr><tr><td><code>list_objects</code></td><td>read</td><td>read, diagnose, write</td></tr><tr><td><code>get_object_details</code></td><td>read</td><td>read, diagnose, write</td></tr><tr><td><code>read_sql</code></td><td>read</td><td>read, diagnose, write</td></tr><tr><td><code>explain_query</code></td><td>diagnose</td><td>diagnose, write</td></tr><tr><td><code>get_top_queries</code></td><td>diagnose</td><td>diagnose, write</td></tr><tr><td><code>analyze_db_health</code></td><td>diagnose</td><td>diagnose, write</td></tr><tr><td><code>analyze_workload_indexes</code></td><td>diagnose</td><td>diagnose, write</td></tr><tr><td><code>analyze_query_indexes</code></td><td>diagnose</td><td>diagnose, write</td></tr><tr><td><code>diagnose_sql</code></td><td>diagnose</td><td>diagnose, write</td></tr><tr><td><code>write_sql</code></td><td>write</td><td>write</td></tr></tbody></table></div>
+      <p>A server registers a tool only when at least one alias admits it, and each description starts with <code>Level: &lt;level&gt;. Aliases: &lt;the aliases that admit it, with their levels&gt;.</code></p>
+      <div class="table-wrap"><table>
+        <thead><tr>
+          <th scope="col">Tool</th>
+          <th scope="col">What it does</th>
+        </tr></thead>
+        <tbody>
+          <tr><td><code>list_databases</code></td><td>Lists every alias with its level, databases, reachability, role check mode and the reasons of the role check</td></tr>
+          <tr><td><code>reconnect</code></td><td>Probes unreachable aliases again with their <code>read</code> credential, or one alias when <code>alias</code> is given</td></tr>
+          <tr><td><code>list_schemas</code>, <code>list_objects</code>, <code>get_object_details</code></td><td>Describe schemas, objects and one object in detail</td></tr>
+          <tr><td><code>read_sql</code></td><td>Runs one or more SELECT or SHOW statements</td></tr>
+          <tr><td><code>explain_query</code></td><td>Shows the execution plan; with <code>analyze</code> it executes the SELECT, with its full load, inside a transaction that is rolled back</td></tr>
+          <tr><td><code>get_top_queries</code></td><td>Reports the most expensive queries from <code>pg_stat_statements</code></td></tr>
+          <tr><td><code>analyze_db_health</code></td><td>Index, connection, vacuum, sequence, replication, buffer-cache and constraint checks</td></tr>
+          <tr><td><code>analyze_workload_indexes</code>, <code>analyze_query_indexes</code></td><td>Recommend indexes with the database tuning advisor, using <code>hypopg</code></td></tr>
+          <tr><td><code>diagnose_sql</code></td><td>Runs what <code>read_sql</code> runs, plus EXPLAIN with ANALYZE, and reads the statistics the diagnose role can see</td></tr>
+          <tr><td><code>write_sql</code></td><td>Runs any SQL with the <code>write</code> credential and commits it</td></tr>
+        </tbody>
+      </table></div>
+      <p>Each query text a tool sends starts with a comment, <code>/* dbwise read */</code>, <code>/* dbwise diagnose */</code> or <code>/* dbwise write */</code>, so a DBA reading <code>pg_stat_activity</code> or <code>pg_stat_statements</code> can see which level sent it. The comment is added once in front of each query text a tool sends. <code>read_sql</code> and <code>write_sql</code> send their whole text as one query, so with several statements <code>pg_stat_activity</code> shows the comment once at the start, while <code>pg_stat_statements</code> splits the text and only the first statement carries it. Only the leading <code>/* dbwise &lt;level&gt; */</code> comment is authoritative. A query can carry its own comment of the same shape later in its text, and that one says nothing about the level.</p>
+      <p>A call at <code>read</code> or <code>diagnose</code> stops after 30 seconds, on the server through <code>statement_timeout</code> and at the client. <code>write</code> has no timeout.</p>
+      <p>When a call is refused for its level, the text reads <code>Error: Alias &#x27;&lt;alias&gt;&#x27; is at level &#x27;&lt;level&gt;&#x27;, but this tool is at level &#x27;&lt;level&gt;&#x27;. Nothing was sent to the database.</code> and no connection is opened.</p>
+    </section>
+    <section class="stack" id="configuration-format">
+      <h2>Configuration format</h2>
+      <p><code>&lt;home&gt;/config.json</code> and a team file share one format. Neither holds a password, only a reference to where one lives; a <code>password</code> key whose value is a string is refused at any depth, except inside the <code>fields</code> of a Vault mapping, where <code>&quot;password&quot;: &quot;&lt;secret key&gt;&quot;</code> names the key that holds it. Names of credentials, servers and aliases start with a letter or a digit and continue with letters, digits, <code>.</code>, <code>_</code> or <code>-</code>. <a href="../examples/team.example.json"><code>examples/team.example.json</code></a> is a complete team file.</p>
+      <div class="table-wrap"><table>
+        <thead><tr>
+          <th scope="col">Path</th>
+          <th scope="col">Meaning</th>
+        </tr></thead>
+        <tbody>
+          <tr><td><code>dbwise</code></td><td>The schema version, <code>1</code>. Required</td></tr>
+          <tr><td><code>vault</code></td><td>Optional. Where <code>import --from-vault</code> reads: <code>addr</code> and <code>mount</code> (both required in the section), <code>namespace</code>, and <code>login</code>, the <code>vault login</code> method (default <code>oidc</code>)</td></tr>
+          <tr><td><code>credentials.&lt;name&gt;.user</code></td><td>The database user. Required, unless a Vault mapping supplies it</td></tr>
+          <tr><td><code>credentials.&lt;name&gt;.password</code></td><td>Optional. Where the password lives: <code>{&quot;keyring&quot;: {}}</code> (the default), <code>{&quot;env&quot;: &quot;VAR&quot;}</code> or <code>{&quot;file&quot;: &quot;PATH&quot;}</code></td></tr>
+          <tr><td><code>credentials.&lt;name&gt;.vault</code></td><td>Optional. A Vault mapping; <code>path</code> and <code>fields</code> are required in it, and <code>fields</code> names the secret keys holding <code>user</code> and <code>password</code></td></tr>
+          <tr><td><code>servers.&lt;name&gt;.engine</code></td><td>The database engine. Required; <code>postgresql</code> is the only one</td></tr>
+          <tr><td><code>servers.&lt;name&gt;.host</code>, <code>dbname</code>, <code>databases</code></td><td>The endpoint. All three are required, but a Vault mapping may supply <code>host</code> and <code>databases</code> instead. <code>dbname</code> is the discovery database, <code>databases</code> the non-empty list the agent may use</td></tr>
+          <tr><td><code>servers.&lt;name&gt;.port</code>, <code>sslmode</code></td><td>Optional. <code>port</code> defaults to 5432, <code>sslmode</code> to <code>require</code> (also <code>disable</code>, <code>allow</code>, <code>prefer</code>, <code>verify-ca</code>, <code>verify-full</code>)</td></tr>
+          <tr><td><code>servers.&lt;name&gt;.role_check</code></td><td>Optional: <code>enforce</code> (the default) or <code>warn</code>. See <a href="#the-role-gate">the role gate</a></td></tr>
+          <tr><td><code>servers.&lt;name&gt;.vault</code></td><td>Optional. A Vault mapping that may fill <code>host</code>, <code>port</code> and <code>databases</code></td></tr>
+          <tr><td><code>aliases.&lt;alias&gt;.server</code></td><td>The server the alias reaches. Required</td></tr>
+          <tr><td><code>aliases.&lt;alias&gt;.level</code></td><td>Optional: <code>read</code> (the default), <code>diagnose</code> or <code>write</code></td></tr>
+          <tr><td><code>aliases.&lt;alias&gt;.credential</code></td><td>Required. A credential name, or a map from level to credential name that names every level from <code>read</code> up to the alias&#x27;s level and none above it</td></tr>
+        </tbody>
+      </table></div>
+      <p>A credential is identified by its name, not by its user. A keychain entry has the service <code>dbwise</code> and the credential&#x27;s name as its username, so two credentials with the same user keep two passwords.</p>
+    </section>
+    <section class="stack" id="files">
+      <h2>Files</h2>
+      <div class="table-wrap"><table>
+        <thead><tr>
+          <th scope="col">File</th>
+          <th scope="col">What it holds</th>
+        </tr></thead>
+        <tbody>
+          <tr><td><code>&lt;home&gt;/config.json</code></td><td>The local configuration. <code>config.json.bak</code> is the previous version</td></tr>
+          <tr><td><code>&lt;home&gt;/venvs/&lt;12 hex digits&gt;/</code></td><td>The Python environment, one for each version of <code>requirements.txt</code>, named after the start of its SHA-256. A build removes environments unused for 14 days</td></tr>
+          <tr><td><code>&lt;home&gt;/bootstrap.log</code></td><td>The log of the environment build, including pip&#x27;s output</td></tr>
+          <tr><td><code>&lt;home&gt;/bootstrap.lock</code></td><td>The lock that keeps two builds apart</td></tr>
+          <tr><td><code>&lt;home&gt;/hook.log</code></td><td>A failure of the SessionStart hook&#x27;s check</td></tr>
+          <tr><td>OS keychain, service <code>dbwise</code></td><td>One password for each credential that uses the keychain, under the credential&#x27;s name</td></tr>
+          <tr><td>A password file</td><td>The file a <code>{&quot;file&quot;: PATH}</code> source names. On macOS and Linux it must not be accessible to group or others (<code>chmod 600</code>); on Windows it must lie under the user profile</td></tr>
+        </tbody>
+      </table></div>
+    </section>
+    <section class="stack" id="environment-variables">
+      <h2>Environment variables</h2>
+      <div class="table-wrap"><table><thead><tr><th scope="col">Variable</th></tr></thead><tbody><tr><td><code>CLAUDE_PLUGIN_ROOT</code></td></tr><tr><td><code>DBWISE_ALIASES</code></td></tr><tr><td><code>DBWISE_BUILD_COMMAND</code></td></tr><tr><td><code>DBWISE_HOME</code></td></tr><tr><td><code>PATH</code></td></tr><tr><td><code>PATHEXT</code></td></tr><tr><td><code>VAULT_TOKEN</code></td></tr></tbody></table></div>
+      <div class="table-wrap"><table>
+        <thead><tr>
+          <th scope="col">Variable</th>
+          <th scope="col">Use</th>
+        </tr></thead>
+        <tbody>
+          <tr><td><code>DBWISE_HOME</code></td><td>Replaces <code>~/.dbwise</code></td></tr>
+          <tr><td><code>DBWISE_ALIASES</code></td><td>A comma-separated list of aliases the server offers; the others are left out. Names that are not aliases are ignored with a warning. Set it in the environment Claude Code starts in, to restrict one project</td></tr>
+          <tr><td><code>DBWISE_BUILD_COMMAND</code></td><td>A path to a script that the stub server runs in place of the bootstrap build; for tests</td></tr>
+          <tr><td><code>CLAUDE_PLUGIN_ROOT</code></td><td>Set by Claude Code; the plugin&#x27;s directory</td></tr>
+          <tr><td><code>PATH</code>, <code>PATHEXT</code></td><td>Where the <code>vault</code> CLI is looked up: only absolute <code>PATH</code> entries count</td></tr>
+          <tr><td><code>VAULT_TOKEN</code></td><td>A Vault token the <code>vault</code> CLI uses. It takes precedence over the token a login writes</td></tr>
+          <tr><td><code>&lt;VAR&gt;</code> named by a <code>{&quot;env&quot;: &quot;VAR&quot;}</code> source</td><td>The password itself</td></tr>
+        </tbody>
+      </table></div>
+      <p>dbWise sets <code>VAULT_ADDR</code> and <code>VAULT_NAMESPACE</code> for the <code>vault</code> CLI it runs, from the <code>vault</code> section, so the section wins over the same variables in your shell. <code>PYTHON_KEYRING_BACKEND</code>, if set, selects the keychain backend of the <code>keyring</code> package; unset it when dbWise reports no usable keychain.</p>
+    </section>
+    <section class="stack" id="exit-codes">
+      <h2>Exit codes</h2>
+      <div class="table-wrap"><table>
+        <thead><tr>
+          <th scope="col">Command</th>
+          <th scope="col">Code</th>
+          <th scope="col">Meaning</th>
+        </tr></thead>
+        <tbody>
+          <tr><td><code>dbwise ...</code></td><td>0</td><td>Done</td></tr>
+          <tr><td></td><td>1</td><td>The command refused or failed; the text on stderr says why. For <code>dbwise import --from-vault</code>, also a problem it listed after the import</td></tr>
+          <tr><td></td><td>2</td><td>A usage error in the arguments</td></tr>
+          <tr><td><code>dbwise doctor</code></td><td>0</td><td>The <code>VERDICT:</code> line reads <code>ready</code></td></tr>
+          <tr><td></td><td>1</td><td>The verdict lists problems</td></tr>
+          <tr><td><code>bin/dbwise</code></td><td>1</td><td>No Python 3.12 to 3.14 found, or the bootstrap refused the platform or failed the build</td></tr>
+          <tr><td><code>bin/dbwise-mcp</code></td><td>1</td><td>No Python 3.12 to 3.14 found, or, once the environment is built, <code>config.json</code> cannot be used (see <a href="limitations.html#an-invalid-configjson-stops-the-server">Limitations</a>)</td></tr>
+          <tr><td></td><td>0</td><td>The server, or the stub before the first build, ended at the end of its input. A refused platform or a failed build does not end it: the stub reports through <code>dbwise_status</code></td></tr>
+          <tr><td><code>bootstrap.py</code></td><td>2</td><td>No mode, an unknown mode, or <code>--run-mcp</code> without an engine</td></tr>
+          <tr><td>SessionStart hook</td><td>0</td><td>Always, also when its check fails; the failure goes to <code>hook.log</code></td></tr>
+          <tr><td></td><td>127</td><td>There is no <code>python3</code> or <code>python</code> on the <code>PATH</code></td></tr>
+        </tbody>
+      </table></div>
+    </section>
+    <section class="stack" id="the-role-gate">
+      <h2>The role gate</h2>
+      <p>When a pool opens for an alias at <code>read</code> or <code>diagnose</code>, the server runs one query as the pool&#x27;s role, in the database of the pool, and refuses the alias when the role holds more than its level allows. At start-up the server opens a discovery pool on the database <code>dbname</code> too, with the same gate, so the role is checked there as well. A <code>write</code> alias has no gate. With <code>&quot;role_check&quot;: &quot;warn&quot;</code> on the server, the reasons become warnings, listed by <code>list_databases</code>, and the alias opens. The tool descriptions only say that the role check is relaxed. <code>dbwise doctor</code> runs the same query for each credential and database, and for the <code>read</code> credential in the server&#x27;s discovery database when the alias&#x27;s list does not name it, then adds findings that refuse nothing.</p>
+      <p>A refusal reads <code>Access refused by the role check of alias &#x27;&lt;alias&gt;&#x27;: &lt;reason&gt;; &lt;reason&gt;</code>. The reasons:</p>
+      <div data-pb-filter="#role-gate-table tbody tr" data-label="Search the refusal reasons" data-count="{shown} of {total} reasons" data-text="skip"></div>
+      <div id="role-gate-table"><div class="table-wrap"><table>
+        <thead><tr>
+          <th scope="col">Reason</th>
+          <th scope="col">What clears it</th>
+        </tr></thead>
+        <tbody>
+          <tr><td>the role is a superuser; has BYPASSRLS, CREATEROLE, CREATEDB or REPLICATION</td><td>Use a role without the attribute</td></tr>
+          <tr><td>the role is a member of predefined role(s) <code>pg_write_all_data</code>, <code>pg_signal_backend</code>, <code>pg_maintain</code>, <code>pg_read_server_files</code>, <code>pg_write_server_files</code>, <code>pg_execute_server_program</code>, <code>pg_checkpoint</code> or <code>pg_create_subscription</code></td><td><code>REVOKE</code> the membership</td></tr>
+          <tr><td>the role is a member of non-predefined role(s) ...</td><td><code>REVOKE</code> the membership; membership lets the role cancel and terminate that role&#x27;s sessions and passes on what that role owns</td></tr>
+          <tr><td>the role owns the current database, relations, functions or schemas of this database</td><td>Give the objects to another role</td></tr>
+          <tr><td>the role holds a write privilege on relation(s) ... (at most 3 are listed); a column-level INSERT or UPDATE grant counts</td><td><code>REVOKE</code> INSERT, UPDATE, DELETE, TRUNCATE (or MAINTAIN on PostgreSQL 17 and later) on tables, including the column-level INSERT and UPDATE grants, and USAGE and UPDATE on sequences, from the role and from <code>PUBLIC</code></td></tr>
+          <tr><td>the role can execute functions of the dblink extension; has USAGE on a foreign server</td><td><code>REVOKE EXECUTE ... FROM PUBLIC</code> on the <code>dblink</code> functions of that database, and <code>REVOKE USAGE</code> on the foreign server</td></tr>
+          <tr><td>at <code>read</code>: the role is a member of <code>pg_monitor</code>, <code>pg_read_all_stats</code> or <code>pg_stat_scan_tables</code>, which belong to the diagnose level</td><td>Use the monitoring roles on the <code>diagnose</code> credential only</td></tr>
+        </tbody>
+      </table></div></div>
+      <p>Roles in <code>pg_*</code> that are not in the list above, such as <code>pg_read_all_data</code>, are accepted.</p>
+    </section>
+    <section class="stack" id="vault">
+      <h2>Vault</h2>
+      <p><code>dbwise import --from-vault</code> reads secrets through the <code>vault</code> CLI, which must be on an absolute <code>PATH</code> entry. The CLI uses the address, namespace, mount and login method of the config&#x27;s <code>vault</code> section.</p>
+      <ul>
+        <li>The address a team file names in its <code>vault</code> section receives the operator&#x27;s Vault token, so read a team file like code before its first <code>import --from-vault</code>. dbWise accepts <code>https://</code> addresses, and <code>http://</code> only for <code>localhost</code>, <code>127.0.0.1</code> and <code>[::1]</code>.</li>
+        <li>The <code>login</code> method name may hold only letters, digits, <code>.</code>, <code>_</code> and <code>-</code>.</li>
+        <li>A mapping may fill <code>user</code> and <code>password</code> of a credential, and <code>host</code>, <code>port</code> and <code>databases</code> of a server. A password goes to the OS keychain only, never to the config.</li>
+        <li>A login with the default <code>oidc</code> method can be started by the agent; the sign-in finishes in the browser. Other methods ask for input and need a terminal.</li>
+      </ul>
+    </section>
+    <section class="stack" id="requirements">
+      <h2>Requirements</h2>
+      <div class="table-wrap"><table>
+        <thead><tr>
+          <th scope="col">Requirement</th>
+          <th scope="col">Needed for</th>
+        </tr></thead>
+        <tbody>
+          <tr><td>Python 3.12 to 3.14 on the <code>PATH</code></td><td>The launchers, the bootstrap and the CLI</td></tr>
+          <tr><td>Access to PyPI (or a mirror pip is set up for) on the first start</td><td>Building the Python environment</td></tr>
+          <tr><td>An OS keychain, or an environment-variable or file password source</td><td>Passwords</td></tr>
+          <tr><td>The <code>vault</code> CLI</td><td><code>dbwise import --from-vault</code></td></tr>
+          <tr><td><code>pg_stat_statements</code> in the database</td><td><code>get_top_queries</code>, <code>analyze_workload_indexes</code></td></tr>
+          <tr><td><code>hypopg</code> in the database</td><td><code>analyze_workload_indexes</code>, <code>analyze_query_indexes</code>, and <code>explain_query</code> with <code>hypothetical_indexes</code></td></tr>
+        </tbody>
+      </table></div>
+    </section>
+  </main>
+</div>
+<script type="application/json" id="pb-strings">{"commands.heading":"Commands","commands.li1":"`dbwise credential add NAME --user U` leaves the password to `dbwise set-password NAME`, which asks for it in a terminal that hides typed input and stores it in the OS keychain. With `--password-env VAR` or `--password-file PATH` the credential reads its password from the environment of the Claude Code process or from a file instead.","commands.li2":"`dbwise alias add ALIAS SERVER --level LEVEL --credential NAME` takes one `--credential NAME`, which serves every level up to the alias's level, or `--credential LEVEL=NAME` once for each level from `read` up to the alias's level.","commands.li3":"`dbwise import FILE` merges a team file into the local config. With `--from-vault` it also fills the values the file maps to Vault. With `--prune` it removes what the file does not list. Every command that changes the config keeps the previous file as `config.json.bak`.","commands.li4":"The server reads the config once when it starts: after a change, reconnect `plugin:dbwise:postgres` in `/mcp` or start a new session.","commands.p1":"Run the commands in a terminal, or let the agent run them through its Bash tool, except where a password is typed. Inside a session, the plugin's `bin/` directory is on the `PATH` of the Bash tool.","configuration-format.cell1":"The schema version, `1`. Required","configuration-format.cell10":"Optional. `port` defaults to 5432, `sslmode` to `require` (also `disable`, `allow`, `prefer`, `verify-ca`, `verify-full`)","configuration-format.cell11":"Optional: `enforce` (the default) or `warn`. See [the role gate](#the-role-gate)","configuration-format.cell12":"Optional. A Vault mapping that may fill `host`, `port` and `databases`","configuration-format.cell13":"The server the alias reaches. Required","configuration-format.cell14":"Optional: `read` (the default), `diagnose` or `write`","configuration-format.cell15":"Required. A credential name, or a map from level to credential name that names every level from `read` up to the alias's level and none above it","configuration-format.cell2":"Optional. Where `import --from-vault` reads: `addr` and `mount` (both required in the section), `namespace`, and `login`, the `vault login` method (default `oidc`)","configuration-format.cell3":"The database user. Required, unless a Vault mapping supplies it","configuration-format.cell4":"Optional. Where the password lives: `{\"keyring\": {}}` (the default), `{\"env\": \"VAR\"}` or `{\"file\": \"PATH\"}`","configuration-format.cell5":"Optional. A Vault mapping; `path` and `fields` are required in it, and `fields` names the secret keys holding `user` and `password`","configuration-format.cell6":"The database engine. Required; `postgresql` is the only one","configuration-format.cell7":"`servers.<name>.host`, `dbname`, `databases`","configuration-format.cell8":"The endpoint. All three are required, but a Vault mapping may supply `host` and `databases` instead. `dbname` is the discovery database, `databases` the non-empty list the agent may use","configuration-format.cell9":"`servers.<name>.port`, `sslmode`","configuration-format.heading":"Configuration format","configuration-format.p1":"`<home>/config.json` and a team file share one format. Neither holds a password, only a reference to where one lives; a `password` key whose value is a string is refused at any depth, except inside the `fields` of a Vault mapping, where `\"password\": \"<secret key>\"` names the key that holds it. Names of credentials, servers and aliases start with a letter or a digit and continue with letters, digits, `.`, `_` or `-`. [`examples/team.example.json`](../examples/team.example.json) is a complete team file.","configuration-format.p2":"A credential is identified by its name, not by its user. A keychain entry has the service `dbwise` and the credential's name as its username, so two credentials with the same user keep two passwords.","configuration-format.th1":"Path","configuration-format.th2":"Meaning","environment-variables.cell1":"Replaces `~/.dbwise`","environment-variables.cell2":"A comma-separated list of aliases the server offers; the others are left out. Names that are not aliases are ignored with a warning. Set it in the environment Claude Code starts in, to restrict one project","environment-variables.cell3":"A path to a script that the stub server runs in place of the bootstrap build; for tests","environment-variables.cell4":"Set by Claude Code; the plugin's directory","environment-variables.cell5":"`PATH`, `PATHEXT`","environment-variables.cell6":"Where the `vault` CLI is looked up: only absolute `PATH` entries count","environment-variables.cell7":"A Vault token the `vault` CLI uses. It takes precedence over the token a login writes","environment-variables.cell8":"`<VAR>` named by a `{\"env\": \"VAR\"}` source","environment-variables.cell9":"The password itself","environment-variables.heading":"Environment variables","environment-variables.p1":"dbWise sets `VAULT_ADDR` and `VAULT_NAMESPACE` for the `vault` CLI it runs, from the `vault` section, so the section wins over the same variables in your shell. `PYTHON_KEYRING_BACKEND`, if set, selects the keychain backend of the `keyring` package; unset it when dbWise reports no usable keychain.","environment-variables.th1":"Variable","environment-variables.th2":"Use","exit-codes.cell1":"Done","exit-codes.cell10":"SessionStart hook","exit-codes.cell11":"Always, also when its check fails; the failure goes to `hook.log`","exit-codes.cell12":"There is no `python3` or `python` on the `PATH`","exit-codes.cell2":"The command refused or failed; the text on stderr says why. For `dbwise import --from-vault`, also a problem it listed after the import","exit-codes.cell3":"A usage error in the arguments","exit-codes.cell4":"The `VERDICT:` line reads `ready`","exit-codes.cell5":"The verdict lists problems","exit-codes.cell6":"No Python 3.12 to 3.14 found, or the bootstrap refused the platform or failed the build","exit-codes.cell7":"No Python 3.12 to 3.14 found, or, once the environment is built, `config.json` cannot be used (see [Limitations](limitations.html#an-invalid-configjson-stops-the-server))","exit-codes.cell8":"The server, or the stub before the first build, ended at the end of its input. A refused platform or a failed build does not end it: the stub reports through `dbwise_status`","exit-codes.cell9":"No mode, an unknown mode, or `--run-mcp` without an engine","exit-codes.heading":"Exit codes","exit-codes.th1":"Command","exit-codes.th2":"Code","exit-codes.th3":"Meaning","files.cell1":"The local configuration. `config.json.bak` is the previous version","files.cell2":"The Python environment, one for each version of `requirements.txt`, named after the start of its SHA-256. A build removes environments unused for 14 days","files.cell3":"The log of the environment build, including pip's output","files.cell4":"The lock that keeps two builds apart","files.cell5":"A failure of the SessionStart hook's check","files.cell6":"OS keychain, service `dbwise`","files.cell7":"One password for each credential that uses the keychain, under the credential's name","files.cell8":"A password file","files.cell9":"The file a `{\"file\": PATH}` source names. On macOS and Linux it must not be accessible to group or others (`chmod 600`); on Windows it must lie under the user profile","files.heading":"Files","files.th1":"File","files.th2":"What it holds","filter_gate":"Search the refusal reasons","filter_gate_count":"{shown} of {total} reasons","intro.p1":"The commands, the tools and their levels, the configuration format, the files and environment variables dbWise uses, the exit codes, and the texts the role gate and the tools answer with. The tables come from the plugin's code: `python .ci/docs_facts.py build` writes its facts, and `python .ci/pages.py build` writes the tables from them. What dbWise cannot do is in [Limitations](limitations.html).","intro.p2":"In this page, `<home>` is dbWise's home directory: `$DBWISE_HOME`, else `~/.dbwise`.","levels-and-tools.cell1":"Lists every alias with its level, databases, reachability, role check mode and the reasons of the role check","levels-and-tools.cell10":"Recommend indexes with the database tuning advisor, using `hypopg`","levels-and-tools.cell11":"Runs what `read_sql` runs, plus EXPLAIN with ANALYZE, and reads the statistics the diagnose role can see","levels-and-tools.cell12":"Runs any SQL with the `write` credential and commits it","levels-and-tools.cell2":"Probes unreachable aliases again with their `read` credential, or one alias when `alias` is given","levels-and-tools.cell3":"`list_schemas`, `list_objects`, `get_object_details`","levels-and-tools.cell4":"Describe schemas, objects and one object in detail","levels-and-tools.cell5":"Runs one or more SELECT or SHOW statements","levels-and-tools.cell6":"Shows the execution plan; with `analyze` it executes the SELECT, with its full load, inside a transaction that is rolled back","levels-and-tools.cell7":"Reports the most expensive queries from `pg_stat_statements`","levels-and-tools.cell8":"Index, connection, vacuum, sequence, replication, buffer-cache and constraint checks","levels-and-tools.cell9":"`analyze_workload_indexes`, `analyze_query_indexes`","levels-and-tools.heading":"Levels and tools","levels-and-tools.p1":"An alias has one of three levels, `read` (the default), `diagnose` and `write`. A tool has a level, or none. A call is allowed when the tool's level is at or below the alias's level, and it connects with the alias's credential for the tool's level. A tool without a level is offered on every alias and uses the `read` credential.","levels-and-tools.p2":"A server registers a tool only when at least one alias admits it, and each description starts with `Level: <level>. Aliases: <the aliases that admit it, with their levels>.`","levels-and-tools.p3":"Each query text a tool sends starts with a comment, `/* dbwise read */`, `/* dbwise diagnose */` or `/* dbwise write */`, so a DBA reading `pg_stat_activity` or `pg_stat_statements` can see which level sent it. The comment is added once in front of each query text a tool sends. `read_sql` and `write_sql` send their whole text as one query, so with several statements `pg_stat_activity` shows the comment once at the start, while `pg_stat_statements` splits the text and only the first statement carries it. Only the leading `/* dbwise <level> */` comment is authoritative. A query can carry its own comment of the same shape later in its text, and that one says nothing about the level.","levels-and-tools.p4":"A call at `read` or `diagnose` stops after 30 seconds, on the server through `statement_timeout` and at the client. `write` has no timeout.","levels-and-tools.p5":"When a call is refused for its level, the text reads `Error: Alias '<alias>' is at level '<level>', but this tool is at level '<level>'. Nothing was sent to the database.` and no connection is opened.","levels-and-tools.th1":"Tool","levels-and-tools.th2":"What it does","nav_label":"Reference","requirements.cell1":"Python 3.12 to 3.14 on the `PATH`","requirements.cell10":"`hypopg` in the database","requirements.cell11":"`analyze_workload_indexes`, `analyze_query_indexes`, and `explain_query` with `hypothetical_indexes`","requirements.cell2":"The launchers, the bootstrap and the CLI","requirements.cell3":"Access to PyPI (or a mirror pip is set up for) on the first start","requirements.cell4":"Building the Python environment","requirements.cell5":"An OS keychain, or an environment-variable or file password source","requirements.cell6":"Passwords","requirements.cell7":"The `vault` CLI","requirements.cell8":"`pg_stat_statements` in the database","requirements.cell9":"`get_top_queries`, `analyze_workload_indexes`","requirements.heading":"Requirements","requirements.th1":"Requirement","requirements.th2":"Needed for","series_label":"pages in this series","the-role-gate.cell1":"the role is a superuser; has BYPASSRLS, CREATEROLE, CREATEDB or REPLICATION","the-role-gate.cell10":"`REVOKE` INSERT, UPDATE, DELETE, TRUNCATE (or MAINTAIN on PostgreSQL 17 and later) on tables, including the column-level INSERT and UPDATE grants, and USAGE and UPDATE on sequences, from the role and from `PUBLIC`","the-role-gate.cell11":"the role can execute functions of the dblink extension; has USAGE on a foreign server","the-role-gate.cell12":"`REVOKE EXECUTE ... FROM PUBLIC` on the `dblink` functions of that database, and `REVOKE USAGE` on the foreign server","the-role-gate.cell13":"at `read`: the role is a member of `pg_monitor`, `pg_read_all_stats` or `pg_stat_scan_tables`, which belong to the diagnose level","the-role-gate.cell14":"Use the monitoring roles on the `diagnose` credential only","the-role-gate.cell2":"Use a role without the attribute","the-role-gate.cell3":"the role is a member of predefined role(s) `pg_write_all_data`, `pg_signal_backend`, `pg_maintain`, `pg_read_server_files`, `pg_write_server_files`, `pg_execute_server_program`, `pg_checkpoint` or `pg_create_subscription`","the-role-gate.cell4":"`REVOKE` the membership","the-role-gate.cell5":"the role is a member of non-predefined role(s) ...","the-role-gate.cell6":"`REVOKE` the membership; membership lets the role cancel and terminate that role's sessions and passes on what that role owns","the-role-gate.cell7":"the role owns the current database, relations, functions or schemas of this database","the-role-gate.cell8":"Give the objects to another role","the-role-gate.cell9":"the role holds a write privilege on relation(s) ... (at most 3 are listed); a column-level INSERT or UPDATE grant counts","the-role-gate.heading":"The role gate","the-role-gate.p1":"When a pool opens for an alias at `read` or `diagnose`, the server runs one query as the pool's role, in the database of the pool, and refuses the alias when the role holds more than its level allows. At start-up the server opens a discovery pool on the database `dbname` too, with the same gate, so the role is checked there as well. A `write` alias has no gate. With `\"role_check\": \"warn\"` on the server, the reasons become warnings, listed by `list_databases`, and the alias opens. The tool descriptions only say that the role check is relaxed. `dbwise doctor` runs the same query for each credential and database, and for the `read` credential in the server's discovery database when the alias's list does not name it, then adds findings that refuse nothing.","the-role-gate.p2":"A refusal reads `Access refused by the role check of alias '<alias>': <reason>; <reason>`. The reasons:","the-role-gate.p3":"Roles in `pg_*` that are not in the list above, such as `pg_read_all_data`, are accepted.","the-role-gate.th1":"Reason","the-role-gate.th2":"What clears it","theme_dark":"Dark","theme_label":"Page theme","theme_light":"Light","theme_system":"System","title":"dbWise reference","toc_label":"Sections","vault.heading":"Vault","vault.li1":"The address a team file names in its `vault` section receives the operator's Vault token, so read a team file like code before its first `import --from-vault`. dbWise accepts `https://` addresses, and `http://` only for `localhost`, `127.0.0.1` and `[::1]`.","vault.li2":"The `login` method name may hold only letters, digits, `.`, `_` and `-`.","vault.li3":"A mapping may fill `user` and `password` of a credential, and `host`, `port` and `databases` of a server. A password goes to the OS keychain only, never to the config.","vault.li4":"A login with the default `oidc` method can be started by the agent; the sign-in finishes in the browser. Other methods ask for input and need a terminal.","vault.p1":"`dbwise import --from-vault` reads secrets through the `vault` CLI, which must be on an absolute `PATH` entry. The CLI uses the address, namespace, mount and login method of the config's `vault` section."}</script>
+<script type="application/json" id="pb-glossary">{"alias":{"name":"Alias","short":"The name the agent uses in a tool call. It points at a server and has a level, read unless you say otherwise, and a credential for each level up to that level."},"credential":{"name":"Credential","short":"A database user and the place its password lives: the OS keychain, an environment variable or a file. The configuration never holds the password."},"diagnose":{"name":"diagnose","short":"Everything at read, plus EXPLAIN with ANALYZE, health checks, top queries from pg_stat_statements and index advice. It can log in with a database role of its own, a member of pg_monitor."},"read":{"name":"read","short":"The default level. The agent looks at schemas and objects and runs SELECT and SHOW statements, in a read-only transaction with a 30-second timeout."},"role_check":{"name":"role_check","short":"A per-server setting, enforce by default. With warn, a refusal by the role gate becomes a warning and the alias still works, so the role layer of the guarantee is gone. Set it by hand in config.json."},"role_gate":{"name":"Role gate","short":"The check dbWise runs when a connection pool opens: one catalog query as the pool's role. A role that is a superuser, owns objects, holds a write grant, belongs to an application role or can run dblink is refused at read and diagnose."},"write":{"name":"write","short":"Everything at diagnose, plus any SQL, committed. Nothing but the database role limits it, so give that role only the grants the task needs."}}</script>
+<script type="application/json" id="pb-facts">{"commands":[{"command":"dbwise alias","help":"the names a tool call uses to pick a server and a level"},{"command":"dbwise alias add","help":"add or replace an alias"},{"command":"dbwise alias rm","help":"remove an alias"},{"command":"dbwise alias list","help":"list aliases with their level and credential per level"},{"command":"dbwise server","help":"database endpoints"},{"command":"dbwise server add","help":"add or replace a server"},{"command":"dbwise server rm","help":"remove a server no alias uses"},{"command":"dbwise server list","help":"list servers"},{"command":"dbwise credential","help":"database logins"},{"command":"dbwise credential add","help":"add or replace a credential (keychain password by default)"},{"command":"dbwise credential rm","help":"remove a credential no alias uses"},{"command":"dbwise credential list","help":"list credentials and their password sources"},{"command":"dbwise import","help":"merge a team file into the local config, then ask missing passwords"},{"command":"dbwise export","help":"write the local config, or part of it, as a team file"},{"command":"dbwise set-password","help":"type a credential's password into the OS keychain, or point the credential to an env or file source"},{"command":"dbwise doctor","help":"check the keychain, the venv and every alias, and name the fix for each problem"}],"default_level":"read","env":["CLAUDE_PLUGIN_ROOT","DBWISE_ALIASES","DBWISE_BUILD_COMMAND","DBWISE_HOME","PATH","PATHEXT","VAULT_TOKEN"],"levels":["read","diagnose","write"],"tools":[{"aliases":["read","diagnose","write"],"level":"any","tool":"list_databases"},{"aliases":["read","diagnose","write"],"level":"any","tool":"reconnect"},{"aliases":["read","diagnose","write"],"level":"read","tool":"list_schemas"},{"aliases":["read","diagnose","write"],"level":"read","tool":"list_objects"},{"aliases":["read","diagnose","write"],"level":"read","tool":"get_object_details"},{"aliases":["read","diagnose","write"],"level":"read","tool":"read_sql"},{"aliases":["diagnose","write"],"level":"diagnose","tool":"explain_query"},{"aliases":["diagnose","write"],"level":"diagnose","tool":"get_top_queries"},{"aliases":["diagnose","write"],"level":"diagnose","tool":"analyze_db_health"},{"aliases":["diagnose","write"],"level":"diagnose","tool":"analyze_workload_indexes"},{"aliases":["diagnose","write"],"level":"diagnose","tool":"analyze_query_indexes"},{"aliases":["diagnose","write"],"level":"diagnose","tool":"diagnose_sql"},{"aliases":["write"],"level":"write","tool":"write_sql"}]}</script>
+<script type="application/json" id="pb-data">{}</script>
+<script>
+const __m = {}
+// Shared page behaviour: strings, glossary popovers, segmented switches, chips and the theme switch.
+// Pages read their data from the JSON script elements the build writes and call PB.* helpers.
+const PB = (() => {
+  const json = id => {
+    const el = document.getElementById(id)
+    return el ? JSON.parse(el.textContent) : {}
+  }
+  const strings = json('pb-strings')
+  const glossary = json('pb-glossary')
+  const facts = json('pb-facts')
+  const data = json('pb-data')
+
+  const t = (key, vars = {}) => {
+    const s = strings[key]
+    if (s === undefined) return `{{${key}}}`
+    return s.replace(/\{(\w+)\}/g, (_, k) => (vars[k] === undefined ? `{${k}}` : String(vars[k])))
+  }
+
+  const el = (tag, attrs = {}, ...children) => {
+    const node = document.createElement(tag)
+    for (const [k, v] of Object.entries(attrs)) {
+      if (v === null || v === undefined || v === false) continue
+      if (k === 'class') node.className = v
+      else if (k === 'text') node.textContent = v
+      else if (k === 'html') node.innerHTML = v
+      else if (k.startsWith('on')) node.addEventListener(k.slice(2), v)
+      else node.setAttribute(k, v === true ? '' : v)
+    }
+    for (const c of children.flat()) if (c !== null && c !== undefined && c !== false) node.append(c instanceof Node ? c : document.createTextNode(String(c)))
+    return node
+  }
+
+  // Text with backtick spans as nodes: code spans become <code>, the rest stays text, never markup.
+  // An unbalanced backtick leaves the whole string as text.
+  const rich = text => {
+    const s = text === undefined || text === null ? '' : String(text)
+    if (s === '') return []
+    const parts = s.split('`')
+    if (parts.length % 2 === 0) return [document.createTextNode(s)]
+    return parts.flatMap((part, i) => {
+      if (part === '') return []
+      return [i % 2 ? el('code', { text: part }) : document.createTextNode(part)]
+    })
+  }
+
+  const store = {
+    get(key) { try { return localStorage.getItem(`pb:${key}`) } catch { return null } },
+    set(key, value) { try { localStorage.setItem(`pb:${key}`, value) } catch { /* storage blocked */ } },
+  }
+
+  // Theme: system (no attribute), light or dark, remembered per viewer; an icon switch.
+  const ICONS = {
+    system: '<rect x="2.5" y="3.5" width="11" height="8" rx="1"/><path d="M6 14h4M8 11.5V14"/>',
+    light: '<circle cx="8" cy="8" r="3"/><path d="M8 1.5v1.5M8 13v1.5M1.5 8H3M13 8h1.5M3.4 3.4l1 1M11.6 11.6l1 1M3.4 12.6l1-1M11.6 4.4l1-1"/>',
+    dark: '<path d="M13 9.5A5.5 5.5 0 0 1 6.5 3a5.5 5.5 0 1 0 6.5 6.5z"/>',
+  }
+  function initTheme() {
+    const apply = v => {
+      if (v === 'light' || v === 'dark') document.documentElement.setAttribute('data-theme', v)
+      else document.documentElement.removeAttribute('data-theme')
+    }
+    apply(store.get('theme'))
+    for (const seg of document.querySelectorAll('[data-pb-theme]')) {
+      seg.classList.add('seg', 'theme-switch')
+      seg.setAttribute('role', 'group')
+      seg.setAttribute('aria-label', t('theme_label'))
+      // innerHTML parses the icon in the SVG namespace; createElement('svg') would not.
+      seg.replaceChildren(...['system', 'light', 'dark'].map(v => {
+        const b = el('button', { type: 'button', 'data-value': v, title: t(`theme_${v}`), html: `<svg viewBox="0 0 16 16" aria-hidden="true">${ICONS[v]}</svg>` })
+        b.append(el('span', { class: 'visually-hidden', text: t(`theme_${v}`) }))
+        return b
+      }))
+      seg.addEventListener('pb:change', e => { apply(e.detail); store.set('theme', e.detail); document.dispatchEvent(new CustomEvent('pb:theme')) })
+      setSeg(seg, store.get('theme') || 'system', false)
+    }
+  }
+
+  // Segmented switches and chip groups: one pressed button; a 'pb:change' event with its value.
+  function setSeg(group, value, notify = true) {
+    for (const b of group.querySelectorAll('button[data-value]')) b.setAttribute('aria-pressed', String(b.dataset.value === value))
+    group.dataset.current = value
+    if (notify) group.dispatchEvent(new CustomEvent('pb:change', { detail: value }))
+  }
+  function initSegs(root = document) {
+    for (const group of root.querySelectorAll('.seg, .chips[data-choice]')) {
+      if (group.dataset.bound) continue
+      group.dataset.bound = '1'
+      group.addEventListener('click', e => {
+        const b = e.target.closest('button[data-value]')
+        if (b && group.contains(b)) setSeg(group, b.dataset.value)
+      })
+      const pressed = group.querySelector('button[aria-pressed="true"]') || group.querySelector('button[data-value]')
+      if (pressed) setSeg(group, pressed.dataset.value, false)
+    }
+  }
+
+  // Glossary popovers: any element with data-term; hover and focus show it, a tap toggles it.
+  let pop = null
+  let owner = null
+  function hide() {
+    if (pop) pop.remove()
+    for (const hot of document.querySelectorAll('.glossary .is-hot')) hot.classList.remove('is-hot')
+    pop = null
+    owner = null
+  }
+  // With the glossary drawer open a term lights its entry there; otherwise it opens a popover.
+  function sideEntry(key) {
+    const entry = document.querySelector(`.glossary [data-entry="${CSS.escape(key)}"]`)
+    if (!entry) return null
+    return entry.closest('.glossary').hidden ? null : entry
+  }
+  function show(target) {
+    const key = target.dataset.term
+    const entry = glossary[key]
+    if (!entry) return
+    hide()
+    owner = target
+    const side = sideEntry(key)
+    if (side) {
+      side.classList.add('is-hot')
+      side.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+      return
+    }
+    pop = el('div', { class: 'popover', role: 'tooltip' }, el('strong', { text: entry.name || key }), el('span', {}, rich(entry.short || entry)))
+    document.body.append(pop)
+    const r = target.getBoundingClientRect()
+    const w = pop.offsetWidth
+    const left = Math.max(16, Math.min(window.scrollX + r.left, window.scrollX + document.documentElement.clientWidth - w - 16))
+    pop.style.left = `${left}px`
+    pop.style.top = `${window.scrollY + r.bottom + 6}px`
+  }
+  function initTerms() {
+    document.addEventListener('mouseover', e => { const x = e.target.closest('[data-term]'); if (x && x !== owner) show(x) })
+    document.addEventListener('mouseout', e => { const x = e.target.closest('[data-term]'); if (x && !x.contains(e.relatedTarget)) hide() })
+    document.addEventListener('focusin', e => { const x = e.target.closest('[data-term]'); if (x) show(x) })
+    document.addEventListener('focusout', e => { if (e.target.closest('[data-term]')) hide() })
+    document.addEventListener('click', e => {
+      const x = e.target.closest('[data-term]')
+      if (x) { if (owner === x) hide(); else show(x) } else if (!e.target.closest('.popover')) hide()
+    })
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') hide() })
+  }
+
+  function term(key, label) {
+    return el('span', { class: 'term', 'data-term': key, tabindex: '0', text: label ?? key })
+  }
+
+  // Section navigation with the current section marked. The build writes the list into the
+  // markup; a page built without one gets it here from its own section headings.
+  function initNav() {
+    const nav = document.querySelector('[data-pb-nav]')
+    if (!nav) return
+    if (!nav.querySelector('a')) {
+      const found = [...document.querySelectorAll('main section[id]')].filter(s => s.querySelector('h1, h2'))
+      const made = found.map(s => el('a', { href: `#${s.id}`, text: s.dataset.nav || s.querySelector('h1, h2').textContent }))
+      nav.replaceChildren(el('ol', {}, made.map(a => el('li', {}, a))))
+    }
+    const links = [...nav.querySelectorAll('a[href^="#"]')]
+    const sections = links.map(a => document.getElementById(a.getAttribute('href').slice(1))).filter(Boolean)
+    const mark = id => { for (const a of links) a.setAttribute('aria-current', String(a.getAttribute('href') === `#${id}`)) }
+    // A click names its target at once, and the scroll it starts (smooth, and often stopped short by the
+    // page end) must not move the mark until it has settled.
+    let locked = false
+    let settle = 0
+    const hold = () => { locked = true; clearTimeout(settle); settle = setTimeout(() => { locked = false }, 200) }
+    nav.addEventListener('click', e => {
+      const a = e.target.closest('a[href^="#"]')
+      if (a && nav.contains(a)) { mark(a.getAttribute('href').slice(1)); hold() }
+    })
+    // The last heading cannot reach the top of a page that ends first, so the page end marks it.
+    const last = sections[sections.length - 1]
+    const atEnd = () => window.scrollY + window.innerHeight >= document.documentElement.scrollHeight - 2
+    window.addEventListener('scroll', () => {
+      if (locked) { hold(); return }
+      if (last && atEnd()) mark(last.id)
+    }, { passive: true })
+    if (!('IntersectionObserver' in window)) return
+    const seen = new IntersectionObserver(entries => {
+      if (locked || (last && atEnd())) return
+      for (const e of entries) if (e.isIntersecting) mark(e.target.id)
+    }, { rootMargin: '-10% 0px -70% 0px' })
+    for (const s of sections) seen.observe(s)
+  }
+
+  // Filter bar (data-pb-filter="<selector of the items>"): items carry data-tags (single words); the bar shows a
+  // search box, one chip per tag and a live count. Its texts come from the bar's own attributes: data-label (search
+  // box), data-all (the chip for every item), data-count ("{shown} of {total}"). A tag's chip reads as the text of the
+  // bar's own [data-tag="<tag>"] element when it holds one (the markup a reader without scripts sees as a list of
+  // the groups), else as the tag. data-group="<selector>" also hides the group that holds no visible item.
+  function initFilters() {
+    for (const bar of document.querySelectorAll('[data-pb-filter]')) {
+      const items = [...document.querySelectorAll(bar.dataset.pbFilter)]
+      if (!items.length) continue
+      const names = new Map([...bar.querySelectorAll('[data-tag]')].map(x => [x.dataset.tag, x.textContent.trim()]))
+      const tagsOf = item => (item.dataset.tags || '').split(/\s+/).filter(Boolean)
+      const found = new Set(items.flatMap(tagsOf))
+      const tags = [...names.keys()].filter(x => found.has(x)).concat([...found].filter(x => !names.has(x)))
+      const box = el('input', { type: 'search', class: 'filter-box', 'aria-label': bar.dataset.label || '', placeholder: bar.dataset.label || '' })
+      const chips = el('div', { class: 'chips', 'data-choice': '', role: 'group' },
+        [['', bar.dataset.all || ''], ...tags.map(x => [x, names.get(x) || x])].map(([v, label]) => el('button', { type: 'button', class: 'chip', 'data-value': v, text: label })))
+      const count = el('p', { class: 'filter-count', 'aria-live': 'polite' })
+      bar.classList.add('filter-bar')
+      bar.replaceChildren(...[box, tags.length ? chips : null, count].filter(Boolean))
+      const groups = bar.dataset.group ? [...new Set(items.map(item => item.closest(bar.dataset.group)).filter(Boolean))] : []
+      const apply = () => {
+        const query = box.value.trim().toLowerCase()
+        const tag = chips.dataset.current || ''
+        let shown = 0
+        for (const item of items) {
+          const ok = (!tag || tagsOf(item).includes(tag)) && (!query || item.textContent.toLowerCase().includes(query))
+          item.hidden = !ok
+          if (ok) shown++
+        }
+        for (const g of groups) g.hidden = items.every(item => !g.contains(item) || item.hidden)
+        count.textContent = (bar.dataset.count || '').replace('{shown}', shown).replace('{total}', items.length)
+      }
+      initSegs(bar)
+      box.addEventListener('input', apply)
+      chips.addEventListener('pb:change', apply)
+      // A link to an entry or group the filter hides clears the filter, so the target can be shown. A link to the
+      // hash already in the address bar fires no hashchange, so a click covers it.
+      const reveal = hash => {
+        const target = hash.length > 1 ? document.getElementById(decodeURIComponent(hash.slice(1))) : null
+        if (!target || !target.closest('[hidden]') || ![...items, ...groups].some(x => x.contains(target))) return
+        box.value = ''
+        setSeg(chips, '')
+        target.scrollIntoView()
+      }
+      window.addEventListener('hashchange', () => reveal(location.hash))
+      document.addEventListener('click', e => {
+        const a = e.target.closest && e.target.closest('a[href^="#"]')
+        if (a && a.hash === location.hash) reveal(a.hash)
+      })
+      apply()
+    }
+  }
+
+  // Count bar (data-pb-counts="<selector of the items>"): one segment per group (the nearest section) in
+  // proportion to its items, each a link to the group with its heading and count.
+  function initCounts() {
+    for (const bar of document.querySelectorAll('[data-pb-counts]')) {
+      const groups = new Map()
+      for (const item of document.querySelectorAll(bar.dataset.pbCounts)) {
+        const g = item.closest('section[id]')
+        if (g) groups.set(g, (groups.get(g) || 0) + 1)
+      }
+      bar.classList.add('count-bar')
+      bar.replaceChildren(...[...groups].map(([g, n]) => el('a', { class: 'count-seg', href: `#${g.id}`, 'aria-label': `${g.querySelector('h2').textContent}: ${n}`, style: `flex-grow: ${n}` },
+        el('span', { class: 'count-n', text: String(n) }), el('span', { class: 'count-name', text: g.querySelector('h2').textContent }))))
+    }
+  }
+
+  // Copy button on commands, code blocks and transcripts, where the page defines copy_label and copied_label.
+  function initCopy() {
+    if (!navigator.clipboard || !strings.copy_label || !strings.copied_label) return
+    for (const block of document.querySelectorAll('main .cmd, main pre, main .transcript')) {
+      const wrap = el('div', { class: 'copy-wrap' })
+      block.replaceWith(wrap)
+      const button = el('button', { type: 'button', class: 'copy-btn', 'aria-live': 'polite', text: t('copy_label') })
+      button.addEventListener('click', () => {
+        navigator.clipboard.writeText(block.textContent.trim()).then(() => {
+          button.textContent = t('copied_label')
+          setTimeout(() => { button.textContent = t('copy_label') }, 1600)
+        }, () => {})
+      })
+      wrap.append(block, button)
+    }
+  }
+
+  // Decision walker (ol.walker): a question with its answers as a nested list. With scripts one node shows
+  // at a time, the answers as buttons (the answer's data-label, else its own text), with back and restart
+  // (walker_back, walker_restart). A node's data-outcome names its colour. Where the page lacks those strings the
+  // list stays as written.
+  function initWalkers() {
+    if (!strings.walker_back || !strings.walker_restart) return
+    for (const list of document.querySelectorAll('ol.walker')) {
+      const root = list.querySelector(':scope > li')
+      if (!root) continue
+      const trail = [root]
+      const view = el('div', { class: 'walker-view', tabindex: '-1', 'aria-live': 'polite' })
+      const own = li => {
+        const copy = li.cloneNode(true)
+        for (const inner of copy.querySelectorAll('ol')) inner.remove()
+        return copy
+      }
+      const go = change => { change(); render(); view.focus() }
+      const render = () => {
+        const li = trail[trail.length - 1]
+        view.dataset.outcome = li.dataset.outcome || ''
+        const options = [...li.querySelectorAll(':scope > ol > li')]
+        const answers = options.map(o => el('button', {
+          type: 'button', class: 'chip', text: o.dataset.label || own(o).textContent.trim(), onclick: () => go(() => trail.push(o)),
+        }))
+        view.replaceChildren(...[
+          el('div', { class: 'walker-text' }, el('p', {}, [...own(li).childNodes])),
+          answers.length ? el('div', { class: 'walker-options' }, answers) : null,
+          el('div', { class: 'walker-controls' },
+            el('button', { type: 'button', text: t('walker_back'), disabled: trail.length < 2, onclick: () => go(() => trail.pop()) }),
+            el('button', { type: 'button', text: t('walker_restart'), disabled: trail.length < 2, onclick: () => go(() => { trail.length = 1 }) })),
+        ].filter(Boolean))
+      }
+      list.hidden = true
+      list.after(view)
+      render()
+    }
+  }
+
+  // Segmented panels (div.seg-panels > div.seg-panel[data-label]): every panel shows without scripts; with
+  // scripts a segmented switch picks one.
+  function initPanels() {
+    for (const box of document.querySelectorAll('.seg-panels')) {
+      const panels = [...box.querySelectorAll(':scope > .seg-panel')]
+      if (panels.length < 2) continue
+      const seg = el('div', { class: 'seg', role: 'group' }, panels.map((p, i) => el('button', { type: 'button', 'data-value': String(i), text: p.dataset.label })))
+      seg.addEventListener('pb:change', e => panels.forEach((p, i) => { p.hidden = String(i) !== e.detail }))
+      box.classList.add('is-tabbed')
+      box.prepend(seg)
+      initSegs(box)
+      panels.forEach((p, i) => { p.hidden = i !== 0 })
+    }
+  }
+
+  // The glossary column: the entries a page lists in data-terms, or all of them.
+  function initGlossary() {
+    for (const aside of document.querySelectorAll('[data-pb-glossary]')) {
+      const keys = aside.dataset.terms ? aside.dataset.terms.split(',').map(k => k.trim()) : Object.keys(glossary)
+      aside.append(el('dl', {}, keys.filter(k => glossary[k]).map(k =>
+        el('div', { class: 'entry', 'data-entry': k }, el('dt', { text: glossary[k].name || k }), el('dd', {}, rich(glossary[k].short))))))
+    }
+  }
+
+  // List and detail built in markup (data-pb-md): an option shows the panel with the same data-panel.
+  function initMasterDetail() {
+    for (const box of document.querySelectorAll('[data-pb-md]')) {
+      const items = [...box.querySelectorAll('.sit-item[data-panel]')]
+      const panels = [...box.querySelectorAll('.md-panel[data-panel]')]
+      const choose = (i, focus) => {
+        items.forEach((it, j) => { it.setAttribute('aria-selected', String(i === j)); it.tabIndex = i === j ? 0 : -1 })
+        for (const p of panels) p.hidden = p.dataset.panel !== items[i].dataset.panel
+        if (focus) items[i].focus()
+      }
+      items.forEach((it, i) => it.addEventListener('click', () => choose(i, true)))
+      box.addEventListener('keydown', e => {
+        const at = items.findIndex(it => it.getAttribute('aria-selected') === 'true')
+        const next = { ArrowDown: at + 1, ArrowUp: at - 1, Home: 0, End: items.length - 1 }[e.key]
+        if (next === undefined || !e.target.closest('.sit-item')) return
+        e.preventDefault()
+        choose(Math.max(0, Math.min(items.length - 1, next)), true)
+      })
+      choose(0, false)
+    }
+  }
+
+  // Drawers: a button with data-pb-drawer opens the panel with that id; the close button, Escape
+  // or a second press closes it, and focus returns to the button.
+  function initDrawers() {
+    for (const opener of document.querySelectorAll('[data-pb-drawer]')) {
+      const panel = document.getElementById(opener.dataset.pbDrawer)
+      if (!panel) continue
+      const set = open => {
+        panel.hidden = !open
+        opener.setAttribute('aria-expanded', String(open))
+        document.body.classList.toggle('drawer-is-open', open)
+        if (open) panel.querySelector('button')?.focus()
+        else opener.focus()
+      }
+      opener.addEventListener('click', () => set(panel.hidden))
+      panel.querySelector('[data-pb-drawer-close]')?.addEventListener('click', () => set(false))
+      document.addEventListener('keydown', e => { if (e.key === 'Escape' && !panel.hidden) set(false) })
+    }
+  }
+
+  document.addEventListener('DOMContentLoaded', () => { initTheme(); initSegs(); initGlossary(); initNav(); initTerms(); initMasterDetail(); initDrawers(); initFilters(); initCounts(); initCopy(); initWalkers(); initPanels() })
+  return { t, el, rich, strings, glossary, facts, data, store, setSeg, initSegs, term }
+})()
+</script>
+</body>
+</html>

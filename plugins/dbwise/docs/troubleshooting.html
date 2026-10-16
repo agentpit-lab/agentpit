@@ -1,0 +1,1048 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>dbWise troubleshooting</title>
+<style>
+/* Layout: page sections on the left, the reading column in the middle, the glossary on the right;
+   the column opens with a TL;DR and an instrument (the thing explained, live), then sections that
+   each answer one question. Page chrome stays quiet: the plugins' own signal
+   colours (calm, watch, act) are the only loud colours on a page. */
+:root {
+  --bg: #f8f7f3;
+  --surface: #ffffff;
+  --surface-2: #f1efe8;
+  --ink: #1d1f1c;
+  --muted: #67695f;
+  --line: #e2dfd5;
+  --accent: #0b6a88;
+  --accent-ink: #ffffff;
+  --accent-soft: #e1eef2;
+  --focus: #0b6a88;
+
+  /* Signal colours as Claude Code Desktop draws them (plugins/pitboard/hooks/desktop.ts). */
+  --calm: #8a8a85;
+  --watch: #c4841d;
+  --act: #e0483e;
+  --cold: #2a9db5;
+  --on: #3d9a5c;
+  --watch-soft: #f6ead6;
+  --act-soft: #fadedb;
+
+  /* The specimen surfaces: a terminal and the Desktop app, each in its own theme. */
+  --term-bg: #fbfbf9;
+  --term-fg: #000000;
+  --term-line: #dcdcd6;
+  /* Claude Code's theme keys as its light and dark themes resolve them: the terminal row draws in
+     these keys, so a specimen shows the colours a reader's own terminal would. */
+  --term-text: #000000;
+  --term-inactive: #666666;
+  --term-subtle: #afafaf;
+  --term-warning: #966c1e;
+  --term-error: #ab2b3f;
+  --term-success: #2c7a39;
+  --term-planMode: #006666;
+  --term-suggestion: #5769f7;
+  --term-autoAccept: #8700ff;
+  --term-bashBorder: #ff0087;
+  --desk-bg: #ffffff;
+  --desk-fg: #2b2b29;
+  --desk-line: #e4e4df;
+
+  /* System faces only: a page loads nothing from outside its file. */
+  --font-display: "Iowan Old Style", Charter, "Bitstream Charter", "Sitka Text", Cambria, Georgia, serif;
+  --font-ui: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "Cascadia Mono", "JetBrains Mono", "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+
+  --step--1: 0.8125rem;
+  --step-0: 1rem;
+  --step-1: 1.1875rem;
+  --step-2: 1.5rem;
+  --step-3: 2.125rem;
+
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2.25rem;
+  --space-7: 3.5rem;
+
+  --radius: 6px;
+  --measure: 720px;
+  --page: 1120px;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #121413;
+    --surface: #1a1d1b;
+    --surface-2: #20231f;
+    --ink: #e8e6df;
+    --muted: #9d9f96;
+    --line: #30332e;
+    --accent: #55b6d3;
+    --accent-ink: #0b1a20;
+    --accent-soft: #173039;
+    --focus: #55b6d3;
+    --watch-soft: #3a2d15;
+    --act-soft: #3d1c19;
+    --desk-bg: #1e1f1d;
+    --desk-fg: #e6e5df;
+    --desk-line: #33342f;
+    --term-bg: #15181b;
+    --term-fg: #ffffff;
+    --term-line: #2c3136;
+    --term-text: #ffffff;
+    --term-inactive: #999999;
+    --term-subtle: #505050;
+    --term-warning: #ffc107;
+    --term-error: #ff6b80;
+    --term-success: #4eba65;
+    --term-planMode: #48968c;
+    --term-suggestion: #b1b9f9;
+    --term-autoAccept: #af87ff;
+    --term-bashBorder: #fd5db1;
+    color-scheme: dark;
+  }
+}
+
+:root[data-theme="dark"] {
+  --bg: #121413;
+  --surface: #1a1d1b;
+  --surface-2: #20231f;
+  --ink: #e8e6df;
+  --muted: #9d9f96;
+  --line: #30332e;
+  --accent: #55b6d3;
+  --accent-ink: #0b1a20;
+  --accent-soft: #173039;
+  --focus: #55b6d3;
+  --watch-soft: #3a2d15;
+  --act-soft: #3d1c19;
+  --desk-bg: #1e1f1d;
+  --desk-fg: #e6e5df;
+  --desk-line: #33342f;
+  --term-bg: #15181b;
+  --term-fg: #ffffff;
+  --term-line: #2c3136;
+  --term-text: #ffffff;
+  --term-inactive: #999999;
+  --term-subtle: #505050;
+  --term-warning: #ffc107;
+  --term-error: #ff6b80;
+  --term-success: #4eba65;
+  --term-planMode: #48968c;
+  --term-suggestion: #b1b9f9;
+  --term-autoAccept: #af87ff;
+  --term-bashBorder: #fd5db1;
+  color-scheme: dark;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font: 400 var(--step-0)/1.6 var(--font-ui);
+}
+img, svg { max-width: 100%; }
+[hidden] { display: none !important; }
+
+
+h1, h2, h3 { line-height: 1.2; text-wrap: balance; overflow-wrap: break-word; margin: 0; }
+h1, h2 { font-family: var(--font-display); font-weight: 500; letter-spacing: -0.005em; }
+h1 { font-size: var(--step-3); }
+h2 { font-size: var(--step-2); }
+h3 { font-size: var(--step-1); font-weight: 600; }
+p { margin: 0; }
+a { color: var(--accent); text-underline-offset: 2px; }
+code, kbd, .mono { font-family: var(--font-mono); font-size: 0.92em; }
+code { background: var(--surface-2); border: 1px solid var(--line); border-radius: 4px; padding: 0 0.3em; overflow-wrap: anywhere; }
+td code, th code { overflow-wrap: normal; }
+.card-quote { font-family: var(--font-mono); font-size: var(--step--1); background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--radius); padding: var(--space-2) var(--space-3); overflow-wrap: anywhere; }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 3px; }
+
+.eyebrow { font: 500 0.6875rem/1.4 var(--font-mono); letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+.lede { font-size: var(--step-1); color: var(--muted); }
+.muted { color: var(--muted); }
+.stack { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-4); }
+.stack-lg { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-6); }
+.row { display: flex; flex-wrap: wrap; gap: var(--space-3); align-items: center; }
+
+
+
+section { scroll-margin-top: var(--space-4); }
+.section-head { display: grid; gap: var(--space-2); margin-bottom: var(--space-4); }
+
+/* Panels: used only where an element is a separate object (an instrument, a card). */
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: var(--space-4); min-width: 0; }
+.grid-auto { display: grid; gap: var(--space-4); grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); }
+.split { display: grid; gap: var(--space-5); }
+
+/* Segmented switch. */
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface-2); padding: 2px; gap: 2px; }
+.seg button { font: inherit; font-size: var(--step--1); border: 0; background: transparent; color: var(--muted); padding: 0.3em 0.8em; border-radius: 4px; cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--surface); color: var(--ink); box-shadow: 0 0 0 1px var(--line); font-weight: 600; }
+.control { display: grid; gap: var(--space-1); }
+.control > .label { font-size: var(--step--1); color: var(--muted); }
+
+/* Chips: a choice among named states. */
+.chips { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.chip { font: inherit; font-size: var(--step--1); border: 1px solid var(--line); background: var(--surface); color: var(--ink); padding: 0.3em 0.75em; border-radius: 999px; cursor: pointer; display: inline-flex; gap: 0.4em; align-items: center; }
+.chip[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); }
+.dot { width: 0.6em; height: 0.6em; border-radius: 50%; background: var(--calm); display: inline-block; flex: none; }
+.dot.watch { background: var(--watch); }
+.dot.act { background: var(--act); }
+.dot.cold { background: var(--cold); }
+
+/* Level pill: state in form as well as words. */
+.pill { display: inline-flex; align-items: center; gap: 0.35em; font-size: var(--step--1); font-weight: 600; padding: 0.05em 0.6em; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); }
+.pill.watch { color: var(--watch); border-color: var(--watch); background: var(--watch-soft); }
+.pill.act { color: var(--act); border-color: var(--act); background: var(--act-soft); }
+
+/* Glossary terms: dotted underline, popover on hover, focus or tap. */
+.term { border-bottom: 1px dotted currentColor; cursor: help; }
+.popover { position: absolute; z-index: 20; max-width: min(340px, calc(100vw - 32px)); background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: 0 8px 24px rgb(0 0 0 / 0.18); padding: var(--space-3); font-size: var(--step--1); line-height: 1.5; }
+.popover strong { display: block; margin-bottom: var(--space-1); }
+
+/* Disclosure: what to do first, detail on demand. */
+details.more { border-top: 1px solid var(--line); padding-block: var(--space-3); }
+details.more > summary { cursor: pointer; font-weight: 600; list-style: none; display: flex; gap: var(--space-2); align-items: center; }
+details.more > summary::-webkit-details-marker { display: none; }
+details.more > summary::before { content: "+"; font-family: var(--font-mono); color: var(--accent); width: 1ch; }
+details.more[open] > summary::before { content: "\2212"; }
+details.more > .body { padding-top: var(--space-3); display: grid; gap: var(--space-3); }
+
+/* Key-value lists aligned on one column. */
+.kv { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: var(--space-1) var(--space-4); font-size: var(--step--1); margin: 0; }
+.kv dt { color: var(--muted); }
+.kv dd { margin: 0; font-variant-numeric: tabular-nums; }
+
+/* Range slider. */
+input[type="range"] { width: 100%; accent-color: var(--accent); }
+.slider { display: grid; gap: var(--space-1); }
+.slider .readout { display: flex; justify-content: space-between; font-size: var(--step--1); color: var(--muted); font-variant-numeric: tabular-nums; }
+.slider .readout b { color: var(--ink); font-weight: 600; }
+
+/* Tables that may run wider than a phone scroll inside their own box. */
+.table-wrap { overflow-x: auto; }
+.facts-list { columns: 9rem; column-gap: var(--space-4); list-style: none; margin: 0; padding: 0; }
+.facts-list li { break-inside: avoid; }
+table { border-collapse: collapse; width: 100%; font-size: var(--step--1); }
+th, td { text-align: left; padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--line); vertical-align: top; }
+th { color: var(--muted); font-weight: 600; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+
+/* A transcript of what Claude Code shows: monospace on the terminal surface. */
+.transcript { background: var(--term-bg); color: var(--term-fg); border-radius: var(--radius); padding: var(--space-3) var(--space-4); font: 0.875rem/1.55 var(--font-mono); overflow-x: auto; white-space: pre; }
+.transcript .dim { color: var(--term-inactive); }
+.transcript .hl { color: #e0b000; }
+
+.callout { display: grid; gap: var(--space-1); border-left: 3px solid var(--accent); padding: var(--space-1) var(--space-3); }
+
+footer.page-foot { margin-top: var(--space-7); padding-top: var(--space-4); border-top: 1px solid var(--line); font-size: var(--step--1); color: var(--muted); display: flex; flex-wrap: wrap; gap: var(--space-4); justify-content: space-between; }
+
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; scroll-behavior: auto !important; } }
+
+/* Steps: a real sequence, so numbered. */
+.steps { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-6); counter-reset: step; }
+.steps > li { display: grid; grid-template-columns: 2.25rem minmax(0, 1fr); gap: var(--space-4); counter-increment: step; }
+.steps > li::before { content: counter(step); width: 2.25rem; height: 2.25rem; border-radius: 50%; display: grid; place-items: center; font-weight: 700; color: var(--accent-ink); background: var(--accent); font-variant-numeric: tabular-nums; }
+.steps > li > div { display: grid; gap: var(--space-3); min-width: 0; }
+.cmd { display: flex; gap: var(--space-2); align-items: center; background: var(--term-bg); color: var(--term-fg); border-radius: var(--radius); padding: var(--space-2) var(--space-3); font: 0.9375rem/1.4 var(--font-mono); overflow-x: auto; }
+.cmd::before { content: "›"; color: var(--term-inactive); }
+
+.annot { display: grid; gap: var(--space-2); font-size: var(--step--1); }
+.annot { margin: 0; padding-left: 1.2em; }
+
+/* One grid for the whole series: sections, a content column of one width, the glossary column.
+   Every block in the content column spans it, so all edges line up on every page. */
+.doc { max-width: calc(190px + var(--measure) + 260px + 2 * var(--space-6) + 2 * var(--space-6)); margin: 0 auto; padding-inline: 16px; padding-block: var(--space-5) var(--space-7); display: grid; gap: var(--space-6); }
+.doc > * { min-width: 0; }
+.doc > main { width: 100%; max-width: var(--measure); }
+@media (min-width: 1180px) { .doc { grid-template-columns: 190px var(--measure) 260px; padding-inline: var(--space-6); justify-content: center; } }
+@media (min-width: 900px) and (max-width: 1179px) { .doc { grid-template-columns: 180px minmax(0, var(--measure)); padding-inline: var(--space-5); } }
+.side { display: grid; gap: var(--space-5); align-content: start; font-size: var(--step--1); }
+@media (min-width: 900px) { .side { position: sticky; top: var(--space-4); max-height: calc(100vh - 2rem); overflow-y: auto; } }
+.side nav ol { list-style: none; margin: 0; padding: 0 0 0 var(--space-3); border-left: 1px solid var(--line); display: grid; gap: var(--space-2); }
+.side nav a { color: var(--muted); text-decoration: none; }
+.side nav a:hover, .side nav a[aria-current="true"] { color: var(--ink); }
+.side nav a[aria-current="true"] { font-weight: 600; }
+.sources { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-1); font: 0.75rem/1.4 var(--font-mono); color: var(--muted); word-break: break-all; }
+@media (max-width: 899px) { .side nav ol { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-4); border: 0; padding: 0; } .side .sources-block { display: none; } }
+
+.glossary { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: var(--space-4); display: grid; gap: var(--space-3); align-content: start; }
+.glossary dl { margin: 0; display: grid; gap: var(--space-3); }
+.glossary dt { font: 500 var(--step-0)/1.3 var(--font-display); }
+.glossary dd { margin: 0; font-size: var(--step--1); color: var(--muted); line-height: 1.5; }
+.glossary .entry { border-radius: 4px; padding: var(--space-1) var(--space-2); margin-inline: calc(-1 * var(--space-2)); transition: background-color 0.15s; }
+.glossary .entry.is-hot { background: var(--accent-soft); }
+.glossary .entry.is-hot dd { color: var(--ink); }
+
+/* TL;DR: the page's answer before its detail. */
+.tldr { border: 1px solid var(--line); border-left: 3px solid var(--accent); background: var(--surface); border-radius: var(--radius); padding: var(--space-3) var(--space-4); }
+.tldr strong:first-child { margin-right: 0.35em; }
+.brand { display: grid; gap: var(--space-2); }
+/* Navigation uses the interface face; the serif belongs to the document's own headings. */
+.brand .mono { font: 500 0.6875rem/1.4 var(--font-mono); letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+.series { display: grid; gap: 2px; }
+.series a { font-size: var(--step--1); color: var(--muted); text-decoration: none; padding: 0.15em 0 0.15em var(--space-3); border-left: 2px solid transparent; }
+.series a:hover { color: var(--ink); }
+.series a[aria-current="page"] { color: var(--ink); font-weight: 600; border-left-color: var(--accent); }
+.page-head { display: grid; gap: var(--space-4); padding-bottom: var(--space-2); }
+.changed { font-size: var(--step--1); color: var(--muted); min-height: 1.5em; }
+.changed b { color: var(--ink); font-weight: 600; }
+
+/* Theme switch: icons, named for screen readers and on hover. */
+.theme-switch button { display: grid; place-items: center; width: 2rem; height: 1.75rem; padding: 0; }
+.theme-switch svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* A pair of specimens: the same moment in the CLI and in Desktop. */
+.pair { display: grid; gap: var(--space-2); }
+.pair .surface-label { font: 500 0.6875rem/1 var(--font-mono); letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+
+/* The specimen: a terminal or the Desktop app, in its own theme whatever the page's. */
+.specimen { display: grid; gap: var(--space-2); }
+.specimen-frame { overflow-x: auto; border-radius: var(--radius); }
+.specimen-hint { font-size: var(--step--1); color: var(--muted); }
+.cli { background: var(--term-bg); color: var(--term-fg); font: 0.9375rem/1.5 var(--font-mono); padding: var(--space-3) var(--space-4); white-space: pre; width: max-content; min-width: 100%; }
+
+.desk { background: var(--desk-bg); color: var(--desk-fg); border: 1px solid var(--desk-line); border-radius: var(--radius); padding: var(--space-2) var(--space-3); width: max-content; min-width: 100%; }
+.svg { display: inline-flex; line-height: 0; }
+.svg svg { display: block; }
+
+.specimen, .specimen-frame, .pair { min-width: 0; }
+
+/* Terms with their meaning, read down one column. */
+.term-list { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: var(--space-3) var(--space-5); margin: 0; }
+.term-list dt { font: 500 var(--step-1)/1.3 var(--font-display); }
+.term-list dd { margin: 0; display: grid; gap: var(--space-1); }
+@media (max-width: 600px) { .term-list { grid-template-columns: minmax(0, 1fr); gap: var(--space-1); } .term-list dd { margin-bottom: var(--space-3); } }
+.side .theme-switch { justify-self: start; }
+
+/* List and detail: moments in order on the left, the chosen one in full on the right. */
+.md { display: grid; gap: var(--space-4); }
+@media (min-width: 640px) { .md { grid-template-columns: 172px minmax(0, 1fr); align-items: start; } }
+.md-list, .md-detail { display: grid; gap: var(--space-3); min-width: 0; }
+.sit-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; border-left: 1px solid var(--line); }
+.sit-item { display: grid; gap: 1px; padding: var(--space-2) var(--space-3); margin-left: -1px; border-left: 2px solid transparent; cursor: pointer; border-radius: 0 4px 4px 0; }
+.sit-item:hover { background: var(--surface-2); }
+.sit-item[aria-selected="true"] { border-left-color: var(--accent); background: var(--accent-soft); }
+.sit-time { font: 500 0.6875rem/1.2 var(--font-mono); color: var(--muted); font-variant-numeric: tabular-nums; }
+.sit-name { display: flex; gap: 0.45em; align-items: baseline; font-size: var(--step--1); line-height: 1.35; }
+.sit-name .dot { flex: none; transform: translateY(-1px); }
+.md-panel { display: grid; gap: var(--space-3); }
+.surface-head { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-3); align-items: center; justify-content: space-between; }
+.desk-fit { overflow: hidden; }
+.desk-fit > .desk { transform-origin: left top; width: max-content; }
+.small-seg button { font-size: 0.75rem; padding: 0.15em 0.6em; }
+/* Specimen trees: the plugin's boxes and runs. */
+.tbox { display: flex; min-width: 0; }
+.cli .tbox, .cli span { white-space: pre; }
+.cli .dim { opacity: 0.62; }
+.desk .dim { opacity: 0.62; }
+.cli .italic, .desk .italic { font-style: italic; }
+.cli .strike, .desk .strike { text-decoration: line-through; }
+.btn { cursor: pointer; }
+.reading { cursor: pointer; border-radius: 3px; }
+.reading[aria-pressed="true"] { outline: 1px solid var(--accent); outline-offset: 1px; }
+.reading:hover { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+/* Wide figures: text keeps the content column; a live row or a chart also takes the empty column on
+   its right, the same on every page of the series. */
+@media (min-width: 1180px) { .wide { margin-right: calc(-1 * (260px + var(--space-6))); } }
+
+/* The glossary drawer: over the page's right side, on demand. */
+.drawer { position: fixed; top: 0; right: 0; bottom: 0; width: min(360px, 100vw); z-index: 30; border-radius: 0; border-width: 0 0 0 1px; box-shadow: -12px 0 32px rgb(0 0 0 / 0.16); overflow-y: auto; padding-block: calc(var(--space-4) + env(safe-area-inset-top, 0px)) var(--space-6); }
+.drawer-head { display: flex; justify-content: space-between; align-items: center; }
+.drawer-close { font: 400 1.5rem/1 var(--font-ui); background: transparent; border: 0; color: var(--muted); cursor: pointer; padding: 0 var(--space-1); }
+.drawer-open { justify-self: start; font: 500 var(--step--1) var(--font-ui); color: var(--accent); background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 0.35em 0.9em; cursor: pointer; }
+.drawer-open[aria-expanded="true"] { border-color: var(--accent); background: var(--accent-soft); }
+
+/* Document components. Each works from its markup alone; the script only adds controls
+   (filter bar, copy buttons, walker, panel tabs), and every one of them is absent without scripts. */
+
+/* Entry card: one symptom, one limit, one term; parts carry their label as data-label. */
+article.entry { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-3); background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: var(--space-4); min-width: 0; }
+article.entry h3 { overflow-wrap: anywhere; }
+article.entry > .part { display: grid; gap: var(--space-1); min-width: 0; }
+.part[data-label]::before, .callout[data-label]::before, .seg-panel[data-label]::before { content: attr(data-label); font: 500 0.6875rem/1.4 var(--font-mono); letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+.part > ul, .part > ol { margin: 0; padding-left: 1.2em; }
+
+/* Filter bar over a list of entries: a search box, tag chips, a live count. */
+.filter-bar { display: grid; gap: var(--space-3); }
+.filter-box { font: inherit; font-size: var(--step--1); color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 0.4em 0.75em; width: 100%; max-width: 24rem; }
+.filter-count { font-size: var(--step--1); color: var(--muted); }
+
+/* Copy button over a block of commands or text. */
+.copy-wrap { position: relative; min-width: 0; }
+.copy-btn { position: absolute; top: var(--space-1); right: var(--space-1); font: 500 0.75rem/1 var(--font-ui); color: var(--term-fg); background: transparent; border: 1px solid var(--term-inactive); border-radius: 4px; padding: 0.35em 0.6em; cursor: pointer; opacity: 0.8; }
+.copy-btn:hover, .copy-btn:focus-visible { opacity: 1; }
+pre[data-lang] { background: var(--term-bg); color: var(--term-fg); border-radius: var(--radius); padding: var(--space-3) var(--space-4); font: 0.875rem/1.55 var(--font-mono); overflow-x: auto; margin: 0; }
+.copy-wrap > .cmd, .copy-wrap > pre, .copy-wrap > .transcript { padding-right: 5rem; }
+
+/* Figure: an inline SVG coloured through the theme tokens, its caption and its text form. */
+figure.diagram { margin: 0; display: grid; gap: var(--space-3); }
+figure.diagram svg { width: 100%; height: auto; }
+figure.diagram figcaption { font-size: var(--step--1); color: var(--muted); }
+figure.diagram .text-form { margin: 0; padding-left: 1.4em; font-size: var(--step--1); color: var(--muted); display: grid; gap: var(--space-1); }
+figure.diagram .node { fill: var(--surface); stroke: var(--line); stroke-width: 1.5; }
+figure.diagram .node.accent { stroke: var(--accent); fill: var(--accent-soft); }
+figure.diagram .edge { fill: none; stroke: var(--muted); stroke-width: 1.5; }
+figure.diagram text { fill: var(--ink); font: 400 13px var(--font-ui); }
+figure.diagram text.muted { fill: var(--muted); }
+
+/* Decision walker: the nested list stays for readers without scripts; with scripts one node at a time. */
+ol.walker, ol.walker ol { padding-left: 1.4em; display: grid; gap: var(--space-2); }
+.walker-view { display: grid; gap: var(--space-3); border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); padding: var(--space-4); }
+.walker-view:focus { outline: none; }
+.walker-text { display: grid; gap: var(--space-2); font-size: var(--step-1); }
+.walker-options, .walker-controls { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.walker-controls button { font: inherit; font-size: var(--step--1); color: var(--accent); background: transparent; border: 0; padding: 0.2em 0; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
+.walker-controls button:disabled { color: var(--muted); cursor: default; text-decoration: none; }
+
+/* Segmented panels: every panel shows without scripts, headed by its label; with scripts one at a time. */
+.seg-panels { display: grid; gap: var(--space-3); }
+.seg-panel { display: grid; gap: var(--space-2); min-width: 0; }
+.seg-panels.is-tabbed > .seg-panel::before { display: none; }
+.seg-panels > .seg { justify-self: start; }
+
+/* A decision walker's outcome takes the colour of its exit: start, wait or stop. */
+.walker-view[data-outcome] { border-left: 4px solid var(--outcome, var(--line)); }
+.walker-view[data-outcome="start"] { --outcome: var(--on); }
+.walker-view[data-outcome="wait"] { --outcome: var(--watch); }
+.walker-view[data-outcome="stop"] { --outcome: var(--act); }
+
+/* Count bar: one link per group, as wide as the group has entries. */
+.count-bar { display: flex; flex-wrap: wrap; gap: 2px; }
+.count-seg { flex-basis: 6rem; min-width: 0; display: grid; gap: 1px; padding: var(--space-2) var(--space-3); background: var(--accent-soft); border-bottom: 3px solid var(--accent); border-radius: 4px 4px 0 0; color: var(--ink); text-decoration: none; font-size: var(--step--1); line-height: 1.3; }
+.count-seg:hover { background: var(--surface-2); }
+.count-n { font: 600 var(--step-1)/1.1 var(--font-display); font-variant-numeric: tabular-nums; }
+.count-name { overflow-wrap: anywhere; }
+
+/* Level scale: a track per reading, zones calm, watch and act, the values where it changes marked under it. */
+.scale-list { display: grid; gap: var(--space-3); }
+.scale-row { display: grid; gap: var(--space-2); }
+@media (min-width: 720px) { .scale-row { grid-template-columns: 200px minmax(0, 1fr); align-items: center; } }
+.scale-name { font-size: var(--step--1); }
+.scale-track { position: relative; height: 34px; margin-right: 1.5rem; }
+.scale-zone { position: absolute; top: 0; height: 12px; }
+.scale-zone.calm { background: color-mix(in srgb, var(--calm) 35%, transparent); border-radius: 3px 0 0 3px; }
+.scale-zone.watch { background: var(--watch); }
+.scale-zone.act { background: var(--act); border-radius: 0 3px 3px 0; }
+.scale-mark { position: absolute; top: 14px; transform: translateX(-50%); font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.scale-mark::before { content: ""; position: absolute; left: 50%; top: -14px; height: 14px; border-left: 1px solid var(--ink); }
+.scale-legend { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-4); font-size: var(--step--1); color: var(--muted); }
+.scale-legend li { display: flex; align-items: center; gap: var(--space-2); }
+
+.symptoms { display: grid; gap: var(--space-2); }
+.symptoms ul.chips { list-style: none; margin: 0; padding: 0; }
+.symptoms .chip { text-decoration: none; }
+.symptoms .chip:hover { border-color: var(--accent); }
+</style>
+</head>
+<body>
+<div class="doc">
+  <aside class="side">
+    <div class="brand"><span class="mono">dbWise</span><nav class="series" aria-label="pages in this series"><a href="getting-started.html">Getting started</a><a href="how-to.html">How-to guides</a><a href="explanation.html">Explanation</a><a href="reference.html">Reference</a><a href="troubleshooting.html" aria-current="page">Troubleshooting</a><a href="limitations.html">Limitations</a></nav></div>
+    <nav data-pb-nav aria-label="Sections"><ol><li><a href="#the-server-is-missing-or-failed-in-mcp">The server is missing or failed in /mcp</a></li><li><a href="#the-server-shows-no-tools">The server shows no tools</a></li><li><a href="#the-server-shows-only-dbwise_status">The server shows only dbwise_status</a></li><li><a href="#an-alias-is-unreachable">An alias is unreachable</a></li><li><a href="#a-call-is-refused-for-its-level">A call is refused for its level</a></li><li><a href="#a-query-is-refused-or-times-out">A query is refused or times out</a></li><li><a href="#a-diagnose-tool-reports-a-permission-problem">A diagnose tool reports a permission problem</a></li><li><a href="#an-invalid-configjson-stops-the-server">An invalid config.json stops the server</a></li><li><a href="#the-server-fails-at-start-on-a-slow-machine">The server fails at start on a slow machine</a></li></ol></nav>
+    <div data-pb-theme></div>
+  </aside>
+
+  <main class="stack-lg">
+    <header class="page-head stack">
+      <h1 id="dbwise-troubleshooting">dbWise troubleshooting</h1>
+      <p>Find the symptom, then read its cause, the check and the fix. For most problems, start with <code>dbwise doctor</code> (or <code>/dbwise:doctor</code> in a session). It checks the OS keychain, the Python environment and every alias, and ends with one <code>VERDICT:</code> line, <code>ready</code> or the list of problems. The <code>dbwise</code> command is on the <code>PATH</code> of the agent&#x27;s Bash tool only, so the agent can run it there. To run it in a terminal yourself, use the command line that <code>dbwise credential add</code> prints; on Windows that is PowerShell or cmd, because Git Bash cannot hide typed input. The <a href="reference.html">reference</a> lists the commands and the role gate&#x27;s refusal reasons, and <a href="limitations.html">Limitations</a> lists what dbWise cannot do.</p>
+      <p>A change to the configuration takes effect after you reconnect <code>plugin:dbwise:postgres</code> in <code>/mcp</code> or start a new session.</p>
+    </header>
+    <nav class="symptoms" aria-label="Symptoms" data-text="skip">
+      <p class="eyebrow">Symptoms</p>
+      <ul class="chips">
+        <li><a class="chip" href="#the-server-is-missing-or-failed-in-mcp">The server is missing or failed in <code>/mcp</code></a></li>
+        <li><a class="chip" href="#the-server-shows-no-tools">The server shows no tools</a></li>
+        <li><a class="chip" href="#the-server-shows-only-dbwise_status">The server shows only dbwise_status</a></li>
+        <li><a class="chip" href="#an-alias-is-unreachable">An alias is unreachable</a></li>
+        <li><a class="chip" href="#a-call-is-refused-for-its-level">A call is refused for its level</a></li>
+        <li><a class="chip" href="#a-query-is-refused-or-times-out">A query is refused or times out</a></li>
+        <li><a class="chip" href="#a-diagnose-tool-reports-a-permission-problem">A diagnose tool reports a permission problem</a></li>
+        <li><a class="chip" href="#an-invalid-configjson-stops-the-server">An invalid config.json stops the server</a></li>
+        <li><a class="chip" href="#the-server-fails-at-start-on-a-slow-machine">The server fails at start on a slow machine</a></li>
+      </ul>
+    </nav>
+    <section class="stack" id="the-server-is-missing-or-failed-in-mcp">
+      <h2>The server is missing or failed in <code>/mcp</code></h2>
+      <article class="entry">
+        <p><code>/mcp</code> lists no <code>plugin:dbwise:postgres</code>, or lists it as failed.</p>
+        <div class="part" data-label="Cause">
+          <p>one of these:</p>
+          <ul>
+            <li>The plugin is not installed or is disabled. Install it with <code>/plugin install dbwise@agentpit</code> and start a new session.</li>
+            <li>There is no Python 3.12 to 3.14 on the <code>PATH</code> of the environment Claude Code starts in. The launcher prints that dbWise needs Python 3.12 to 3.14 and exits with status 1. See <a href="limitations.html#the-server-needs-python-312-to-314">The server needs Python 3.12 to 3.14</a>.</li>
+            <li><code>config.json</code> is invalid, so the server exits with status 1. See <a href="#an-invalid-configjson-stops-the-server">An invalid config.json stops the server</a>.</li>
+          </ul>
+        </div>
+        <div class="part" data-label="Check">
+          <p>run <code>python3 --version</code> (on Windows <code>py --list</code>) in the environment Claude Code starts from, and <code>dbwise doctor</code>.</p>
+          <p>The launcher tries <code>py -3.14</code>, <code>py -3.13</code>, <code>py -3.12</code> and then <code>python</code> on Windows, and <code>python3.14</code>, <code>python3.13</code>, <code>python3.12</code>, <code>python3</code> and then <code>python</code> on macOS and Linux, and takes the first that is 3.12 to 3.14.</p>
+        </div>
+        <div class="part" data-label="Fix">
+          <p>install a Python in the range, or correct the config, then start a new session. With Claude Code 2.1.296 under <code>claude -p</code>, a server that timed out at start was not started again by a new session for about 15 minutes; whether a server that exited with status 1 is held back the same way is not verified. If a new session does not bring it back, wait out that period.</p>
+        </div>
+      </article>
+    </section>
+    <section class="stack" id="the-server-shows-no-tools">
+      <h2>The server shows no tools</h2>
+      <article class="entry">
+        <p><code>plugin:dbwise:postgres</code> is connected, and no database tool is listed.</p>
+        <div class="part" data-label="Cause">
+          <p>the server registers a tool only when an alias admits it. With no aliases there is nothing to offer, and that is not an error. Either <code>config.json</code> does not exist, it holds no aliases, or <code>DBWISE_ALIASES</code> names none of them. A <code>read</code> alias gives the tools of level <code>read</code> only; the <code>diagnose</code> and <code>write</code> tools appear when an alias admits them.</p>
+        </div>
+        <div class="part" data-label="Check">
+          <pre data-lang="">dbwise alias list</pre>
+          <p>and <code>echo $DBWISE_ALIASES</code> (in PowerShell <code>$env:DBWISE_ALIASES</code>) in the environment Claude Code starts from. The names in the variable have to be alias names, and the server warns about one that is not.</p>
+        </div>
+        <div class="part" data-label="Fix">
+          <p>add an alias (<a href="how-to.html#add-an-alias">Add an alias</a>) or correct <code>DBWISE_ALIASES</code>, then reconnect.</p>
+        </div>
+      </article>
+    </section>
+    <section class="stack" id="the-server-shows-only-dbwise_status">
+      <h2>The server shows only dbwise_status</h2>
+      <article class="entry">
+        <p>The only tool is <code>dbwise_status</code>, and none of <code>list_databases</code>, <code>read_sql</code> and the rest.</p>
+        <div class="part" data-label="Cause">
+          <p>the plugin&#x27;s Python environment is not built yet. Claude Code waits a few tens of seconds for a server to answer, and the first build takes longer, so for the first session after the install (and after an update that changes <code>requirements.txt</code>) the server is a stub with one tool while a build runs in the background. A build that has failed, a platform dbWise refuses and a build in another session produce the same picture.</p>
+        </div>
+        <div class="part" data-label="Check">
+          <p>ask the agent to call <code>dbwise_status</code> and relay its text, or call it yourself. What the text means:</p>
+          <div class="table-wrap"><table>
+            <thead><tr>
+              <th scope="col">Text starts with</th>
+              <th scope="col">Meaning</th>
+              <th scope="col">What to do</th>
+            </tr></thead>
+            <tbody>
+              <tr><td><code>dbwise is installing its dependencies</code></td><td>The build is running</td><td>Wait about a minute, then reconnect <code>plugin:dbwise:postgres</code> in <code>/mcp</code> or start a new session</td></tr>
+              <tr><td><code>Another session is installing the dbwise dependencies</code></td><td>A second session started the build</td><td>The same: wait, then reconnect</td></tr>
+              <tr><td><code>The dependencies are installed.</code></td><td>The build ended</td><td>Reconnect <code>plugin:dbwise:postgres</code> in <code>/mcp</code> or start a new session</td></tr>
+              <tr><td><code>dbwise could not finish installing its dependencies.</code></td><td>The build failed. The text ends with the last lines of the build log and its path</td><td>Read the log, fix the cause, restart Claude Code</td></tr>
+              <tr><td><code>dbwise does not run on native Windows ARM64 Python</code></td><td>The Python on the <code>PATH</code> is a native ARM64 build, for which the two compiled packages have no wheel</td><td>Install an x64 Python 3.12 to 3.14; Windows on ARM runs it by emulation</td></tr>
+            </tbody>
+          </table></div>
+          <p>The full build log is <code>bootstrap.log</code> in the dbWise home directory, <code>~/.dbwise</code> or <code>$DBWISE_HOME</code> (see <a href="reference.html#files">Files</a>). It holds pip&#x27;s output. The usual cause of a failed build is no route to PyPI, or to the mirror pip is set up for, because pip installs binary wheels only. See <a href="limitations.html#the-first-start-needs-access-to-pypi">The first start needs access to PyPI</a>.</p>
+        </div>
+        <div class="part" data-label="Fix">
+          <p>after the cause is gone, restart Claude Code, or run <code>dbwise doctor</code> in a terminal, which waits for a build and then runs. A refused platform writes nothing to <code>bootstrap.log</code>.</p>
+        </div>
+      </article>
+    </section>
+    <section class="stack" id="an-alias-is-unreachable">
+      <h2>An alias is unreachable</h2>
+      <article class="entry">
+        <p><code>list_databases</code> shows the alias with <code>reachable: false</code>, or a call answers with <code>Access refused by the role check of alias &#x27;&lt;alias&gt;&#x27;: ...</code>, or with the cause the server recorded for the alias, such as <code>Alias &#x27;&lt;alias&gt;&#x27; has no usable connection at level &#x27;read&#x27;: ...</code> or <code>Timed out after 5s connecting to alias &#x27;&lt;alias&gt;&#x27;</code>.</p>
+        <div class="part" data-label="Cause">
+          <p>at start-up the server probes each alias with its <code>read</code> credential, and an alias it cannot open stays in the list with no database. The tool&#x27;s text and the alias&#x27;s <code>error</code> in <code>list_databases</code> name the cause; a gate refusal names its reasons in both and in the alias&#x27;s <code>reasons</code>.</p>
+        </div>
+        <div class="part" data-label="Check">
+          <pre data-lang="">dbwise doctor --alias prod</pre>
+          <p>The doctor tells these causes apart: <code>NO HOST</code> and <code>NO USER</code> (the config lacks them; the fix is a <code>dbwise server add</code> or <code>dbwise credential add</code>, or <code>dbwise import --from-vault</code>), <code>NETWORK</code> (the host cannot be reached within 5 seconds; check the VPN, the tunnel, the host and the port), a missing password (<code>dbwise set-password NAME</code> in a terminal), <code>AUTH FAILED</code> (the server refused the user; the password changed or is wrong, so run <code>dbwise set-password NAME</code>), <code>NOT FOUND</code> and <code>NO ACCESS</code> for a database in the list (correct the list with <code>dbwise server add</code>, or have the database owner grant CONNECT), and a role check <code>REFUSED:</code>, in a database of the alias&#x27;s list or in the server&#x27;s discovery database.</p>
+          <p>When the cause was the network, the agent&#x27;s <code>reconnect</code> tool probes the alias again. After a change to the config or to a password, reconnect <code>plugin:dbwise:postgres</code> in <code>/mcp</code> instead.</p>
+        </div>
+      </article>
+      <article class="entry" id="the-role-check-refused-the-alias">
+        <h3>The role check refused the alias</h3>
+        <p>The refusal lists every reason it found, separated by <code>;</code>. Each row below names the reason, the statement that clears it, and what it means. Run the statements as a superuser, in the database the reason was found in (one of the alias&#x27;s databases or the server&#x27;s discovery database, <code>dbname</code>, default <code>postgres</code>, which the server and <code>dbwise doctor</code> both check), and replace <code>dbwise_read</code> with the role the alias&#x27;s credential uses. After the fix, reconnect <code>plugin:dbwise:postgres</code> (or call <code>reconnect</code>), because the gate takes a snapshot when a pool opens.</p>
+        <div data-pb-filter="#role-check-table tbody tr" data-label="Search the refusal reasons" data-count="{shown} of {total} reasons" data-text="skip"></div>
+        <div id="role-check-table"><div class="table-wrap"><table>
+          <thead><tr>
+            <th scope="col">Reason</th>
+            <th scope="col">Statement that clears it</th>
+          </tr></thead>
+          <tbody>
+            <tr><td><code>the role is a superuser</code>, <code>has BYPASSRLS</code>, <code>has CREATEROLE</code>, <code>has CREATEDB</code>, <code>has REPLICATION</code></td><td><code>ALTER ROLE dbwise_read NOSUPERUSER NOBYPASSRLS NOCREATEROLE NOCREATEDB NOREPLICATION;</code> or use another role</td></tr>
+            <tr><td><code>the role is a member of predefined role(s) pg_write_all_data</code> (or <code>pg_signal_backend</code>, <code>pg_maintain</code>, <code>pg_read_server_files</code>, <code>pg_write_server_files</code>, <code>pg_execute_server_program</code>, <code>pg_checkpoint</code>, <code>pg_create_subscription</code>)</td><td><code>REVOKE pg_write_all_data FROM dbwise_read;</code></td></tr>
+            <tr><td><code>the role is a member of non-predefined role(s) app_role</code></td><td><code>REVOKE app_role FROM dbwise_read;</code> Membership lets the role cancel and terminate that role&#x27;s sessions and passes on what that role owns. Grant SELECT to the login directly, or through <code>pg_read_all_data</code>, instead</td></tr>
+            <tr><td><code>the role owns the current database</code>, <code>owns relations</code>, <code>owns functions</code>, <code>owns schemas of this database</code></td><td>Give the objects to another role, for example <code>ALTER TABLE orders OWNER TO app_owner;</code>. A role that owns objects can change them whatever its grants say</td></tr>
+            <tr><td><code>the role holds a write privilege on relation(s) public.orders</code> (up to three are listed)</td><td><code>REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON ALL TABLES IN SCHEMA public FROM dbwise_read;</code> and, on PostgreSQL 17 and later, add <code>MAINTAIN</code> to the list. For a sequence: <code>REVOKE USAGE, UPDATE ON ALL SEQUENCES IN SCHEMA public FROM dbwise_read;</code>. A grant to <code>PUBLIC</code> counts: run the same statements with <code>FROM PUBLIC</code>, or the role keeps being refused. A REVOKE on a table also removes column-level INSERT and UPDATE grants</td></tr>
+            <tr><td><code>the role can execute functions of the dblink extension</code></td><td>The REVOKE of <a href="how-to.html#5-revoke-the-functions-that-public-may-execute">step 5 of the role recipe</a>, run in that database; then <code>GRANT EXECUTE</code> on the functions to the roles that need <code>dblink</code></td></tr>
+            <tr><td><code>the role has USAGE on a foreign server</code></td><td><code>REVOKE USAGE ON FOREIGN SERVER server_name FROM dbwise_read;</code>, and the same <code>FROM PUBLIC</code> when it was granted there</td></tr>
+            <tr><td>at <code>read</code>: <code>the role is a member of pg_monitor, ... which belong to the diagnose level</code> (the reason names <code>pg_monitor</code>, <code>pg_read_all_stats</code> or <code>pg_stat_scan_tables</code>)</td><td><code>REVOKE pg_monitor FROM dbwise_read;</code> when the reason names <code>pg_monitor</code>: the other two come with it. Otherwise revoke the role the reason names. Use the monitoring roles on the <code>diagnose</code> credential only</td></tr>
+          </tbody>
+        </table></div></div>
+        <p>The statements above were run on PostgreSQL 17.11 against a role built to hit each reason, and each cleared it. Where the grants came from is easiest to see in <code>dbwise doctor</code>, whose <code>audit:</code> lines list what the role owns and the write grants that reach it, directly, through <code>PUBLIC</code> or through a role it inherits.</p>
+      </article>
+      <article class="entry" id="the-server-is-configured-with-role_check-warn">
+        <h3>The server is configured with role_check warn</h3>
+        <p>On a server whose entry in <code>config.json</code> has <code>&quot;role_check&quot;: &quot;warn&quot;</code>, a refused gate is a warning: the alias opens, and <code>list_databases</code> shows <code>role_check: warn</code> with the reasons. This is meant for local and test databases; see <a href="limitations.html#a-server-with-role_check-set-to-warn-loses-the-role-layer">Limitations</a>. The setting is edited in <code>config.json</code> by hand: <code>dbwise server add</code> replaces the entry and drops it.</p>
+      </article>
+    </section>
+    <section class="stack" id="a-call-is-refused-for-its-level">
+      <h2>A call is refused for its level</h2>
+      <article class="entry">
+        <p>The tool answers <code>Error: Alias &#x27;&lt;alias&gt;&#x27; is at level &#x27;&lt;alias level&gt;&#x27;, but this tool is at level &#x27;&lt;tool level&gt;&#x27;. Nothing was sent to the database.</code></p>
+        <div class="part" data-label="Cause">
+          <p>the alias&#x27;s level is lower than the tool&#x27;s. <code>diagnose_sql</code>, <code>explain_query</code>, <code>get_top_queries</code>, <code>analyze_db_health</code>, <code>analyze_workload_indexes</code> and <code>analyze_query_indexes</code> are <code>diagnose</code>; <code>write_sql</code> is <code>write</code>.</p>
+        </div>
+        <div class="part" data-label="Fix">
+          <p>raising the level is your decision. Replace the alias with a higher level, and give it a credential for each level up to the new one:</p>
+          <pre data-lang="">dbwise alias add prod prod-db --level diagnose --credential read=prod-reader --credential diagnose=prod-monitor</pre>
+          <p>Create the roles first (<a href="how-to.html#create-the-database-roles-for-dbwise">Create the database roles for dbWise</a>), because a <code>diagnose</code> login has to pass the gate at <code>diagnose</code>.</p>
+        </div>
+      </article>
+    </section>
+    <section class="stack" id="a-query-is-refused-or-times-out">
+      <h2>A query is refused or times out</h2>
+      <article class="entry">
+        <p><strong><code>read_sql</code> or <code>diagnose_sql</code> answers <code>Error: Error validating query: &lt;the query text&gt;</code>; <code>explain_query</code> answers <code>Error: Error executing explain plan: Error validating query: EXPLAIN (&lt;options&gt;) &lt;the query text&gt;</code>.</strong></p>
+        <div class="part" data-label="Cause">
+          <p>the SQL policy of the alias&#x27;s level refused the statement before it reached the database. The tool&#x27;s text does not name the reason. A statement kind the level does not admit, a function outside the level&#x27;s set and a <code>SELECT</code> with a locking clause are refused this way. A statement that PostgreSQL cannot parse answers <code>Error: Failed to parse SQL statement</code>.</p>
+        </div>
+        <div class="part" data-label="Check">
+          <p>compare the statement with <a href="explanation.html#what-each-levels-policy-admits">What each level&#x27;s policy admits</a>. <code>EXPLAIN</code> runs only through <code>diagnose_sql</code> or <code>explain_query</code> on an alias at <code>diagnose</code> or <code>write</code>, and a function such as <code>pg_sleep</code>, <code>set_config</code> or a <code>pg_advisory_*</code> function is in no set.</p>
+        </div>
+        <div class="part" data-label="Fix">
+          <p>rewrite the query to use admitted statements and functions. If the task needs something that only <code>diagnose</code> admits, raising the alias&#x27;s level is your decision; see <a href="#a-call-is-refused-for-its-level">A call is refused for its level</a>. At <code>write</code> there is no policy, and the database role is the only limit.</p>
+        </div>
+        <p><strong>A call answers <code>Error: Query execution timed out after 30 seconds at level read.</code></strong> The text goes on with <code>Consider simplifying your query or increasing the timeout.</code> At <code>diagnose</code> the level in the text is <code>diagnose</code>.</p>
+        <div class="part" data-label="Cause">
+          <p>a call at <code>read</code> or <code>diagnose</code> has 30 seconds, and the limit is fixed.</p>
+        </div>
+        <div class="part" data-label="Fix">
+          <p>simplify the query: filter earlier, add a <code>LIMIT</code>, or ask the DBA for an index. No setting raises the limit at <code>read</code> and <code>diagnose</code>. <code>write_sql</code> has no timeout, and using it is your decision.</p>
+        </div>
+      </article>
+    </section>
+    <section class="stack" id="a-diagnose-tool-reports-a-permission-problem">
+      <h2>A diagnose tool reports a permission problem</h2>
+      <article class="entry">
+        <p><strong>The <code>Sequence health:</code> part of <code>analyze_db_health</code> ends with <code>&lt;n&gt; sequence(s) could not be read with this role&#x27;s privileges and were not checked:</code>, followed by names.</strong> The role has no SELECT on those sequences. Grant it, never USAGE, which the gate counts as a write grant:</p>
+        <pre data-lang="sql">GRANT SELECT ON ALL SEQUENCES IN SCHEMA public TO dbwise_diagnose;
+ALTER DEFAULT PRIVILEGES FOR ROLE app_owner IN SCHEMA public
+  GRANT SELECT ON SEQUENCES TO dbwise_diagnose;</pre>
+        <p>or make the role a member of <code>pg_read_all_data</code>. The other health checks ran.</p>
+        <p><strong>A query on <code>hypopg_list_indexes</code> answers <code>permission denied for view hypopg_list_indexes</code>.</strong> hypopg 1.4.3 grants that view to its owner only, and the <code>GRANT SELECT ON ALL TABLES IN SCHEMA public</code> of the role recipe covers it only when the extension already exists in <code>public</code>. In the database with the extension, run <code>GRANT SELECT ON hypopg_list_indexes, hypopg_hidden_indexes TO dbwise_diagnose;</code>. If the extension lives in another schema, qualify both views with that schema and grant USAGE on the schema to every dbWise role (<code>dbwise_read</code>, <code>dbwise_diagnose</code>, <code>dbwise_write</code>): the pool reset after each call runs that schema&#x27;s <code>hypopg_reset()</code> and <code>hypopg_unhide_all_indexes()</code> on the pools of all levels. The recipe is in <a href="how-to.html#create-the-database-roles-for-dbwise">Create the database roles for dbWise</a>. The index tools do not use these views.</p>
+        <p><strong><code>get_top_queries</code> or the workload index tool finds no <code>pg_stat_statements</code>, or the index tools no <code>hypopg</code>.</strong> The doctor prints <code>note: extension ... is not installed in &lt;database&gt;</code>. Ask the database owner to create it, or create it through <code>write_sql</code> on an alias at level <code>write</code>.</p>
+      </article>
+    </section>
+    <section class="stack" id="an-invalid-configjson-stops-the-server">
+      <h2>An invalid config.json stops the server</h2>
+      <article class="entry">
+        <p><code>plugin:dbwise:postgres</code> failed in <code>/mcp</code>, and no alias is offered, including the valid ones.</p>
+        <div class="part" data-label="Cause">
+          <p>once the Python environment is built, the server reads <code>config.json</code> before it opens an alias. A file that cannot be read, is not valid JSON or does not follow the <a href="reference.html#configuration-format">format</a> makes it print the reason and exit with status 1.</p>
+        </div>
+        <div class="part" data-label="Check">
+          <p><code>dbwise doctor</code> prints <code>config unusable:</code> with the file, what is wrong and, for a format violation, the JSON path of the first problem. The SessionStart hook&#x27;s lines in the session list the config as unusable as well.</p>
+        </div>
+        <div class="part" data-label="Fix">
+          <p>correct the file, or copy <code>config.json.bak</code> over it when one exists, then reconnect. See <a href="limitations.html#an-invalid-configjson-stops-the-server">An invalid config.json stops the server</a>.</p>
+        </div>
+      </article>
+    </section>
+    <section class="stack" id="the-server-fails-at-start-on-a-slow-machine">
+      <h2>The server fails at start on a slow machine</h2>
+      <article class="entry">
+        <p>The environment is built and the config is valid, and <code>plugin:dbwise:postgres</code> still fails or times out when a session starts, on a machine that is slow or heavily loaded.</p>
+        <div class="part" data-label="Cause">
+          <p>Claude Code closed the server&#x27;s input when it had waited long enough for the first answer. Observed with Claude Code 2.1.296 under <code>claude -p</code>: 27 seconds. A measurement of the server&#x27;s start-up with a built environment on a Windows 11 machine took about 2 seconds on the first start after a build and under 1 second afterwards, so this applies to slow machines only.</p>
+        </div>
+        <div class="part" data-label="Fix (optional)">
+          <p>raise the wait with <code>MCP_TIMEOUT</code>, in milliseconds, set in the environment Claude Code starts from. In a POSIX shell:</p>
+          <pre data-lang="">export MCP_TIMEOUT=60000</pre>
+          <p>In PowerShell:</p>
+          <pre data-lang="">$env:MCP_TIMEOUT = "60000"</pre>
+          <p>dbWise cannot set this for you: it belongs to Claude Code&#x27;s own environment. The first start after an install is covered by the <code>dbwise_status</code> stub and needs no setting.</p>
+        </div>
+      </article>
+    </section>
+  </main>
+</div>
+<script type="application/json" id="pb-strings">{"a-call-is-refused-for-its-level.heading":"A call is refused for its level","a-call-is-refused-for-its-level.p1":"The tool answers `Error: Alias '<alias>' is at level '<alias level>', but this tool is at level '<tool level>'. Nothing was sent to the database.`","a-call-is-refused-for-its-level.p2":"the alias's level is lower than the tool's. `diagnose_sql`, `explain_query`, `get_top_queries`, `analyze_db_health`, `analyze_workload_indexes` and `analyze_query_indexes` are `diagnose`; `write_sql` is `write`.","a-call-is-refused-for-its-level.p3":"raising the level is your decision. Replace the alias with a higher level, and give it a credential for each level up to the new one:","a-call-is-refused-for-its-level.p4":"Create the roles first ([Create the database roles for dbWise](how-to.html#create-the-database-roles-for-dbwise)), because a `diagnose` login has to pass the gate at `diagnose`.","a-diagnose-tool-reports-a-permission-problem.heading":"A diagnose tool reports a permission problem","a-diagnose-tool-reports-a-permission-problem.p1":"**The `Sequence health:` part of `analyze_db_health` ends with `<n> sequence(s) could not be read with this role's privileges and were not checked:`, followed by names.** The role has no SELECT on those sequences. Grant it, never USAGE, which the gate counts as a write grant:","a-diagnose-tool-reports-a-permission-problem.p2":"or make the role a member of `pg_read_all_data`. The other health checks ran.","a-diagnose-tool-reports-a-permission-problem.p3":"**A query on `hypopg_list_indexes` answers `permission denied for view hypopg_list_indexes`.** hypopg 1.4.3 grants that view to its owner only, and the `GRANT SELECT ON ALL TABLES IN SCHEMA public` of the role recipe covers it only when the extension already exists in `public`. In the database with the extension, run `GRANT SELECT ON hypopg_list_indexes, hypopg_hidden_indexes TO dbwise_diagnose;`. If the extension lives in another schema, qualify both views with that schema and grant USAGE on the schema to every dbWise role (`dbwise_read`, `dbwise_diagnose`, `dbwise_write`): the pool reset after each call runs that schema's `hypopg_reset()` and `hypopg_unhide_all_indexes()` on the pools of all levels. The recipe is in [Create the database roles for dbWise](how-to.html#create-the-database-roles-for-dbwise). The index tools do not use these views.","a-diagnose-tool-reports-a-permission-problem.p4":"**`get_top_queries` or the workload index tool finds no `pg_stat_statements`, or the index tools no `hypopg`.** The doctor prints `note: extension ... is not installed in <database>`. Ask the database owner to create it, or create it through `write_sql` on an alias at level `write`.","a-query-is-refused-or-times-out.heading":"A query is refused or times out","a-query-is-refused-or-times-out.p1":"**`read_sql` or `diagnose_sql` answers `Error: Error validating query: <the query text>`; `explain_query` answers `Error: Error executing explain plan: Error validating query: EXPLAIN (<options>) <the query text>`.**","a-query-is-refused-or-times-out.p2":"the SQL policy of the alias's level refused the statement before it reached the database. The tool's text does not name the reason. A statement kind the level does not admit, a function outside the level's set and a `SELECT` with a locking clause are refused this way. A statement that PostgreSQL cannot parse answers `Error: Failed to parse SQL statement`.","a-query-is-refused-or-times-out.p3":"compare the statement with [What each level's policy admits](explanation.html#what-each-levels-policy-admits). `EXPLAIN` runs only through `diagnose_sql` or `explain_query` on an alias at `diagnose` or `write`, and a function such as `pg_sleep`, `set_config` or a `pg_advisory_*` function is in no set.","a-query-is-refused-or-times-out.p4":"rewrite the query to use admitted statements and functions. If the task needs something that only `diagnose` admits, raising the alias's level is your decision; see [A call is refused for its level](#a-call-is-refused-for-its-level). At `write` there is no policy, and the database role is the only limit.","a-query-is-refused-or-times-out.p5":"**A call answers `Error: Query execution timed out after 30 seconds at level read.`** The text goes on with `Consider simplifying your query or increasing the timeout.` At `diagnose` the level in the text is `diagnose`.","a-query-is-refused-or-times-out.p6":"a call at `read` or `diagnose` has 30 seconds, and the limit is fixed.","a-query-is-refused-or-times-out.p7":"simplify the query: filter earlier, add a `LIMIT`, or ask the DBA for an index. No setting raises the limit at `read` and `diagnose`. `write_sql` has no timeout, and using it is your decision.","an-alias-is-unreachable.heading":"An alias is unreachable","an-alias-is-unreachable.p1":"`list_databases` shows the alias with `reachable: false`, or a call answers with `Access refused by the role check of alias '<alias>': ...`, or with the cause the server recorded for the alias, such as `Alias '<alias>' has no usable connection at level 'read': ...` or `Timed out after 5s connecting to alias '<alias>'`.","an-alias-is-unreachable.p2":"at start-up the server probes each alias with its `read` credential, and an alias it cannot open stays in the list with no database. The tool's text and the alias's `error` in `list_databases` name the cause; a gate refusal names its reasons in both and in the alias's `reasons`.","an-alias-is-unreachable.p4":"The doctor tells these causes apart: `NO HOST` and `NO USER` (the config lacks them; the fix is a `dbwise server add` or `dbwise credential add`, or `dbwise import --from-vault`), `NETWORK` (the host cannot be reached within 5 seconds; check the VPN, the tunnel, the host and the port), a missing password (`dbwise set-password NAME` in a terminal), `AUTH FAILED` (the server refused the user; the password changed or is wrong, so run `dbwise set-password NAME`), `NOT FOUND` and `NO ACCESS` for a database in the list (correct the list with `dbwise server add`, or have the database owner grant CONNECT), and a role check `REFUSED:`, in a database of the alias's list or in the server's discovery database.","an-alias-is-unreachable.p5":"When the cause was the network, the agent's `reconnect` tool probes the alias again. After a change to the config or to a password, reconnect `plugin:dbwise:postgres` in `/mcp` instead.","an-invalid-configjson-stops-the-server.heading":"An invalid config.json stops the server","an-invalid-configjson-stops-the-server.p1":"`plugin:dbwise:postgres` failed in `/mcp`, and no alias is offered, including the valid ones.","an-invalid-configjson-stops-the-server.p2":"once the Python environment is built, the server reads `config.json` before it opens an alias. A file that cannot be read, is not valid JSON or does not follow the [format](reference.html#configuration-format) makes it print the reason and exit with status 1.","an-invalid-configjson-stops-the-server.p3":"`dbwise doctor` prints `config unusable:` with the file, what is wrong and, for a format violation, the JSON path of the first problem. The SessionStart hook's lines in the session list the config as unusable as well.","an-invalid-configjson-stops-the-server.p4":"correct the file, or copy `config.json.bak` over it when one exists, then reconnect. See [An invalid config.json stops the server](limitations.html#an-invalid-configjson-stops-the-server).","copied_label":"Copied","copy_label":"Copy","filter_refusal":"Search the refusal reasons","filter_refusal_count":"{shown} of {total} reasons","intro.p1":"Find the symptom, then read its cause, the check and the fix. For most problems, start with `dbwise doctor` (or `/dbwise:doctor` in a session). It checks the OS keychain, the Python environment and every alias, and ends with one `VERDICT:` line, `ready` or the list of problems. The `dbwise` command is on the `PATH` of the agent's Bash tool only, so the agent can run it there. To run it in a terminal yourself, use the command line that `dbwise credential add` prints; on Windows that is PowerShell or cmd, because Git Bash cannot hide typed input. The [reference](reference.html) lists the commands and the role gate's refusal reasons, and [Limitations](limitations.html) lists what dbWise cannot do.","intro.p2":"A change to the configuration takes effect after you reconnect `plugin:dbwise:postgres` in `/mcp` or start a new session.","label_cause":"Cause","label_check":"Check","label_fix":"Fix","label_fix_optional":"Fix (optional)","nav_label":"Troubleshooting","series_label":"pages in this series","symptoms_label":"Symptoms","the-role-check-refused-the-alias.cell1":"`the role is a superuser`, `has BYPASSRLS`, `has CREATEROLE`, `has CREATEDB`, `has REPLICATION`","the-role-check-refused-the-alias.cell10":"`REVOKE USAGE ON FOREIGN SERVER server_name FROM dbwise_read;`, and the same `FROM PUBLIC` when it was granted there","the-role-check-refused-the-alias.cell11":"at `read`: `the role is a member of pg_monitor, ... which belong to the diagnose level` (the reason names `pg_monitor`, `pg_read_all_stats` or `pg_stat_scan_tables`)","the-role-check-refused-the-alias.cell12":"`REVOKE pg_monitor FROM dbwise_read;` when the reason names `pg_monitor`: the other two come with it. Otherwise revoke the role the reason names. Use the monitoring roles on the `diagnose` credential only","the-role-check-refused-the-alias.cell2":"`ALTER ROLE dbwise_read NOSUPERUSER NOBYPASSRLS NOCREATEROLE NOCREATEDB NOREPLICATION;` or use another role","the-role-check-refused-the-alias.cell3":"`the role is a member of predefined role(s) pg_write_all_data` (or `pg_signal_backend`, `pg_maintain`, `pg_read_server_files`, `pg_write_server_files`, `pg_execute_server_program`, `pg_checkpoint`, `pg_create_subscription`)","the-role-check-refused-the-alias.cell4":"`REVOKE app_role FROM dbwise_read;` Membership lets the role cancel and terminate that role's sessions and passes on what that role owns. Grant SELECT to the login directly, or through `pg_read_all_data`, instead","the-role-check-refused-the-alias.cell5":"`the role owns the current database`, `owns relations`, `owns functions`, `owns schemas of this database`","the-role-check-refused-the-alias.cell6":"Give the objects to another role, for example `ALTER TABLE orders OWNER TO app_owner;`. A role that owns objects can change them whatever its grants say","the-role-check-refused-the-alias.cell7":"`the role holds a write privilege on relation(s) public.orders` (up to three are listed)","the-role-check-refused-the-alias.cell8":"`REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON ALL TABLES IN SCHEMA public FROM dbwise_read;` and, on PostgreSQL 17 and later, add `MAINTAIN` to the list. For a sequence: `REVOKE USAGE, UPDATE ON ALL SEQUENCES IN SCHEMA public FROM dbwise_read;`. A grant to `PUBLIC` counts: run the same statements with `FROM PUBLIC`, or the role keeps being refused. A REVOKE on a table also removes column-level INSERT and UPDATE grants","the-role-check-refused-the-alias.cell9":"The REVOKE of [step 5 of the role recipe](how-to.html#5-revoke-the-functions-that-public-may-execute), run in that database; then `GRANT EXECUTE` on the functions to the roles that need `dblink`","the-role-check-refused-the-alias.heading":"The role check refused the alias","the-role-check-refused-the-alias.p1":"The refusal lists every reason it found, separated by `;`. Each row below names the reason, the statement that clears it, and what it means. Run the statements as a superuser, in the database the reason was found in (one of the alias's databases or the server's discovery database, `dbname`, default `postgres`, which the server and `dbwise doctor` both check), and replace `dbwise_read` with the role the alias's credential uses. After the fix, reconnect `plugin:dbwise:postgres` (or call `reconnect`), because the gate takes a snapshot when a pool opens.","the-role-check-refused-the-alias.p2":"The statements above were run on PostgreSQL 17.11 against a role built to hit each reason, and each cleared it. Where the grants came from is easiest to see in `dbwise doctor`, whose `audit:` lines list what the role owns and the write grants that reach it, directly, through `PUBLIC` or through a role it inherits.","the-role-check-refused-the-alias.th1":"Reason","the-role-check-refused-the-alias.th2":"Statement that clears it","the-server-fails-at-start-on-a-slow-machine.heading":"The server fails at start on a slow machine","the-server-fails-at-start-on-a-slow-machine.p1":"The environment is built and the config is valid, and `plugin:dbwise:postgres` still fails or times out when a session starts, on a machine that is slow or heavily loaded.","the-server-fails-at-start-on-a-slow-machine.p2":"Claude Code closed the server's input when it had waited long enough for the first answer. Observed with Claude Code 2.1.296 under `claude -p`: 27 seconds. A measurement of the server's start-up with a built environment on a Windows 11 machine took about 2 seconds on the first start after a build and under 1 second afterwards, so this applies to slow machines only.","the-server-fails-at-start-on-a-slow-machine.p3":"raise the wait with `MCP_TIMEOUT`, in milliseconds, set in the environment Claude Code starts from. In a POSIX shell:","the-server-fails-at-start-on-a-slow-machine.p4":"In PowerShell:","the-server-fails-at-start-on-a-slow-machine.p5":"dbWise cannot set this for you: it belongs to Claude Code's own environment. The first start after an install is covered by the `dbwise_status` stub and needs no setting.","the-server-is-configured-with-role_check-warn.heading":"The server is configured with role_check warn","the-server-is-configured-with-role_check-warn.p1":"On a server whose entry in `config.json` has `\"role_check\": \"warn\"`, a refused gate is a warning: the alias opens, and `list_databases` shows `role_check: warn` with the reasons. This is meant for local and test databases; see [Limitations](limitations.html#a-server-with-role_check-set-to-warn-loses-the-role-layer). The setting is edited in `config.json` by hand: `dbwise server add` replaces the entry and drops it.","the-server-is-missing-or-failed-in-mcp.heading":"The server is missing or failed in `/mcp`","the-server-is-missing-or-failed-in-mcp.li1":"The plugin is not installed or is disabled. Install it with `/plugin install dbwise@agentpit` and start a new session.","the-server-is-missing-or-failed-in-mcp.li2":"There is no Python 3.12 to 3.14 on the `PATH` of the environment Claude Code starts in. The launcher prints that dbWise needs Python 3.12 to 3.14 and exits with status 1. See [The server needs Python 3.12 to 3.14](limitations.html#the-server-needs-python-312-to-314).","the-server-is-missing-or-failed-in-mcp.li3":"`config.json` is invalid, so the server exits with status 1. See [An invalid config.json stops the server](#an-invalid-configjson-stops-the-server).","the-server-is-missing-or-failed-in-mcp.p1":"`/mcp` lists no `plugin:dbwise:postgres`, or lists it as failed.","the-server-is-missing-or-failed-in-mcp.p2":"one of these:","the-server-is-missing-or-failed-in-mcp.p3":"run `python3 --version` (on Windows `py --list`) in the environment Claude Code starts from, and `dbwise doctor`.","the-server-is-missing-or-failed-in-mcp.p4":"The launcher tries `py -3.14`, `py -3.13`, `py -3.12` and then `python` on Windows, and `python3.14`, `python3.13`, `python3.12`, `python3` and then `python` on macOS and Linux, and takes the first that is 3.12 to 3.14.","the-server-is-missing-or-failed-in-mcp.p5":"install a Python in the range, or correct the config, then start a new session. With Claude Code 2.1.296 under `claude -p`, a server that timed out at start was not started again by a new session for about 15 minutes; whether a server that exited with status 1 is held back the same way is not verified. If a new session does not bring it back, wait out that period.","the-server-shows-no-tools.heading":"The server shows no tools","the-server-shows-no-tools.p1":"`plugin:dbwise:postgres` is connected, and no database tool is listed.","the-server-shows-no-tools.p2":"the server registers a tool only when an alias admits it. With no aliases there is nothing to offer, and that is not an error. Either `config.json` does not exist, it holds no aliases, or `DBWISE_ALIASES` names none of them. A `read` alias gives the tools of level `read` only; the `diagnose` and `write` tools appear when an alias admits them.","the-server-shows-no-tools.p4":"and `echo $DBWISE_ALIASES` (in PowerShell `$env:DBWISE_ALIASES`) in the environment Claude Code starts from. The names in the variable have to be alias names, and the server warns about one that is not.","the-server-shows-no-tools.p5":"add an alias ([Add an alias](how-to.html#add-an-alias)) or correct `DBWISE_ALIASES`, then reconnect.","the-server-shows-only-dbwise_status.cell1":"The build is running","the-server-shows-only-dbwise_status.cell10":"Install an x64 Python 3.12 to 3.14; Windows on ARM runs it by emulation","the-server-shows-only-dbwise_status.cell2":"Wait about a minute, then reconnect `plugin:dbwise:postgres` in `/mcp` or start a new session","the-server-shows-only-dbwise_status.cell3":"A second session started the build","the-server-shows-only-dbwise_status.cell4":"The same: wait, then reconnect","the-server-shows-only-dbwise_status.cell5":"The build ended","the-server-shows-only-dbwise_status.cell6":"Reconnect `plugin:dbwise:postgres` in `/mcp` or start a new session","the-server-shows-only-dbwise_status.cell7":"The build failed. The text ends with the last lines of the build log and its path","the-server-shows-only-dbwise_status.cell8":"Read the log, fix the cause, restart Claude Code","the-server-shows-only-dbwise_status.cell9":"The Python on the `PATH` is a native ARM64 build, for which the two compiled packages have no wheel","the-server-shows-only-dbwise_status.heading":"The server shows only dbwise_status","the-server-shows-only-dbwise_status.p1":"The only tool is `dbwise_status`, and none of `list_databases`, `read_sql` and the rest.","the-server-shows-only-dbwise_status.p2":"the plugin's Python environment is not built yet. Claude Code waits a few tens of seconds for a server to answer, and the first build takes longer, so for the first session after the install (and after an update that changes `requirements.txt`) the server is a stub with one tool while a build runs in the background. A build that has failed, a platform dbWise refuses and a build in another session produce the same picture.","the-server-shows-only-dbwise_status.p3":"ask the agent to call `dbwise_status` and relay its text, or call it yourself. What the text means:","the-server-shows-only-dbwise_status.p4":"The full build log is `bootstrap.log` in the dbWise home directory, `~/.dbwise` or `$DBWISE_HOME` (see [Files](reference.html#files)). It holds pip's output. The usual cause of a failed build is no route to PyPI, or to the mirror pip is set up for, because pip installs binary wheels only. See [The first start needs access to PyPI](limitations.html#the-first-start-needs-access-to-pypi).","the-server-shows-only-dbwise_status.p5":"after the cause is gone, restart Claude Code, or run `dbwise doctor` in a terminal, which waits for a build and then runs. A refused platform writes nothing to `bootstrap.log`.","the-server-shows-only-dbwise_status.th1":"Text starts with","the-server-shows-only-dbwise_status.th2":"Meaning","the-server-shows-only-dbwise_status.th3":"What to do","theme_dark":"Dark","theme_label":"Page theme","theme_light":"Light","theme_system":"System","title":"dbWise troubleshooting","toc_label":"Sections"}</script>
+<script type="application/json" id="pb-glossary">{"alias":{"name":"Alias","short":"The name the agent uses in a tool call. It points at a server and has a level, read unless you say otherwise, and a credential for each level up to that level."},"credential":{"name":"Credential","short":"A database user and the place its password lives: the OS keychain, an environment variable or a file. The configuration never holds the password."},"diagnose":{"name":"diagnose","short":"Everything at read, plus EXPLAIN with ANALYZE, health checks, top queries from pg_stat_statements and index advice. It can log in with a database role of its own, a member of pg_monitor."},"read":{"name":"read","short":"The default level. The agent looks at schemas and objects and runs SELECT and SHOW statements, in a read-only transaction with a 30-second timeout."},"role_check":{"name":"role_check","short":"A per-server setting, enforce by default. With warn, a refusal by the role gate becomes a warning and the alias still works, so the role layer of the guarantee is gone. Set it by hand in config.json."},"role_gate":{"name":"Role gate","short":"The check dbWise runs when a connection pool opens: one catalog query as the pool's role. A role that is a superuser, owns objects, holds a write grant, belongs to an application role or can run dblink is refused at read and diagnose."},"write":{"name":"write","short":"Everything at diagnose, plus any SQL, committed. Nothing but the database role limits it, so give that role only the grants the task needs."}}</script>
+<script type="application/json" id="pb-facts">{"commands":[{"command":"dbwise alias","help":"the names a tool call uses to pick a server and a level"},{"command":"dbwise alias add","help":"add or replace an alias"},{"command":"dbwise alias rm","help":"remove an alias"},{"command":"dbwise alias list","help":"list aliases with their level and credential per level"},{"command":"dbwise server","help":"database endpoints"},{"command":"dbwise server add","help":"add or replace a server"},{"command":"dbwise server rm","help":"remove a server no alias uses"},{"command":"dbwise server list","help":"list servers"},{"command":"dbwise credential","help":"database logins"},{"command":"dbwise credential add","help":"add or replace a credential (keychain password by default)"},{"command":"dbwise credential rm","help":"remove a credential no alias uses"},{"command":"dbwise credential list","help":"list credentials and their password sources"},{"command":"dbwise import","help":"merge a team file into the local config, then ask missing passwords"},{"command":"dbwise export","help":"write the local config, or part of it, as a team file"},{"command":"dbwise set-password","help":"type a credential's password into the OS keychain, or point the credential to an env or file source"},{"command":"dbwise doctor","help":"check the keychain, the venv and every alias, and name the fix for each problem"}],"default_level":"read","env":["CLAUDE_PLUGIN_ROOT","DBWISE_ALIASES","DBWISE_BUILD_COMMAND","DBWISE_HOME","PATH","PATHEXT","VAULT_TOKEN"],"levels":["read","diagnose","write"],"tools":[{"aliases":["read","diagnose","write"],"level":"any","tool":"list_databases"},{"aliases":["read","diagnose","write"],"level":"any","tool":"reconnect"},{"aliases":["read","diagnose","write"],"level":"read","tool":"list_schemas"},{"aliases":["read","diagnose","write"],"level":"read","tool":"list_objects"},{"aliases":["read","diagnose","write"],"level":"read","tool":"get_object_details"},{"aliases":["read","diagnose","write"],"level":"read","tool":"read_sql"},{"aliases":["diagnose","write"],"level":"diagnose","tool":"explain_query"},{"aliases":["diagnose","write"],"level":"diagnose","tool":"get_top_queries"},{"aliases":["diagnose","write"],"level":"diagnose","tool":"analyze_db_health"},{"aliases":["diagnose","write"],"level":"diagnose","tool":"analyze_workload_indexes"},{"aliases":["diagnose","write"],"level":"diagnose","tool":"analyze_query_indexes"},{"aliases":["diagnose","write"],"level":"diagnose","tool":"diagnose_sql"},{"aliases":["write"],"level":"write","tool":"write_sql"}]}</script>
+<script type="application/json" id="pb-data">{}</script>
+<script>
+const __m = {}
+// Shared page behaviour: strings, glossary popovers, segmented switches, chips and the theme switch.
+// Pages read their data from the JSON script elements the build writes and call PB.* helpers.
+const PB = (() => {
+  const json = id => {
+    const el = document.getElementById(id)
+    return el ? JSON.parse(el.textContent) : {}
+  }
+  const strings = json('pb-strings')
+  const glossary = json('pb-glossary')
+  const facts = json('pb-facts')
+  const data = json('pb-data')
+
+  const t = (key, vars = {}) => {
+    const s = strings[key]
+    if (s === undefined) return `{{${key}}}`
+    return s.replace(/\{(\w+)\}/g, (_, k) => (vars[k] === undefined ? `{${k}}` : String(vars[k])))
+  }
+
+  const el = (tag, attrs = {}, ...children) => {
+    const node = document.createElement(tag)
+    for (const [k, v] of Object.entries(attrs)) {
+      if (v === null || v === undefined || v === false) continue
+      if (k === 'class') node.className = v
+      else if (k === 'text') node.textContent = v
+      else if (k === 'html') node.innerHTML = v
+      else if (k.startsWith('on')) node.addEventListener(k.slice(2), v)
+      else node.setAttribute(k, v === true ? '' : v)
+    }
+    for (const c of children.flat()) if (c !== null && c !== undefined && c !== false) node.append(c instanceof Node ? c : document.createTextNode(String(c)))
+    return node
+  }
+
+  // Text with backtick spans as nodes: code spans become <code>, the rest stays text, never markup.
+  // An unbalanced backtick leaves the whole string as text.
+  const rich = text => {
+    const s = text === undefined || text === null ? '' : String(text)
+    if (s === '') return []
+    const parts = s.split('`')
+    if (parts.length % 2 === 0) return [document.createTextNode(s)]
+    return parts.flatMap((part, i) => {
+      if (part === '') return []
+      return [i % 2 ? el('code', { text: part }) : document.createTextNode(part)]
+    })
+  }
+
+  const store = {
+    get(key) { try { return localStorage.getItem(`pb:${key}`) } catch { return null } },
+    set(key, value) { try { localStorage.setItem(`pb:${key}`, value) } catch { /* storage blocked */ } },
+  }
+
+  // Theme: system (no attribute), light or dark, remembered per viewer; an icon switch.
+  const ICONS = {
+    system: '<rect x="2.5" y="3.5" width="11" height="8" rx="1"/><path d="M6 14h4M8 11.5V14"/>',
+    light: '<circle cx="8" cy="8" r="3"/><path d="M8 1.5v1.5M8 13v1.5M1.5 8H3M13 8h1.5M3.4 3.4l1 1M11.6 11.6l1 1M3.4 12.6l1-1M11.6 4.4l1-1"/>',
+    dark: '<path d="M13 9.5A5.5 5.5 0 0 1 6.5 3a5.5 5.5 0 1 0 6.5 6.5z"/>',
+  }
+  function initTheme() {
+    const apply = v => {
+      if (v === 'light' || v === 'dark') document.documentElement.setAttribute('data-theme', v)
+      else document.documentElement.removeAttribute('data-theme')
+    }
+    apply(store.get('theme'))
+    for (const seg of document.querySelectorAll('[data-pb-theme]')) {
+      seg.classList.add('seg', 'theme-switch')
+      seg.setAttribute('role', 'group')
+      seg.setAttribute('aria-label', t('theme_label'))
+      // innerHTML parses the icon in the SVG namespace; createElement('svg') would not.
+      seg.replaceChildren(...['system', 'light', 'dark'].map(v => {
+        const b = el('button', { type: 'button', 'data-value': v, title: t(`theme_${v}`), html: `<svg viewBox="0 0 16 16" aria-hidden="true">${ICONS[v]}</svg>` })
+        b.append(el('span', { class: 'visually-hidden', text: t(`theme_${v}`) }))
+        return b
+      }))
+      seg.addEventListener('pb:change', e => { apply(e.detail); store.set('theme', e.detail); document.dispatchEvent(new CustomEvent('pb:theme')) })
+      setSeg(seg, store.get('theme') || 'system', false)
+    }
+  }
+
+  // Segmented switches and chip groups: one pressed button; a 'pb:change' event with its value.
+  function setSeg(group, value, notify = true) {
+    for (const b of group.querySelectorAll('button[data-value]')) b.setAttribute('aria-pressed', String(b.dataset.value === value))
+    group.dataset.current = value
+    if (notify) group.dispatchEvent(new CustomEvent('pb:change', { detail: value }))
+  }
+  function initSegs(root = document) {
+    for (const group of root.querySelectorAll('.seg, .chips[data-choice]')) {
+      if (group.dataset.bound) continue
+      group.dataset.bound = '1'
+      group.addEventListener('click', e => {
+        const b = e.target.closest('button[data-value]')
+        if (b && group.contains(b)) setSeg(group, b.dataset.value)
+      })
+      const pressed = group.querySelector('button[aria-pressed="true"]') || group.querySelector('button[data-value]')
+      if (pressed) setSeg(group, pressed.dataset.value, false)
+    }
+  }
+
+  // Glossary popovers: any element with data-term; hover and focus show it, a tap toggles it.
+  let pop = null
+  let owner = null
+  function hide() {
+    if (pop) pop.remove()
+    for (const hot of document.querySelectorAll('.glossary .is-hot')) hot.classList.remove('is-hot')
+    pop = null
+    owner = null
+  }
+  // With the glossary drawer open a term lights its entry there; otherwise it opens a popover.
+  function sideEntry(key) {
+    const entry = document.querySelector(`.glossary [data-entry="${CSS.escape(key)}"]`)
+    if (!entry) return null
+    return entry.closest('.glossary').hidden ? null : entry
+  }
+  function show(target) {
+    const key = target.dataset.term
+    const entry = glossary[key]
+    if (!entry) return
+    hide()
+    owner = target
+    const side = sideEntry(key)
+    if (side) {
+      side.classList.add('is-hot')
+      side.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+      return
+    }
+    pop = el('div', { class: 'popover', role: 'tooltip' }, el('strong', { text: entry.name || key }), el('span', {}, rich(entry.short || entry)))
+    document.body.append(pop)
+    const r = target.getBoundingClientRect()
+    const w = pop.offsetWidth
+    const left = Math.max(16, Math.min(window.scrollX + r.left, window.scrollX + document.documentElement.clientWidth - w - 16))
+    pop.style.left = `${left}px`
+    pop.style.top = `${window.scrollY + r.bottom + 6}px`
+  }
+  function initTerms() {
+    document.addEventListener('mouseover', e => { const x = e.target.closest('[data-term]'); if (x && x !== owner) show(x) })
+    document.addEventListener('mouseout', e => { const x = e.target.closest('[data-term]'); if (x && !x.contains(e.relatedTarget)) hide() })
+    document.addEventListener('focusin', e => { const x = e.target.closest('[data-term]'); if (x) show(x) })
+    document.addEventListener('focusout', e => { if (e.target.closest('[data-term]')) hide() })
+    document.addEventListener('click', e => {
+      const x = e.target.closest('[data-term]')
+      if (x) { if (owner === x) hide(); else show(x) } else if (!e.target.closest('.popover')) hide()
+    })
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') hide() })
+  }
+
+  function term(key, label) {
+    return el('span', { class: 'term', 'data-term': key, tabindex: '0', text: label ?? key })
+  }
+
+  // Section navigation with the current section marked. The build writes the list into the
+  // markup; a page built without one gets it here from its own section headings.
+  function initNav() {
+    const nav = document.querySelector('[data-pb-nav]')
+    if (!nav) return
+    if (!nav.querySelector('a')) {
+      const found = [...document.querySelectorAll('main section[id]')].filter(s => s.querySelector('h1, h2'))
+      const made = found.map(s => el('a', { href: `#${s.id}`, text: s.dataset.nav || s.querySelector('h1, h2').textContent }))
+      nav.replaceChildren(el('ol', {}, made.map(a => el('li', {}, a))))
+    }
+    const links = [...nav.querySelectorAll('a[href^="#"]')]
+    const sections = links.map(a => document.getElementById(a.getAttribute('href').slice(1))).filter(Boolean)
+    const mark = id => { for (const a of links) a.setAttribute('aria-current', String(a.getAttribute('href') === `#${id}`)) }
+    // A click names its target at once, and the scroll it starts (smooth, and often stopped short by the
+    // page end) must not move the mark until it has settled.
+    let locked = false
+    let settle = 0
+    const hold = () => { locked = true; clearTimeout(settle); settle = setTimeout(() => { locked = false }, 200) }
+    nav.addEventListener('click', e => {
+      const a = e.target.closest('a[href^="#"]')
+      if (a && nav.contains(a)) { mark(a.getAttribute('href').slice(1)); hold() }
+    })
+    // The last heading cannot reach the top of a page that ends first, so the page end marks it.
+    const last = sections[sections.length - 1]
+    const atEnd = () => window.scrollY + window.innerHeight >= document.documentElement.scrollHeight - 2
+    window.addEventListener('scroll', () => {
+      if (locked) { hold(); return }
+      if (last && atEnd()) mark(last.id)
+    }, { passive: true })
+    if (!('IntersectionObserver' in window)) return
+    const seen = new IntersectionObserver(entries => {
+      if (locked || (last && atEnd())) return
+      for (const e of entries) if (e.isIntersecting) mark(e.target.id)
+    }, { rootMargin: '-10% 0px -70% 0px' })
+    for (const s of sections) seen.observe(s)
+  }
+
+  // Filter bar (data-pb-filter="<selector of the items>"): items carry data-tags (single words); the bar shows a
+  // search box, one chip per tag and a live count. Its texts come from the bar's own attributes: data-label (search
+  // box), data-all (the chip for every item), data-count ("{shown} of {total}"). A tag's chip reads as the text of the
+  // bar's own [data-tag="<tag>"] element when it holds one (the markup a reader without scripts sees as a list of
+  // the groups), else as the tag. data-group="<selector>" also hides the group that holds no visible item.
+  function initFilters() {
+    for (const bar of document.querySelectorAll('[data-pb-filter]')) {
+      const items = [...document.querySelectorAll(bar.dataset.pbFilter)]
+      if (!items.length) continue
+      const names = new Map([...bar.querySelectorAll('[data-tag]')].map(x => [x.dataset.tag, x.textContent.trim()]))
+      const tagsOf = item => (item.dataset.tags || '').split(/\s+/).filter(Boolean)
+      const found = new Set(items.flatMap(tagsOf))
+      const tags = [...names.keys()].filter(x => found.has(x)).concat([...found].filter(x => !names.has(x)))
+      const box = el('input', { type: 'search', class: 'filter-box', 'aria-label': bar.dataset.label || '', placeholder: bar.dataset.label || '' })
+      const chips = el('div', { class: 'chips', 'data-choice': '', role: 'group' },
+        [['', bar.dataset.all || ''], ...tags.map(x => [x, names.get(x) || x])].map(([v, label]) => el('button', { type: 'button', class: 'chip', 'data-value': v, text: label })))
+      const count = el('p', { class: 'filter-count', 'aria-live': 'polite' })
+      bar.classList.add('filter-bar')
+      bar.replaceChildren(...[box, tags.length ? chips : null, count].filter(Boolean))
+      const groups = bar.dataset.group ? [...new Set(items.map(item => item.closest(bar.dataset.group)).filter(Boolean))] : []
+      const apply = () => {
+        const query = box.value.trim().toLowerCase()
+        const tag = chips.dataset.current || ''
+        let shown = 0
+        for (const item of items) {
+          const ok = (!tag || tagsOf(item).includes(tag)) && (!query || item.textContent.toLowerCase().includes(query))
+          item.hidden = !ok
+          if (ok) shown++
+        }
+        for (const g of groups) g.hidden = items.every(item => !g.contains(item) || item.hidden)
+        count.textContent = (bar.dataset.count || '').replace('{shown}', shown).replace('{total}', items.length)
+      }
+      initSegs(bar)
+      box.addEventListener('input', apply)
+      chips.addEventListener('pb:change', apply)
+      // A link to an entry or group the filter hides clears the filter, so the target can be shown. A link to the
+      // hash already in the address bar fires no hashchange, so a click covers it.
+      const reveal = hash => {
+        const target = hash.length > 1 ? document.getElementById(decodeURIComponent(hash.slice(1))) : null
+        if (!target || !target.closest('[hidden]') || ![...items, ...groups].some(x => x.contains(target))) return
+        box.value = ''
+        setSeg(chips, '')
+        target.scrollIntoView()
+      }
+      window.addEventListener('hashchange', () => reveal(location.hash))
+      document.addEventListener('click', e => {
+        const a = e.target.closest && e.target.closest('a[href^="#"]')
+        if (a && a.hash === location.hash) reveal(a.hash)
+      })
+      apply()
+    }
+  }
+
+  // Count bar (data-pb-counts="<selector of the items>"): one segment per group (the nearest section) in
+  // proportion to its items, each a link to the group with its heading and count.
+  function initCounts() {
+    for (const bar of document.querySelectorAll('[data-pb-counts]')) {
+      const groups = new Map()
+      for (const item of document.querySelectorAll(bar.dataset.pbCounts)) {
+        const g = item.closest('section[id]')
+        if (g) groups.set(g, (groups.get(g) || 0) + 1)
+      }
+      bar.classList.add('count-bar')
+      bar.replaceChildren(...[...groups].map(([g, n]) => el('a', { class: 'count-seg', href: `#${g.id}`, 'aria-label': `${g.querySelector('h2').textContent}: ${n}`, style: `flex-grow: ${n}` },
+        el('span', { class: 'count-n', text: String(n) }), el('span', { class: 'count-name', text: g.querySelector('h2').textContent }))))
+    }
+  }
+
+  // Copy button on commands, code blocks and transcripts, where the page defines copy_label and copied_label.
+  function initCopy() {
+    if (!navigator.clipboard || !strings.copy_label || !strings.copied_label) return
+    for (const block of document.querySelectorAll('main .cmd, main pre, main .transcript')) {
+      const wrap = el('div', { class: 'copy-wrap' })
+      block.replaceWith(wrap)
+      const button = el('button', { type: 'button', class: 'copy-btn', 'aria-live': 'polite', text: t('copy_label') })
+      button.addEventListener('click', () => {
+        navigator.clipboard.writeText(block.textContent.trim()).then(() => {
+          button.textContent = t('copied_label')
+          setTimeout(() => { button.textContent = t('copy_label') }, 1600)
+        }, () => {})
+      })
+      wrap.append(block, button)
+    }
+  }
+
+  // Decision walker (ol.walker): a question with its answers as a nested list. With scripts one node shows
+  // at a time, the answers as buttons (the answer's data-label, else its own text), with back and restart
+  // (walker_back, walker_restart). A node's data-outcome names its colour. Where the page lacks those strings the
+  // list stays as written.
+  function initWalkers() {
+    if (!strings.walker_back || !strings.walker_restart) return
+    for (const list of document.querySelectorAll('ol.walker')) {
+      const root = list.querySelector(':scope > li')
+      if (!root) continue
+      const trail = [root]
+      const view = el('div', { class: 'walker-view', tabindex: '-1', 'aria-live': 'polite' })
+      const own = li => {
+        const copy = li.cloneNode(true)
+        for (const inner of copy.querySelectorAll('ol')) inner.remove()
+        return copy
+      }
+      const go = change => { change(); render(); view.focus() }
+      const render = () => {
+        const li = trail[trail.length - 1]
+        view.dataset.outcome = li.dataset.outcome || ''
+        const options = [...li.querySelectorAll(':scope > ol > li')]
+        const answers = options.map(o => el('button', {
+          type: 'button', class: 'chip', text: o.dataset.label || own(o).textContent.trim(), onclick: () => go(() => trail.push(o)),
+        }))
+        view.replaceChildren(...[
+          el('div', { class: 'walker-text' }, el('p', {}, [...own(li).childNodes])),
+          answers.length ? el('div', { class: 'walker-options' }, answers) : null,
+          el('div', { class: 'walker-controls' },
+            el('button', { type: 'button', text: t('walker_back'), disabled: trail.length < 2, onclick: () => go(() => trail.pop()) }),
+            el('button', { type: 'button', text: t('walker_restart'), disabled: trail.length < 2, onclick: () => go(() => { trail.length = 1 }) })),
+        ].filter(Boolean))
+      }
+      list.hidden = true
+      list.after(view)
+      render()
+    }
+  }
+
+  // Segmented panels (div.seg-panels > div.seg-panel[data-label]): every panel shows without scripts; with
+  // scripts a segmented switch picks one.
+  function initPanels() {
+    for (const box of document.querySelectorAll('.seg-panels')) {
+      const panels = [...box.querySelectorAll(':scope > .seg-panel')]
+      if (panels.length < 2) continue
+      const seg = el('div', { class: 'seg', role: 'group' }, panels.map((p, i) => el('button', { type: 'button', 'data-value': String(i), text: p.dataset.label })))
+      seg.addEventListener('pb:change', e => panels.forEach((p, i) => { p.hidden = String(i) !== e.detail }))
+      box.classList.add('is-tabbed')
+      box.prepend(seg)
+      initSegs(box)
+      panels.forEach((p, i) => { p.hidden = i !== 0 })
+    }
+  }
+
+  // The glossary column: the entries a page lists in data-terms, or all of them.
+  function initGlossary() {
+    for (const aside of document.querySelectorAll('[data-pb-glossary]')) {
+      const keys = aside.dataset.terms ? aside.dataset.terms.split(',').map(k => k.trim()) : Object.keys(glossary)
+      aside.append(el('dl', {}, keys.filter(k => glossary[k]).map(k =>
+        el('div', { class: 'entry', 'data-entry': k }, el('dt', { text: glossary[k].name || k }), el('dd', {}, rich(glossary[k].short))))))
+    }
+  }
+
+  // List and detail built in markup (data-pb-md): an option shows the panel with the same data-panel.
+  function initMasterDetail() {
+    for (const box of document.querySelectorAll('[data-pb-md]')) {
+      const items = [...box.querySelectorAll('.sit-item[data-panel]')]
+      const panels = [...box.querySelectorAll('.md-panel[data-panel]')]
+      const choose = (i, focus) => {
+        items.forEach((it, j) => { it.setAttribute('aria-selected', String(i === j)); it.tabIndex = i === j ? 0 : -1 })
+        for (const p of panels) p.hidden = p.dataset.panel !== items[i].dataset.panel
+        if (focus) items[i].focus()
+      }
+      items.forEach((it, i) => it.addEventListener('click', () => choose(i, true)))
+      box.addEventListener('keydown', e => {
+        const at = items.findIndex(it => it.getAttribute('aria-selected') === 'true')
+        const next = { ArrowDown: at + 1, ArrowUp: at - 1, Home: 0, End: items.length - 1 }[e.key]
+        if (next === undefined || !e.target.closest('.sit-item')) return
+        e.preventDefault()
+        choose(Math.max(0, Math.min(items.length - 1, next)), true)
+      })
+      choose(0, false)
+    }
+  }
+
+  // Drawers: a button with data-pb-drawer opens the panel with that id; the close button, Escape
+  // or a second press closes it, and focus returns to the button.
+  function initDrawers() {
+    for (const opener of document.querySelectorAll('[data-pb-drawer]')) {
+      const panel = document.getElementById(opener.dataset.pbDrawer)
+      if (!panel) continue
+      const set = open => {
+        panel.hidden = !open
+        opener.setAttribute('aria-expanded', String(open))
+        document.body.classList.toggle('drawer-is-open', open)
+        if (open) panel.querySelector('button')?.focus()
+        else opener.focus()
+      }
+      opener.addEventListener('click', () => set(panel.hidden))
+      panel.querySelector('[data-pb-drawer-close]')?.addEventListener('click', () => set(false))
+      document.addEventListener('keydown', e => { if (e.key === 'Escape' && !panel.hidden) set(false) })
+    }
+  }
+
+  document.addEventListener('DOMContentLoaded', () => { initTheme(); initSegs(); initGlossary(); initNav(); initTerms(); initMasterDetail(); initDrawers(); initFilters(); initCounts(); initCopy(); initWalkers(); initPanels() })
+  return { t, el, rich, strings, glossary, facts, data, store, setSeg, initSegs, term }
+})()
+</script>
+</body>
+</html>

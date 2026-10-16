@@ -1,6 +1,6 @@
-# paceline
+# PaceLine
 
-paceline is a Claude Code plugin that protects two things: a session's context and a subscription's
+PaceLine is a Claude Code plugin that protects two things: a session's context and a subscription's
 usage limits. It has four functions, each turned on and off on its own:
 
 | Function | What it adds to a session | Default |
@@ -16,7 +16,9 @@ and [Who pace is for](docs/explanation.md#who-pace-is-for) help you decide.
 
 One more part, the limits writer, is always on. It records the limit readings Claude Code reports
 to plugins in a limits file, `rate-limits.json`, that pace and other plugins, such as a status
-line, read. It adds nothing to the conversation.
+line, read. It adds nothing to the conversation. It keeps each signed-in account's readings apart,
+so after a `/login` to another account pace shows that account's limits; see
+[Use two accounts on one machine](docs/how-to.md#use-two-accounts-on-one-machine).
 
 ## Install
 
@@ -27,7 +29,9 @@ line, read. It adds nothing to the conversation.
 Then start a new session.
 
 Requirements: Claude Code 2.1.287 or later, and Python 3.9 or later on `PATH` as `python3` or
-`python`. paceline runs on Windows, macOS, and Linux and needs only the Python standard library.
+`python`. PaceLine runs on Windows, macOS, and Linux and needs only the Python standard library.
+PaceLine does not need PitBoard; with PitBoard installed, its row also shows the readings PaceLine
+records.
 
 ## First run
 
@@ -50,11 +54,21 @@ so run it there or ask the agent to.
   budget and the night queue's decision. Online:
   [budget simulator](https://agentpit-lab.github.io/agentpit/plugins/paceline/docs/budget-simulator.html).
 - [How-to guides](docs/how-to.md): run a night queue, declare a plan, hold the cache, recover after
-  a compaction, keep usage current, change a profile setting.
-- [Reference](docs/reference.md): commands, exit codes, profile keys, environment variables, files,
-  the limits file, and the inbox.
+  a compaction, keep usage current, use two accounts, change a profile setting.
+  Online page:
+  [how-to guides](https://agentpit-lab.github.io/agentpit/plugins/paceline/docs/how-to.html).
 - [Explanation](docs/explanation.md): how the budget, the forecast, and the night queue's decisions
   are computed, and where the numbers come from.
+  Online page:
+  [explanation](https://agentpit-lab.github.io/agentpit/plugins/paceline/docs/explanation.html).
+- [Reference](docs/reference.md): commands, exit codes, profile keys, environment variables, files,
+  the limits file, and the inbox.
+  Online page:
+  [reference](https://agentpit-lab.github.io/agentpit/plugins/paceline/docs/reference.html).
 - [Troubleshooting](docs/troubleshooting.md): what to check when pace looks inactive, the budget
   looks wrong, or the data is stale.
+  Online page:
+  [troubleshooting](https://agentpit-lab.github.io/agentpit/plugins/paceline/docs/troubleshooting.html).
 - [Limitations](docs/limitations.md): what the plugin cannot do, and what still works.
+  Online page:
+  [limitations](https://agentpit-lab.github.io/agentpit/plugins/paceline/docs/limitations.html).
