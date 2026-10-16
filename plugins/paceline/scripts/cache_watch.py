@@ -33,6 +33,8 @@ from pathlib import Path
 HOUR_S = 3600
 # Count the cache as gone a little early, so a wake never lands just after it expired.
 MARGIN_S = 5
+# Claude Code's idle compaction fires about 54 minutes after the last request; 90 s of margin keeps the wake ahead of it.
+LATEST_WAKE_S = 3150
 # The transcript can trail the Stop hook by a moment; the turn's last request must be in it.
 SETTLE_S = 3
 STEP_S = 60
@@ -169,6 +171,10 @@ def deadline_of(info):
     return info["anchor"] + HOUR_S - MARGIN_S
 
 
+def wake_at(info, lead):
+    return min(deadline_of(info) - lead * 60, info["anchor"] + LATEST_WAKE_S)
+
+
 def find_transcript(session):
     config = Path(os.environ.get("CLAUDE_CONFIG_DIR") or Path.home() / ".claude")
     projects = config / "projects"
@@ -247,7 +253,7 @@ def hook_stop(data_dir, payload):
             sys.stderr.write(FIVE_MIN_TEXT + "\n")
             return 2
         deadline = deadline_of(info)
-        fire = deadline - state["lead"] * 60
+        fire = wake_at(info, state["lead"])
         t = now()
         if t >= deadline:
             # A wake now would write the whole context anyway: stop watching, and let the next prompt say so.
@@ -345,7 +351,7 @@ def _describe(session, state):
         if deadline > now():
             parts.append(f"expires {_clock(deadline)}")
             if state.get("on"):
-                parts.append(f"next wake {_clock(deadline - state['lead'] * 60)}")
+                parts.append(f"next wake {_clock(wake_at(info, state['lead']))}")
         else:
             parts.append("expired")
     return " · ".join(parts)

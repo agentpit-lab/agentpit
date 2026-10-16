@@ -124,12 +124,13 @@ turn writes the whole context to the cache again.
    its subagents write one-hour entries. The main thread's TTL is Claude Code's setting for the
    session; subagent TTL settings do not change the decision.
 2. Leave the session idle. After every turn, a `Stop` hook waits in the background and wakes the
-   session `lead` minutes (5 by default) before the cache would expire. The woken turn keeps the
-   cache for another hour. The agent sends one line, such as `Cache kept until 15:30 · wake 1 of 5 ·
-   reply stop to stop keeping it`, as a push notification and ends the turn without a reply, so the
-   line shows once. The push reaches your phone when the session has Remote Control on and "Push
-   when Claude decides" enabled in `/config`. Only a session without the push tool gets the line as
-   a reply instead. Wakes come every `60 - lead` minutes.
+   session `lead` minutes (5 by default) before the cache would expire, and no later than 52.5
+   minutes after the last request. The woken turn keeps the cache for another hour. The agent sends
+   one line, such as `Cache kept until 15:30 · wake 1 of 5 · reply stop to stop keeping it`, as a
+   push notification and ends the turn without a reply, so the line shows once. The push reaches
+   your phone when the session has Remote Control on and "Push when Claude decides" enabled in
+   `/config`. Only a session without the push tool gets the line as a reply instead. With a `lead`
+   up to 7, wakes come every 52.5 minutes; with a larger `lead`, every `60 - lead` minutes.
 3. Any message you send in the session resets the count. After `max` wakes (5 by default) in a row
    without a message from you, watching stops. To stop earlier, reply `stop` or run
    `/paceline:cache-watch off`. Ending the session also stops it, and so does a compaction, manual
@@ -157,10 +158,11 @@ What it cannot do:
 - In a terminal session whose context is at or above the idle compaction threshold, Claude Code is
   expected to compact the conversation about 54 minutes after the last request ([Claude Code,
   settings reference](https://code.claude.com/docs/en/settings-reference#idlecompaction), read
-  2026-10-15). With the default `lead` of 5, cache-watch wakes at about 55 minutes, so idle
-  compaction is expected to run before cache-watch's wake, and a compaction turns cache-watch off.
-  See [idle compaction before the
-  wake](limitations.md#idle-compaction-can-run-before-cache-watchs-wake-and-turn-it-off).
+  2026-10-15). cache-watch wakes the session no later than 52.5 minutes after the last request, so
+  the wake comes before idle compaction, and as a new request it restarts Claude Code's idle count.
+  When the wakes run out, cache-watch turns itself off and Claude Code can compact about 54 minutes
+  after the last wake. See [idle compaction after the last
+  wake](limitations.md#idle-compaction-can-run-after-cache-watchs-last-wake).
 
 A wake keeps the cache for far less than losing it costs. The woken turn reads the context from the
 cache; the first turn after the cache's expiry writes the whole context to the cache again, which by
@@ -175,7 +177,7 @@ options to `on`.
 
 **How to tell it worked:** `/paceline:cache-watch status` shows the session as `on`, with the cache
 expiry and the next wake, for example `<session id> · on · lead 5 min · wakes 0/5 · cache 1h ·
-expires 15:30 · next wake 15:25`.
+expires 15:30 · next wake 15:22`.
 
 ## Recover after a compaction
 

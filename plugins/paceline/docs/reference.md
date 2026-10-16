@@ -211,7 +211,8 @@ depends on it.
   whose transcript has not changed for 24 hours.
 - `paceline cache-watch config --data-dir DIR [--lead MIN] [--max N]` shows or changes the defaults:
   `lead` is 5 minutes (1 to 30), and `max` is 5 wakes (1 to 20). `--lead` and `--max` on `on` apply
-  to that session only.
+  to that session only. A wake comes `lead` minutes before the cache expires, and no later than 52.5
+  minutes after the last request.
 
 The data directory is the plugin's `${CLAUDE_PLUGIN_DATA}`. The skill `/paceline:cache-watch` fills
 in the session ID and the data directory.

@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.3.4 - 2026-10-16
+
+### Changed
+
+- Cache-watch wakes the session no later than 52.5 minutes after the last request, so the wake comes
+  before Claude Code's idle compaction (about 54 minutes) whatever the `lead` setting.
+- The documentation pages describe the new wake time and what happens after the last wake.
+
 ## 0.3.3 - 2026-10-16
 
 ### Added

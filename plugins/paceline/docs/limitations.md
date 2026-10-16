@@ -227,23 +227,24 @@ The `Cache kept until` line and the times in `status` use the machine's time zon
 
 **What still works:** pace's commands keep the profile's zone.
 
-### Idle compaction can run before cache-watch's wake and turn it off
+### Idle compaction can run after cache-watch's last wake
 
 In a terminal session whose context is at or above the idle compaction threshold, Claude Code is
 expected to compact the conversation about 54 minutes after the last request ([Claude Code, settings
 reference](https://code.claude.com/docs/en/settings-reference#idlecompaction), read 2026-10-15).
-With the default `lead` of 5, cache-watch wakes at about 55 minutes, so idle compaction is expected
-to run before cache-watch's wake, and a compaction turns cache-watch off. The threshold is 200,000
-tokens unless `CLAUDE_CODE_IDLE_COMPACT_MIN_TOKENS` sets it, and idle compaction also needs Claude
-Code to fetch feature flags from Anthropic, so a given session may differ.
+cache-watch wakes the session no later than 52.5 minutes after the last request, and each wake, as a
+new request, restarts Claude Code's idle count. When the wakes run out, cache-watch turns itself off
+and Claude Code can compact about 54 minutes after the last wake. The threshold is 200,000 tokens
+unless `CLAUDE_CODE_IDLE_COMPACT_MIN_TOKENS` sets it, and idle compaction also needs Claude Code to
+fetch feature flags from Anthropic, so a given session may differ.
 
-**What you see:** `/paceline:cache-watch status` shows `off (compacted)`, and the next message in
-the session sends a summary instead of the full history.
+**What you see:** `/paceline:cache-watch status` shows `off (no reply after N wakes)`. If Claude
+Code compacted the session in the meantime, the next message in the session sends a summary instead
+of the full history.
 
-**What still works:** run `/paceline:cache-watch on` to watch the compacted session again. A `lead`
-above 6 wakes cache-watch before idle compaction. Setting `idleCompaction` to `false` keeps Claude
-Code v2.1.290 or later from compacting while idle; on an earlier version, setting
-`autoCompactEnabled` to `false` does.
+**What still works:** run `/paceline:cache-watch on` to watch the session again, or raise the number
+of wakes with `--max`. Setting `idleCompaction` to `false` keeps Claude Code v2.1.290 or later from
+compacting while idle; on an earlier version, setting `autoCompactEnabled` to `false` does.
 
 ### cache-watch depends on Claude Code's private transcript format
 
