@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.3.3 - 2026-10-16
+
+### Added
+
+- The Ukrainian documentation pages ship with the plugin in `docs/uk/`.
+- Every documentation page has an En/Uk switch that opens the page in the other language.
+- The En/Uk switch remembers the reader's choice, and the first visit follows the browser's language.
+
+### Changed
+
+- The documentation pages mark product and command names as untranslated, so a translation
+  tool leaves them as written.
+
 ## 0.3.2 - 2026-10-16
 
 ### Changed

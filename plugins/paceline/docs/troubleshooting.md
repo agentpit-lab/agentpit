@@ -71,7 +71,7 @@ simulator](https://agentpit-lab.github.io/agentpit/plugins/paceline/docs/budget-
 shows how each input moves the budget, and the [explanation](explanation.md#the-budget-per-hour)
 gives the rules.
 
-## Data is STALE
+## Data is `STALE`
 
 `paceline status` shows `STALE data N min old`, and the `pace:` line shows `STALE data`.
 

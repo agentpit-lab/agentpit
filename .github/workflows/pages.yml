@@ -1,7 +1,7 @@
 name: pages
 
-# Publishes the plugins' documentation pages: the landing page and every plugins/*/docs/*.html,
-# at the paths they have in this repository.
+# Publishes the plugins' documentation pages: the landing pages (index.html and uk/index.html) and every
+# plugins/*/docs/*.html and plugins/*/docs/uk/*.html, at the paths they have in this repository.
 on:
   push:
     branches: [main]
@@ -30,7 +30,10 @@ jobs:
         run: |
           mkdir -p _site
           cp index.html _site/
-          for page in plugins/*/docs/*.html; do
+          mkdir -p _site/uk
+          cp uk/index.html _site/uk/
+          for page in plugins/*/docs/*.html plugins/*/docs/uk/*.html; do
+            [ -e "$page" ] || continue
             mkdir -p "_site/$(dirname "$page")"
             cp "$page" "_site/$page"
           done

@@ -79,12 +79,12 @@ A server registers a tool only when at least one alias admits it, and each descr
 | `list_databases` | Lists every alias with its level, databases, reachability, role check mode and the reasons of the role check |
 | `reconnect` | Probes unreachable aliases again with their `read` credential, or one alias when `alias` is given |
 | `list_schemas`, `list_objects`, `get_object_details` | Describe schemas, objects and one object in detail |
-| `read_sql` | Runs one or more SELECT or SHOW statements |
-| `explain_query` | Shows the execution plan; with `analyze` it executes the SELECT, with its full load, inside a transaction that is rolled back |
+| `read_sql` | Runs one or more `SELECT` or `SHOW` statements |
+| `explain_query` | Shows the execution plan; with `analyze` it executes the `SELECT`, with its full load, inside a transaction that is rolled back |
 | `get_top_queries` | Reports the most expensive queries from `pg_stat_statements` |
 | `analyze_db_health` | Index, connection, vacuum, sequence, replication, buffer-cache and constraint checks |
 | `analyze_workload_indexes`, `analyze_query_indexes` | Recommend indexes with the database tuning advisor, using `hypopg` |
-| `diagnose_sql` | Runs what `read_sql` runs, plus EXPLAIN with ANALYZE, and reads the statistics the diagnose role can see |
+| `diagnose_sql` | Runs what `read_sql` runs, plus `EXPLAIN` with `ANALYZE`, and reads the statistics the `diagnose` role can see |
 | `write_sql` | Runs any SQL with the `write` credential and commits it |
 
 Each query text a tool sends starts with a comment, `/* dbwise read */`, `/* dbwise diagnose */` or
@@ -138,7 +138,7 @@ and the credential's name as its username, so two credentials with the same user
 | `<home>/venvs/<12 hex digits>/` | The Python environment, one for each version of `requirements.txt`, named after the start of its SHA-256. A build removes environments unused for 14 days |
 | `<home>/bootstrap.log` | The log of the environment build, including pip's output |
 | `<home>/bootstrap.lock` | The lock that keeps two builds apart |
-| `<home>/hook.log` | A failure of the SessionStart hook's check |
+| `<home>/hook.log` | A failure of the `SessionStart` hook's check |
 | OS keychain, service `dbwise` | One password for each credential that uses the keychain, under the credential's name |
 | A password file | The file a `{"file": PATH}` source names. On macOS and Linux it must not be accessible to group or others (`chmod 600`); on Windows it must lie under the user profile |
 
@@ -182,7 +182,7 @@ keychain.
 | `bin/dbwise-mcp` | 1 | No Python 3.12 to 3.14 found, or, once the environment is built, `config.json` cannot be used (see [Limitations](limitations.md#an-invalid-configjson-stops-the-server)) |
 |  | 0 | The server, or the stub before the first build, ended at the end of its input. A refused platform or a failed build does not end it: the stub reports through `dbwise_status` |
 | `bootstrap.py` | 2 | No mode, an unknown mode, or `--run-mcp` without an engine |
-| SessionStart hook | 0 | Always, also when its check fails; the failure goes to `hook.log` |
+| `SessionStart` hook | 0 | Always, also when its check fails; the failure goes to `hook.log` |
 |  | 127 | There is no `python3` or `python` on the `PATH` |
 
 ## The role gate
@@ -201,13 +201,13 @@ reasons:
 
 | Reason | What clears it |
 |---|---|
-| the role is a superuser; has BYPASSRLS, CREATEROLE, CREATEDB or REPLICATION | Use a role without the attribute |
+| the role is a superuser; has `BYPASSRLS`, `CREATEROLE`, `CREATEDB` or `REPLICATION` | Use a role without the attribute |
 | the role is a member of predefined role(s) `pg_write_all_data`, `pg_signal_backend`, `pg_maintain`, `pg_read_server_files`, `pg_write_server_files`, `pg_execute_server_program`, `pg_checkpoint` or `pg_create_subscription` | `REVOKE` the membership |
 | the role is a member of non-predefined role(s) ... | `REVOKE` the membership; membership lets the role cancel and terminate that role's sessions and passes on what that role owns |
 | the role owns the current database, relations, functions or schemas of this database | Give the objects to another role |
-| the role holds a write privilege on relation(s) ... (at most 3 are listed); a column-level INSERT or UPDATE grant counts | `REVOKE` INSERT, UPDATE, DELETE, TRUNCATE (or MAINTAIN on PostgreSQL 17 and later) on tables, including the column-level INSERT and UPDATE grants, and USAGE and UPDATE on sequences, from the role and from `PUBLIC` |
-| the role can execute functions of the dblink extension; has USAGE on a foreign server | `REVOKE EXECUTE ... FROM PUBLIC` on the `dblink` functions of that database, and `REVOKE USAGE` on the foreign server |
-| at `read`: the role is a member of `pg_monitor`, `pg_read_all_stats` or `pg_stat_scan_tables`, which belong to the diagnose level | Use the monitoring roles on the `diagnose` credential only |
+| the role holds a write privilege on relation(s) ... (at most 3 are listed); a column-level `INSERT` or `UPDATE` grant counts | `REVOKE` `INSERT`, `UPDATE`, `DELETE`, `TRUNCATE` (or `MAINTAIN` on PostgreSQL 17 and later) on tables, including the column-level `INSERT` and `UPDATE` grants, and `USAGE` and `UPDATE` on sequences, from the role and from `PUBLIC` |
+| the role can execute functions of the `dblink` extension; has `USAGE` on a foreign server | `REVOKE EXECUTE ... FROM PUBLIC` on the `dblink` functions of that database, and `REVOKE USAGE` on the foreign server |
+| at `read`: the role is a member of `pg_monitor`, `pg_read_all_stats` or `pg_stat_scan_tables`, which belong to the `diagnose` level | Use the monitoring roles on the `diagnose` credential only |
 
 Roles in `pg_*` that are not in the list above, such as `pg_read_all_data`, are accepted.
 

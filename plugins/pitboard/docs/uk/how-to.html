@@ -1,0 +1,1119 @@
+<!doctype html>
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<meta name="pb-twin" content="../how-to.html">
+<script>
+// Language choice: remembered per viewer, followed from the browser on the first visit.
+// Inlined as the first script in <head>, so it runs before the body exists: the counterpart
+// comes from <meta name="pb-twin">, which the build writes before this script and omits when the
+// other language is a placeholder.
+;(() => {
+  const KEY = 'pb:lang'
+  const meta = name => {
+    const m = document.querySelector(`meta[name="${name}"]`)
+    return m ? m.getAttribute('content') : null
+  }
+  const valid = v => (v === 'uk' || v === 'en' ? v : null)
+
+  // A read alone cannot tell blocked storage from empty storage, and a redirect without a working
+  // store would bounce the reader back on every page.
+  let works = false
+  try {
+    localStorage.setItem(KEY + '-probe', '1')
+    localStorage.removeItem(KEY + '-probe')
+    works = true
+  } catch { /* storage blocked */ }
+
+  function preferred() {
+    try {
+      const stored = valid(localStorage.getItem(KEY))
+      if (stored) return stored
+    } catch { /* storage blocked */ }
+    for (const tag of navigator.languages || []) {
+      const primary = valid(String(tag).toLowerCase().split('-')[0])
+      if (primary) return primary
+    }
+    return 'en'
+  }
+
+  // A redirect carries ?pb-lang=<language>. Where each file has its own storage (some browsers
+  // scope localStorage per file:// file) the two pages can disagree forever; a page that arrives
+  // through a hop trusts it, stores it and never redirects, so a hop happens at most once.
+  const hop = (/[?&]pb-lang=([^&#]*)/.exec(location.search || '') || [])[1]
+  const hopped = valid(hop)
+  const marked = (href, code) => href.split('#')[0].split('?')[0] + '?pb-lang=' + code + location.hash
+
+  const twin = meta('pb-twin')
+  if (hop !== undefined) {
+    if (hopped && works) {
+      try { localStorage.setItem(KEY, hopped) } catch { /* storage blocked */ }
+    }
+    try {
+      if (typeof history !== 'undefined' && history.replaceState) {
+        const rest = (location.search || '').slice(1).split('&').filter(p => p && !p.startsWith('pb-lang='))
+        history.replaceState(history.state, '', location.pathname + (rest.length ? '?' + rest.join('&') : '') + location.hash)
+      }
+    } catch { /* a refused rewrite must not stop the click listener below */ }
+  }
+
+  // Going Back to the page the reader just left reruns this script with the stored choice, which
+  // would send the reader forward again and make Back unusable.
+  let traversal = false
+  try {
+    const entry = performance.getEntriesByType && performance.getEntriesByType('navigation')[0]
+    traversal = !!entry && entry.type === 'back_forward'
+  } catch { /* no navigation timing */ }
+
+  if (!hopped && !traversal && works && twin && preferred() !== document.documentElement.getAttribute('lang')) {
+    location.replace(marked(twin, preferred()))
+  }
+
+  document.addEventListener('click', event => {
+    const link = event.target && event.target.closest && event.target.closest('nav[data-pb-lang] a')
+    if (!link) return
+    const code = valid(link.getAttribute('hreflang'))
+    const href = link.getAttribute('href')
+    // The English page of a placeholder is a way out of an empty page, not a choice of language.
+    if (code && !(code === 'en' && meta('pb-placeholder'))) {
+      try { localStorage.setItem(KEY, code) } catch { /* storage blocked */ }
+      if (href) link.setAttribute('href', marked(href, code))
+    } else if (href) {
+      link.setAttribute('href', href.split('#')[0].split('?')[0] + location.hash)
+    }
+  })
+})()
+</script>
+<title>Практичні інструкції PitBoard</title>
+<style>
+/* Layout: page sections on the left, the reading column in the middle, the glossary on the right;
+   the column opens with a TL;DR and an instrument (the thing explained, live), then sections that
+   each answer one question. Page chrome stays quiet: the plugins' own signal
+   colours (calm, watch, act) are the only loud colours on a page. */
+:root {
+  --bg: #f8f7f3;
+  --surface: #ffffff;
+  --surface-2: #f1efe8;
+  --ink: #1d1f1c;
+  --muted: #67695f;
+  --line: #e2dfd5;
+  --accent: #0b6a88;
+  --accent-ink: #ffffff;
+  --accent-soft: #e1eef2;
+  --focus: #0b6a88;
+
+  /* Signal colours as Claude Code Desktop draws them (plugins/pitboard/hooks/desktop.ts). */
+  --calm: #8a8a85;
+  --watch: #c4841d;
+  --act: #e0483e;
+  --cold: #2a9db5;
+  --on: #3d9a5c;
+  --watch-soft: #f6ead6;
+  --act-soft: #fadedb;
+
+  /* The specimen surfaces: a terminal and the Desktop app, each in its own theme. */
+  --term-bg: #fbfbf9;
+  --term-fg: #000000;
+  --term-line: #dcdcd6;
+  /* Claude Code's theme keys as its light and dark themes resolve them: the terminal row draws in
+     these keys, so a specimen shows the colours a reader's own terminal would. */
+  --term-text: #000000;
+  --term-inactive: #666666;
+  --term-subtle: #afafaf;
+  --term-warning: #966c1e;
+  --term-error: #ab2b3f;
+  --term-success: #2c7a39;
+  --term-planMode: #006666;
+  --term-suggestion: #5769f7;
+  --term-autoAccept: #8700ff;
+  --term-bashBorder: #ff0087;
+  --desk-bg: #ffffff;
+  --desk-fg: #2b2b29;
+  --desk-line: #e4e4df;
+
+  /* System faces only: a page loads nothing from outside its file. */
+  --font-display: "Iowan Old Style", Charter, "Bitstream Charter", "Sitka Text", Cambria, Georgia, serif;
+  --font-ui: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "Cascadia Mono", "JetBrains Mono", "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+
+  --step--1: 0.8125rem;
+  --step-0: 1rem;
+  --step-1: 1.1875rem;
+  --step-2: 1.5rem;
+  --step-3: 2.125rem;
+
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2.25rem;
+  --space-7: 3.5rem;
+
+  --radius: 6px;
+  --measure: 720px;
+  --page: 1120px;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #121413;
+    --surface: #1a1d1b;
+    --surface-2: #20231f;
+    --ink: #e8e6df;
+    --muted: #9d9f96;
+    --line: #30332e;
+    --accent: #55b6d3;
+    --accent-ink: #0b1a20;
+    --accent-soft: #173039;
+    --focus: #55b6d3;
+    --watch-soft: #3a2d15;
+    --act-soft: #3d1c19;
+    --desk-bg: #1e1f1d;
+    --desk-fg: #e6e5df;
+    --desk-line: #33342f;
+    --term-bg: #15181b;
+    --term-fg: #ffffff;
+    --term-line: #2c3136;
+    --term-text: #ffffff;
+    --term-inactive: #999999;
+    --term-subtle: #505050;
+    --term-warning: #ffc107;
+    --term-error: #ff6b80;
+    --term-success: #4eba65;
+    --term-planMode: #48968c;
+    --term-suggestion: #b1b9f9;
+    --term-autoAccept: #af87ff;
+    --term-bashBorder: #fd5db1;
+    color-scheme: dark;
+  }
+}
+
+:root[data-theme="dark"] {
+  --bg: #121413;
+  --surface: #1a1d1b;
+  --surface-2: #20231f;
+  --ink: #e8e6df;
+  --muted: #9d9f96;
+  --line: #30332e;
+  --accent: #55b6d3;
+  --accent-ink: #0b1a20;
+  --accent-soft: #173039;
+  --focus: #55b6d3;
+  --watch-soft: #3a2d15;
+  --act-soft: #3d1c19;
+  --desk-bg: #1e1f1d;
+  --desk-fg: #e6e5df;
+  --desk-line: #33342f;
+  --term-bg: #15181b;
+  --term-fg: #ffffff;
+  --term-line: #2c3136;
+  --term-text: #ffffff;
+  --term-inactive: #999999;
+  --term-subtle: #505050;
+  --term-warning: #ffc107;
+  --term-error: #ff6b80;
+  --term-success: #4eba65;
+  --term-planMode: #48968c;
+  --term-suggestion: #b1b9f9;
+  --term-autoAccept: #af87ff;
+  --term-bashBorder: #fd5db1;
+  color-scheme: dark;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font: 400 var(--step-0)/1.6 var(--font-ui);
+}
+img, svg { max-width: 100%; }
+[hidden] { display: none !important; }
+
+
+h1, h2, h3 { line-height: 1.2; text-wrap: balance; overflow-wrap: break-word; margin: 0; }
+h1, h2 { font-family: var(--font-display); font-weight: 500; letter-spacing: -0.005em; }
+h1 { font-size: var(--step-3); }
+h2 { font-size: var(--step-2); }
+h3 { font-size: var(--step-1); font-weight: 600; }
+p { margin: 0; }
+a { color: var(--accent); text-underline-offset: 2px; }
+code, kbd, .mono { font-family: var(--font-mono); font-size: 0.92em; }
+code { background: var(--surface-2); border: 1px solid var(--line); border-radius: 4px; padding: 0 0.3em; overflow-wrap: anywhere; }
+td code, th code { overflow-wrap: normal; }
+.card-quote { font-family: var(--font-mono); font-size: var(--step--1); background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--radius); padding: var(--space-2) var(--space-3); overflow-wrap: anywhere; }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 3px; }
+
+.eyebrow { font: 500 0.6875rem/1.4 var(--font-mono); letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+.lede { font-size: var(--step-1); color: var(--muted); }
+.muted { color: var(--muted); }
+.stack { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-4); }
+.stack-lg { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-6); }
+.row { display: flex; flex-wrap: wrap; gap: var(--space-3); align-items: center; }
+
+
+
+section { scroll-margin-top: var(--space-4); }
+.section-head { display: grid; gap: var(--space-2); margin-bottom: var(--space-4); }
+
+/* Panels: used only where an element is a separate object (an instrument, a card). */
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: var(--space-4); min-width: 0; }
+.grid-auto { display: grid; gap: var(--space-4); grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); }
+.split { display: grid; gap: var(--space-5); }
+
+/* Segmented switch. */
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface-2); padding: 2px; gap: 2px; }
+.seg button { font: inherit; font-size: var(--step--1); border: 0; background: transparent; color: var(--muted); padding: 0.3em 0.8em; border-radius: 4px; cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--surface); color: var(--ink); box-shadow: 0 0 0 1px var(--line); font-weight: 600; }
+.control { display: grid; gap: var(--space-1); }
+.control > .label { font-size: var(--step--1); color: var(--muted); }
+
+/* Chips: a choice among named states. */
+.chips { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.chip { font: inherit; font-size: var(--step--1); border: 1px solid var(--line); background: var(--surface); color: var(--ink); padding: 0.3em 0.75em; border-radius: 999px; cursor: pointer; display: inline-flex; gap: 0.4em; align-items: center; }
+.chip[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); }
+.dot { width: 0.6em; height: 0.6em; border-radius: 50%; background: var(--calm); display: inline-block; flex: none; }
+.dot.watch { background: var(--watch); }
+.dot.act { background: var(--act); }
+.dot.cold { background: var(--cold); }
+
+/* Level pill: state in form as well as words. */
+.pill { display: inline-flex; align-items: center; gap: 0.35em; font-size: var(--step--1); font-weight: 600; padding: 0.05em 0.6em; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); }
+.pill.watch { color: var(--watch); border-color: var(--watch); background: var(--watch-soft); }
+.pill.act { color: var(--act); border-color: var(--act); background: var(--act-soft); }
+
+/* Glossary terms: dotted underline, popover on hover, focus or tap. */
+.term { border-bottom: 1px dotted currentColor; cursor: help; }
+.popover { position: absolute; z-index: 20; max-width: min(340px, calc(100vw - 32px)); background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: 0 8px 24px rgb(0 0 0 / 0.18); padding: var(--space-3); font-size: var(--step--1); line-height: 1.5; }
+.popover strong { display: block; margin-bottom: var(--space-1); }
+
+/* Disclosure: what to do first, detail on demand. */
+details.more { border-top: 1px solid var(--line); padding-block: var(--space-3); }
+details.more > summary { cursor: pointer; font-weight: 600; list-style: none; display: flex; gap: var(--space-2); align-items: center; }
+details.more > summary::-webkit-details-marker { display: none; }
+details.more > summary::before { content: "+"; font-family: var(--font-mono); color: var(--accent); width: 1ch; }
+details.more[open] > summary::before { content: "\2212"; }
+details.more > .body { padding-top: var(--space-3); display: grid; gap: var(--space-3); }
+
+/* Key-value lists aligned on one column. */
+.kv { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: var(--space-1) var(--space-4); font-size: var(--step--1); margin: 0; }
+.kv dt { color: var(--muted); }
+.kv dd { margin: 0; font-variant-numeric: tabular-nums; }
+
+/* Range slider. */
+input[type="range"] { width: 100%; accent-color: var(--accent); }
+.slider { display: grid; gap: var(--space-1); }
+.slider .readout { display: flex; justify-content: space-between; font-size: var(--step--1); color: var(--muted); font-variant-numeric: tabular-nums; }
+.slider .readout b { color: var(--ink); font-weight: 600; }
+
+/* Tables that may run wider than a phone scroll inside their own box. */
+.table-wrap { overflow-x: auto; }
+.facts-list { columns: 9rem; column-gap: var(--space-4); list-style: none; margin: 0; padding: 0; }
+.facts-list li { break-inside: avoid; }
+table { border-collapse: collapse; width: 100%; font-size: var(--step--1); }
+th, td { text-align: left; padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--line); vertical-align: top; }
+th { color: var(--muted); font-weight: 600; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+
+/* A transcript of what Claude Code shows: monospace on the terminal surface. */
+.transcript { background: var(--term-bg); color: var(--term-fg); border-radius: var(--radius); padding: var(--space-3) var(--space-4); font: 0.875rem/1.55 var(--font-mono); overflow-x: auto; white-space: pre; }
+.transcript .dim { color: var(--term-inactive); }
+.transcript .hl { color: #e0b000; }
+
+.callout { display: grid; gap: var(--space-1); border-left: 3px solid var(--accent); padding: var(--space-1) var(--space-3); }
+
+footer.page-foot { margin-top: var(--space-7); padding-top: var(--space-4); border-top: 1px solid var(--line); font-size: var(--step--1); color: var(--muted); display: flex; flex-wrap: wrap; gap: var(--space-4); justify-content: space-between; }
+
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; scroll-behavior: auto !important; } }
+
+/* Steps: a real sequence, so numbered. */
+.steps { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-6); counter-reset: step; }
+.steps > li { display: grid; grid-template-columns: 2.25rem minmax(0, 1fr); gap: var(--space-4); counter-increment: step; }
+.steps > li::before { content: counter(step); width: 2.25rem; height: 2.25rem; border-radius: 50%; display: grid; place-items: center; font-weight: 700; color: var(--accent-ink); background: var(--accent); font-variant-numeric: tabular-nums; }
+.steps > li > div { display: grid; gap: var(--space-3); min-width: 0; }
+.cmd { display: flex; gap: var(--space-2); align-items: center; background: var(--term-bg); color: var(--term-fg); border-radius: var(--radius); padding: var(--space-2) var(--space-3); font: 0.9375rem/1.4 var(--font-mono); overflow-x: auto; }
+.cmd::before { content: "›"; color: var(--term-inactive); }
+
+.annot { display: grid; gap: var(--space-2); font-size: var(--step--1); }
+.annot { margin: 0; padding-left: 1.2em; }
+
+/* One grid for the whole series: sections, a content column of one width, the glossary column.
+   Every block in the content column spans it, so all edges line up on every page. */
+.doc { max-width: calc(190px + var(--measure) + 260px + 2 * var(--space-6) + 2 * var(--space-6)); margin: 0 auto; padding-inline: 16px; padding-block: var(--space-5) var(--space-7); display: grid; gap: var(--space-6); }
+.doc > * { min-width: 0; }
+.doc > main { width: 100%; max-width: var(--measure); }
+@media (min-width: 1180px) { .doc { grid-template-columns: 190px var(--measure) 260px; padding-inline: var(--space-6); justify-content: center; } }
+@media (min-width: 900px) and (max-width: 1179px) { .doc { grid-template-columns: 180px minmax(0, var(--measure)); padding-inline: var(--space-5); } }
+.side { display: grid; gap: var(--space-5); align-content: start; font-size: var(--step--1); }
+@media (min-width: 900px) { .side { position: sticky; top: var(--space-4); max-height: calc(100vh - 2rem); overflow-y: auto; } }
+.side nav ol { list-style: none; margin: 0; padding: 0 0 0 var(--space-3); border-left: 1px solid var(--line); display: grid; gap: var(--space-2); }
+.side nav a { color: var(--muted); text-decoration: none; }
+.side nav a:hover, .side nav a[aria-current="true"] { color: var(--ink); }
+.side nav a[aria-current="true"] { font-weight: 600; }
+.sources { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-1); font: 0.75rem/1.4 var(--font-mono); color: var(--muted); word-break: break-all; }
+@media (max-width: 899px) { .side nav ol { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-4); border: 0; padding: 0; } .side .sources-block { display: none; } }
+
+.glossary { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: var(--space-4); display: grid; gap: var(--space-3); align-content: start; }
+.glossary dl { margin: 0; display: grid; gap: var(--space-3); }
+.glossary dt { font: 500 var(--step-0)/1.3 var(--font-display); }
+.glossary dd { margin: 0; font-size: var(--step--1); color: var(--muted); line-height: 1.5; }
+.glossary .entry { border-radius: 4px; padding: var(--space-1) var(--space-2); margin-inline: calc(-1 * var(--space-2)); transition: background-color 0.15s; }
+.glossary .entry.is-hot { background: var(--accent-soft); }
+.glossary .entry.is-hot dd { color: var(--ink); }
+
+/* TL;DR: the page's answer before its detail. */
+.tldr { border: 1px solid var(--line); border-left: 3px solid var(--accent); background: var(--surface); border-radius: var(--radius); padding: var(--space-3) var(--space-4); }
+.tldr strong:first-child { margin-right: 0.35em; }
+.brand { display: grid; gap: var(--space-2); }
+/* Navigation uses the interface face; the serif belongs to the document's own headings. */
+.brand .mono { font: 500 0.6875rem/1.4 var(--font-mono); letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+.series { display: grid; gap: 2px; }
+.series a { font-size: var(--step--1); color: var(--muted); text-decoration: none; padding: 0.15em 0 0.15em var(--space-3); border-left: 2px solid transparent; }
+.series a:hover { color: var(--ink); }
+.series a[aria-current="page"] { color: var(--ink); font-weight: 600; border-left-color: var(--accent); }
+.page-head { display: grid; gap: var(--space-4); padding-bottom: var(--space-2); }
+.changed { font-size: var(--step--1); color: var(--muted); min-height: 1.5em; }
+.changed b { color: var(--ink); font-weight: 600; }
+
+/* Theme switch: icons, named for screen readers and on hover. */
+.theme-switch button { display: grid; place-items: center; width: 2rem; height: 1.75rem; padding: 0; }
+.theme-switch svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* A pair of specimens: the same moment in the CLI and in Desktop. */
+.pair { display: grid; gap: var(--space-2); }
+.pair .surface-label { font: 500 0.6875rem/1 var(--font-mono); letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+
+/* The specimen: a terminal or the Desktop app, in its own theme whatever the page's. */
+.specimen { display: grid; gap: var(--space-2); }
+.specimen-frame { overflow-x: auto; border-radius: var(--radius); }
+.specimen-hint { font-size: var(--step--1); color: var(--muted); }
+.cli { background: var(--term-bg); color: var(--term-fg); font: 0.9375rem/1.5 var(--font-mono); padding: var(--space-3) var(--space-4); white-space: pre; width: max-content; min-width: 100%; }
+
+.desk { background: var(--desk-bg); color: var(--desk-fg); border: 1px solid var(--desk-line); border-radius: var(--radius); padding: var(--space-2) var(--space-3); width: max-content; min-width: 100%; }
+.svg { display: inline-flex; line-height: 0; }
+.svg svg { display: block; }
+
+.specimen, .specimen-frame, .pair { min-width: 0; }
+
+/* Terms with their meaning, read down one column. */
+.term-list { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: var(--space-3) var(--space-5); margin: 0; }
+.term-list dt { font: 500 var(--step-1)/1.3 var(--font-display); }
+.term-list dd { margin: 0; display: grid; gap: var(--space-1); }
+@media (max-width: 600px) { .term-list { grid-template-columns: minmax(0, 1fr); gap: var(--space-1); } .term-list dd { margin-bottom: var(--space-3); } }
+.side .theme-switch { justify-self: start; }
+
+/* Language switch: two plain links that look like the theme segment, current one pressed. */
+[data-pb-lang] { display: inline-flex; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface-2); padding: 2px; gap: 2px; }
+.side [data-pb-lang] { justify-self: start; }
+.side [data-pb-lang] a { font-size: var(--step--1); color: var(--muted); text-decoration: none; padding: 0.3em 0.8em; border-radius: 4px; }
+.side [data-pb-lang] a:hover { color: var(--ink); }
+.side [data-pb-lang] a[aria-current="page"] { background: var(--surface); color: var(--ink); box-shadow: 0 0 0 1px var(--line); font-weight: 600; }
+
+/* List and detail: moments in order on the left, the chosen one in full on the right. */
+.md { display: grid; gap: var(--space-4); }
+@media (min-width: 640px) { .md { grid-template-columns: 172px minmax(0, 1fr); align-items: start; } }
+.md-list, .md-detail { display: grid; gap: var(--space-3); min-width: 0; }
+.sit-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; border-left: 1px solid var(--line); }
+.sit-item { display: grid; gap: 1px; padding: var(--space-2) var(--space-3); margin-left: -1px; border-left: 2px solid transparent; cursor: pointer; border-radius: 0 4px 4px 0; }
+.sit-item:hover { background: var(--surface-2); }
+.sit-item[aria-selected="true"] { border-left-color: var(--accent); background: var(--accent-soft); }
+.sit-time { font: 500 0.6875rem/1.2 var(--font-mono); color: var(--muted); font-variant-numeric: tabular-nums; }
+.sit-name { display: flex; gap: 0.45em; align-items: baseline; font-size: var(--step--1); line-height: 1.35; }
+.sit-name .dot { flex: none; transform: translateY(-1px); }
+.md-panel { display: grid; gap: var(--space-3); }
+.surface-head { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-3); align-items: center; justify-content: space-between; }
+.desk-fit { overflow: hidden; }
+.desk-fit > .desk { transform-origin: left top; width: max-content; }
+.small-seg button { font-size: 0.75rem; padding: 0.15em 0.6em; }
+/* Specimen trees: the plugin's boxes and runs. */
+.tbox { display: flex; min-width: 0; }
+.cli .tbox, .cli span { white-space: pre; }
+.cli .dim { opacity: 0.62; }
+.desk .dim { opacity: 0.62; }
+.cli .italic, .desk .italic { font-style: italic; }
+.cli .strike, .desk .strike { text-decoration: line-through; }
+.btn { cursor: pointer; }
+.reading { cursor: pointer; border-radius: 3px; }
+.reading[aria-pressed="true"] { outline: 1px solid var(--accent); outline-offset: 1px; }
+.reading:hover { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+/* Wide figures: text keeps the content column; a live row or a chart also takes the empty column on
+   its right, the same on every page of the series. */
+@media (min-width: 1180px) { .wide { margin-right: calc(-1 * (260px + var(--space-6))); } }
+
+/* The glossary drawer: over the page's right side, on demand. */
+.drawer { position: fixed; top: 0; right: 0; bottom: 0; width: min(360px, 100vw); z-index: 30; border-radius: 0; border-width: 0 0 0 1px; box-shadow: -12px 0 32px rgb(0 0 0 / 0.16); overflow-y: auto; padding-block: calc(var(--space-4) + env(safe-area-inset-top, 0px)) var(--space-6); }
+.drawer-head { display: flex; justify-content: space-between; align-items: center; }
+.drawer-close { font: 400 1.5rem/1 var(--font-ui); background: transparent; border: 0; color: var(--muted); cursor: pointer; padding: 0 var(--space-1); }
+.drawer-open { justify-self: start; font: 500 var(--step--1) var(--font-ui); color: var(--accent); background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 0.35em 0.9em; cursor: pointer; }
+.drawer-open[aria-expanded="true"] { border-color: var(--accent); background: var(--accent-soft); }
+
+/* Document components. Each works from its markup alone; the script only adds controls
+   (filter bar, copy buttons, walker, panel tabs), and every one of them is absent without scripts. */
+
+/* Entry card: one symptom, one limit, one term; parts carry their label as data-label. */
+article.entry { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-3); background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: var(--space-4); min-width: 0; }
+article.entry h3 { overflow-wrap: anywhere; }
+article.entry > .part { display: grid; gap: var(--space-1); min-width: 0; }
+.part[data-label]::before, .callout[data-label]::before, .seg-panel[data-label]::before { content: attr(data-label); font: 500 0.6875rem/1.4 var(--font-mono); letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+.part > ul, .part > ol { margin: 0; padding-left: 1.2em; }
+
+/* Filter bar over a list of entries: a search box, tag chips, a live count. */
+.filter-bar { display: grid; gap: var(--space-3); }
+.filter-box { font: inherit; font-size: var(--step--1); color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 0.4em 0.75em; width: 100%; max-width: 24rem; }
+.filter-count { font-size: var(--step--1); color: var(--muted); }
+
+/* Copy button over a block of commands or text. */
+.copy-wrap { position: relative; min-width: 0; }
+.copy-btn { position: absolute; top: var(--space-1); right: var(--space-1); font: 500 0.75rem/1 var(--font-ui); color: var(--term-fg); background: transparent; border: 1px solid var(--term-inactive); border-radius: 4px; padding: 0.35em 0.6em; cursor: pointer; opacity: 0.8; }
+.copy-btn:hover, .copy-btn:focus-visible { opacity: 1; }
+pre[data-lang] { background: var(--term-bg); color: var(--term-fg); border-radius: var(--radius); padding: var(--space-3) var(--space-4); font: 0.875rem/1.55 var(--font-mono); overflow-x: auto; margin: 0; }
+.copy-wrap > .cmd, .copy-wrap > pre, .copy-wrap > .transcript { padding-right: 5rem; }
+
+/* Figure: an inline SVG coloured through the theme tokens, its caption and its text form. */
+figure.diagram { margin: 0; display: grid; gap: var(--space-3); }
+figure.diagram svg { width: 100%; height: auto; }
+figure.diagram figcaption { font-size: var(--step--1); color: var(--muted); }
+figure.diagram .text-form { margin: 0; padding-left: 1.4em; font-size: var(--step--1); color: var(--muted); display: grid; gap: var(--space-1); }
+figure.diagram .node { fill: var(--surface); stroke: var(--line); stroke-width: 1.5; }
+figure.diagram .node.accent { stroke: var(--accent); fill: var(--accent-soft); }
+figure.diagram .edge { fill: none; stroke: var(--muted); stroke-width: 1.5; }
+figure.diagram text { fill: var(--ink); font: 400 13px var(--font-ui); }
+figure.diagram text.muted { fill: var(--muted); }
+
+/* Decision walker: the nested list stays for readers without scripts; with scripts one node at a time. */
+ol.walker, ol.walker ol { padding-left: 1.4em; display: grid; gap: var(--space-2); }
+.walker-view { display: grid; gap: var(--space-3); border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); padding: var(--space-4); }
+.walker-view:focus { outline: none; }
+.walker-text { display: grid; gap: var(--space-2); font-size: var(--step-1); }
+.walker-options, .walker-controls { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.walker-controls button { font: inherit; font-size: var(--step--1); color: var(--accent); background: transparent; border: 0; padding: 0.2em 0; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
+.walker-controls button:disabled { color: var(--muted); cursor: default; text-decoration: none; }
+
+/* Segmented panels: every panel shows without scripts, headed by its label; with scripts one at a time. */
+.seg-panels { display: grid; gap: var(--space-3); }
+.seg-panel { display: grid; gap: var(--space-2); min-width: 0; }
+.seg-panels.is-tabbed > .seg-panel::before { display: none; }
+.seg-panels > .seg { justify-self: start; }
+
+/* A decision walker's outcome takes the colour of its exit: start, wait or stop. */
+.walker-view[data-outcome] { border-left: 4px solid var(--outcome, var(--line)); }
+.walker-view[data-outcome="start"] { --outcome: var(--on); }
+.walker-view[data-outcome="wait"] { --outcome: var(--watch); }
+.walker-view[data-outcome="stop"] { --outcome: var(--act); }
+
+/* Count bar: one link per group, as wide as the group has entries. */
+.count-bar { display: flex; flex-wrap: wrap; gap: 2px; }
+.count-seg { flex-basis: 6rem; min-width: 0; display: grid; gap: 1px; padding: var(--space-2) var(--space-3); background: var(--accent-soft); border-bottom: 3px solid var(--accent); border-radius: 4px 4px 0 0; color: var(--ink); text-decoration: none; font-size: var(--step--1); line-height: 1.3; }
+.count-seg:hover { background: var(--surface-2); }
+.count-n { font: 600 var(--step-1)/1.1 var(--font-display); font-variant-numeric: tabular-nums; }
+.count-name { overflow-wrap: anywhere; }
+
+/* Level scale: a track per reading, zones calm, watch and act, the values where it changes marked under it. */
+.scale-list { display: grid; gap: var(--space-3); }
+.scale-row { display: grid; gap: var(--space-2); }
+@media (min-width: 720px) { .scale-row { grid-template-columns: 200px minmax(0, 1fr); align-items: center; } }
+.scale-name { font-size: var(--step--1); }
+.scale-track { position: relative; height: 34px; margin-right: 1.5rem; }
+.scale-zone { position: absolute; top: 0; height: 12px; }
+.scale-zone.calm { background: color-mix(in srgb, var(--calm) 35%, transparent); border-radius: 3px 0 0 3px; }
+.scale-zone.watch { background: var(--watch); }
+.scale-zone.act { background: var(--act); border-radius: 0 3px 3px 0; }
+.scale-mark { position: absolute; top: 14px; transform: translateX(-50%); font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.scale-mark::before { content: ""; position: absolute; left: 50%; top: -14px; height: 14px; border-left: 1px solid var(--ink); }
+.scale-legend { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-4); font-size: var(--step--1); color: var(--muted); }
+.scale-legend li { display: flex; align-items: center; gap: var(--space-2); }
+</style>
+</head>
+<body>
+<div class="doc">
+  <aside class="side">
+    <div class="brand"><span class="mono" translate="no">PitBoard</span><nav class="series" aria-label="сторінки цієї серії"><a href="getting-started.html">Початок роботи</a><a href="row-anatomy.html">Анатомія рядка</a><a href="how-to.html" aria-current="page">Практичні інструкції</a><a href="explanation.html">Пояснення</a><a href="reference.html">Довідник</a><a href="troubleshooting.html">Усунення проблем</a><a href="limitations.html">Обмеження</a></nav></div>
+    <nav data-pb-nav aria-label="Розділи"><ol><li><a href="#use-pitboard-with-paceline">Використання PitBoard разом із PaceLine</a></li><li><a href="#move-the-state-directory">Перенесення каталогу стану</a></li><li><a href="#use-two-accounts-on-one-machine">Використання двох акаунтів на одній машині</a></li><li><a href="#read-the-row-in-desktop">Читання рядка в Desktop</a></li><li><a href="#read-the-row-in-a-narrow-terminal">Читання рядка у вузькому терміналі</a></li><li><a href="#open-every-card-with-pitboard">Відкриття всіх карток через /pitboard</a></li></ol></nav>
+    <nav data-pb-lang aria-label="Мова"><a href="../how-to.html" hreflang="en" lang="en">En</a><a href="how-to.html" hreflang="uk" lang="uk" aria-current="page">Uk</a></nav>
+    <div data-pb-theme></div>
+  </aside>
+
+  <main class="stack-lg">
+    <header class="page-head stack">
+      <h1 id="pitboard-how-to-guides">Практичні інструкції PitBoard</h1>
+      <p>Інструкції до задач PitBoard. Кожна описує, коли вона потрібна, кроки і як перевірити результат. Значення кожного показника наведено в <a href="reference.html">довіднику</a>.</p>
+    </header>
+    <section class="stack" id="use-pitboard-with-paceline">
+      <h2>Використання PitBoard разом із PaceLine</h2>
+      <div class="callout" data-label="Коли потрібно">
+        <p>Працює кілька сесій, і сесія без активності має показувати ліміти, які бачила інша сесія; потрібен Pace з першого малювання нової сесії; або в рядку потрібні тижневі ліміти окремих моделей.</p>
+      </div>
+      <p>Сам по собі PitBoard показує п&#x27;ятигодинний і тижневий ліміти лише власної сесії, як їх повідомляє Claude Code після кожного запиту до моделі. <a href="../../../paceline/docs/uk/getting-started.html">PaceLine</a> записує показники всіх сесій у свій файл лімітів, <code>rate-limits.json</code>, і веде їхню історію. PitBoard читає цей файл, коли він існує; для цього не потрібне жодне налаштування.</p>
+      <ol class="steps">
+        <li>
+          <div>
+            <p>Встановити paceline:</p>
+            <pre data-lang="">/plugin install paceline@agentpit</pre>
+          </div>
+        </li>
+        <li>
+          <div>
+            <p>Почати нову сесію.</p>
+          </div>
+        </li>
+        <li>
+          <div>
+            <p>Щоб показувати також тижневі ліміти окремих моделей, увімкніть usage-watch від PaceLine:</p>
+            <pre data-lang="">/paceline:usage-watch on</pre>
+            <p>usage-watch вимкнено, доки його не ввімкнено. Поки він увімкнений, PaceLine кожні 125 секунд читає використання акаунта, ті самі числа, що показує <code>/usage</code>, і зводить їх із лімітами окремих моделей у файл лімітів.</p>
+          </div>
+        </li>
+      </ol>
+      <div class="callout" data-label="Як перевірити результат">
+        <ul>
+          <li>Сесія, з якою зараз не працюють, показує показник ліміту, який бачила інша сесія, приблизно за 20 секунд після того, як PaceLine записав його у файл.</li>
+          <li><code>Pace</code> у картках <code>5h limit</code> і <code>Week</code> показує темп з першого малювання нової сесії, якщо в історії файлу є показник поточного вікна, старший щонайменше за 10 хвилин для п&#x27;ятигодинного ліміту або щонайменше за годину для тижневого.</li>
+          <li>З увімкненим usage-watch кожен ліміт окремої моделі з&#x27;являється в групі лімітів під назвою моделі, наприклад <code>Fable</code>, після наступного показника usage-watch. Якщо ні, див. <a href="troubleshooting.html#a-model-scoped-limit-disappears">Ліміт моделі зникає</a>.</li>
+        </ul>
+      </div>
+    </section>
+    <section class="stack" id="move-the-state-directory">
+      <h2>Перенесення каталогу стану</h2>
+      <div class="callout" data-label="Коли потрібно">
+        <p>якщо ви зберігаєте файли PaceLine деінде, ніж у <code>&lt;config&gt;/state/paceline</code>, наприклад для другої ізольованої конфігурації. <code>&lt;config&gt;</code> — це <code>$CLAUDE_CONFIG_DIR</code>, інакше <code>~/.claude</code>.</p>
+      </div>
+      <p>PitBoard знаходить файл лімітів за правилом самого PaceLine: <code>$PACELINE_STATE_DIR/rate-limits.json</code>, якщо змінну задано і вона не порожня, інакше <code>&lt;config&gt;/state/paceline/rate-limits.json</code>. PitBoard читає змінну з середовища, у якому стартує Claude Code.</p>
+      <ol class="steps">
+        <li>
+          <div>
+            <p>Задати <code>PACELINE_STATE_DIR</code> у середовищі, яке запускає Claude Code: у shell, з якого запускають <code>claude</code>, або в середовищі користувача для Claude Code Desktop.</p>
+          </div>
+        </li>
+        <li>
+          <div>
+            <p>Почати нову сесію.</p>
+          </div>
+        </li>
+      </ol>
+      <div class="callout" data-label="Як перевірити результат">
+        <p><code>rate-limits.json</code> з&#x27;являється в новому каталозі, щойно PaceLine запише показник, а сесія в простої показує ліміти, які бачили інші сесії. Якщо змінну бачить лише один із двох плагінів, вони шукають у різних каталогах.</p>
+      </div>
+    </section>
+    <section class="stack" id="use-two-accounts-on-one-machine">
+      <h2>Використання двох акаунтів на одній машині</h2>
+      <div class="callout" data-label="Коли потрібно">
+        <p>На цьому комп&#x27;ютері ви входите більш ніж в один акаунт Claude і хочете, щоб рядок показував ліміти акаунта, яким користуєтеся зараз.</p>
+      </div>
+      <ul>
+        <li>Без PaceLine рядок показує ліміти власної сесії. Після <code>/login</code> наступна відповідь приносить числа нового акаунта.</li>
+        <li>З PaceLine рядок переходить на акаунт, в який ви ввійшли, приблизно за 20 секунд. <code>Pace</code> починається знову з показників нового акаунта, бо PitBoard відкидає вибірки старого акаунта. Для ходу одразу після <code>/login</code> власні числа сесії ще можуть належати старому акаунту.</li>
+        <li><code>Account</code> <code>unknown</code> на <code>5h limit</code>, <code>Week</code> або на картці ліміту окремої моделі означає, що число походить із файлу лімітів PaceLine, а PitBoard не може визначити, що показники файлу належать акаунту, в який ви ввійшли. Про рядок див. <a href="reference.html">довідник</a>, а причини та виправлення — у <a href="../../../paceline/docs/uk/troubleshooting.html#status-says-account-unknown">Статус каже account unknown</a> в PaceLine.</li>
+      </ul>
+      <ol class="steps">
+        <li>
+          <div>
+            <p>Оновіть обидва плагіни разом командою <code>/plugin marketplace update agentpit</code> і перезапустіть усі відкриті сесії. PitBoard 0.1.7 читає лише верхній рівень файлу лімітів, тобто акаунт, який записав останнім.</p>
+          </div>
+        </li>
+        <li>
+          <div>
+            <p>Виконати <code>/login</code> і увійти в інший акаунт.</p>
+          </div>
+        </li>
+        <li>
+          <div>
+            <p>Зачекати приблизно 20 секунд. Рядок показує ліміти нового акаунта.</p>
+          </div>
+        </li>
+      </ol>
+      <div class="callout" data-label="Як перевірити результат">
+        <p>На картках немає рядка <code>Account</code>, а <code>Pace</code> знову заповнюється після перших показників нового акаунта.</p>
+      </div>
+      <p>Щоб повністю розділити два акаунти, дайте кожному власний каталог конфігурації. Див. розділ <a href="#move-the-state-directory">Перенесення каталогу стану</a> і <a href="../../../paceline/docs/uk/how-to.html#use-two-accounts-on-one-machine">Використання двох акаунтів на одній машині</a> у PaceLine.</p>
+    </section>
+    <section class="stack" id="read-the-row-in-desktop">
+      <h2>Читання рядка в Desktop</h2>
+      <div class="callout" data-label="Коли потрібно">
+        <p>Використовується Claude Code Desktop і треба зрозуміти, що означає кожна позначка в рядку.</p>
+      </div>
+      <p>Рядок розташований над промптом. Контекст і кеш — кругові діаграми розміром із власне кільце контексту Desktop. П&#x27;ятигодинний і тижневий ліміти — смуги. Кожен ліміт окремої моделі — кругова діаграма. Поки задано радника, він має власну групу між контекстом і кешем. Рядок закінчується <code>ⓘ</code>.</p>
+      <ol class="steps">
+        <li>
+          <div>
+            <p>Наведіть на показник. PitBoard затінює його і показує картку: назву показника, по рядку на кожне значення, смугу для ліміту і пораду, коли показник потребує рішення. Поки панель <code>pitboard</code> відкрита, рядок не показує карток, бо панель містить їх усі; затінення лишається.</p>
+          </div>
+        </li>
+        <li>
+          <div>
+            <p>Прочитати смугу ліміту. Заповнення — використана частка. Позначка стоїть там, де зараз було б використання за рівномірного темпу до скидання, тобто на частці вікна, що минула. Заповнення за позначкою означає витрату швидшу, ніж дозволяє вікно.</p>
+          </div>
+        </li>
+        <li>
+          <div>
+            <p>Прочитати кольори: сірий нічого не вимагає, жовтий вартий погляду, червоний змінює наступні дії. Пороги наведено в розділі <a href="reference.html#levels">Рівні</a>.</p>
+          </div>
+        </li>
+        <li>
+          <div>
+            <p>Щоб побачити пояснення до картки, клацніть <code>pitboard</code> у нижній панелі під промптом, між режимом і назвою моделі, або запустіть <code>/pitboard</code>; див. розділ <a href="#open-every-card-with-pitboard">Відкриття всіх карток через <code>/pitboard</code></a>.</p>
+          </div>
+        </li>
+      </ol>
+      <p>Смуги змінюють розмір разом із шириною вікна. Де це можливо, PitBoard вміщує рядок в одну лінію:</p>
+      <ul>
+        <li>У широкому вікні <code>5h</code> і <code>7d</code> показують смугу, відсоток і час до скидання.</li>
+        <li>Коли це не вміщується, смуги спершу втрачають час до скидання. Картка все одно його показує.</li>
+        <li>Коли не вміщується й це, <code>5h</code> і <code>7d</code> стають круговими діаграмами і показують числа, лише коли виходять зі стану calm.</li>
+      </ul>
+      <div class="callout" data-label="Як перевірити результат">
+        <p>Картка з&#x27;являється під час наведення на показник і зникає, коли вказівник іде з нього. Якщо картка не зникає, див. <a href="troubleshooting.html#a-desktop-card-stays-open">Картка Desktop не закривається</a>.</p>
+      </div>
+    </section>
+    <section class="stack" id="read-the-row-in-a-narrow-terminal">
+      <h2>Читання рядка у вузькому терміналі</h2>
+      <div class="callout" data-label="Коли потрібно">
+        <p>Термінал завузький для всього рядка.</p>
+      </div>
+      <p>У CLI рядок розташований під промптом, під власним рядком режиму й підказки Claude Code, з короткою лінією над ним. Кожен показник — це його назва та індикатор із двох клітинок. Число з&#x27;являється, лише коли показник виходить зі стану calm, тож поки нічого не потребує уваги, рядок короткий.</p>
+      <ol class="steps">
+        <li>
+          <div>
+            <p>Дозволити рядку переноситися. Він розривається між групами: контекст, кеш, ліміти і <code>ⓘ</code> разом із <code>pitboard</code>. Група лишається цілою.</p>
+          </div>
+        </li>
+        <li>
+          <div>
+            <p>Щоб прочитати значення одного показника, клацнути його назву або натиснути Enter, коли назва має фокус. Його картка відкривається одним рядком під рядком стану, з <code>▲</code> під назвою. Картка <code>ⓘ</code> займає другий рядок, починаючи з <code>Claude Code</code>.</p>
+          </div>
+        </li>
+        <li>
+          <div>
+            <p>Рядок подробиць, ширший за термінал, обрізається в кінці. Щоб прочитати всі значення, клацнути <code>pitboard</code> у кінці рядка або запустити <code>/pitboard</code>.</p>
+          </div>
+        </li>
+      </ol>
+      <div class="callout" data-label="Як перевірити результат">
+        <p>Групи розташовуються в окремих рядках, а клацання на назві відкриває її рядок. Друге клацання на тій самій назві його закриває.</p>
+      </div>
+    </section>
+    <section class="stack" id="open-every-card-with-pitboard">
+      <h2>Відкриття всіх карток через <code>/pitboard</code></h2>
+      <div class="callout" data-label="Коли потрібно">
+        <p>Потрібні всі показники з поясненнями одразу, картка, обрізана у вузькому терміналі, або показники в мобільному застосунку Claude, який не має рядка.</p>
+      </div>
+      <ol class="steps">
+        <li>
+          <div>
+            <p>Запустити:</p>
+            <pre data-lang="">/pitboard</pre>
+            <p>Або клацнути <code>pitboard</code>: у CLI — у кінці рядка, поруч з <code>ⓘ</code>; у Desktop — у нижній панелі під промптом, між режимом і назвою моделі. Мобільний застосунок має лише команду.</p>
+          </div>
+        </li>
+        <li>
+          <div>
+            <p>Читайте панель із заголовком <code>pitboard</code> згори вниз:</p>
+            <ul>
+              <li><strong>Needs attention</strong>, лише поки щось потребує рішення: кожне попередження з порадою, найтерміновіше першим.</li>
+              <li>Усі картки в порядку рядка, з усіма їхніми рядками та поясненнями. Картка радника йде за карткою контексту, поки радника задано; картка сесії остання.</li>
+              <li>Під <code>5h limit</code> і <code>Week</code> — смуга з використаною часткою та позначкою рівномірного темпу. Смуга <code>5h limit</code> також світлішим кольором показує, куди поточний темп приведе до скидання.</li>
+            </ul>
+          </div>
+        </li>
+        <li>
+          <div>
+            <p>Закрити панель її позначкою закриття або клавішею Escape. Повторне клацання на <code>pitboard</code> лишає її відкритою.</p>
+          </div>
+        </li>
+      </ol>
+      <div class="callout" data-label="Як перевірити результат">
+        <p>Панель показує картки; після <code>/pitboard</code> Claude Code також відповідає <code>pitboard pane opened.</code></p>
+      </div>
+      <p>Сторінка «Початок роботи» малює панель у CLI та в Desktop: див. <a href="getting-started.html#install">Початок роботи, крок 3</a>.</p>
+    </section>
+  </main>
+</div>
+<script type="application/json" id="pb-strings">{"copied_label":"Скопійовано","copy_label":"Копіювати","intro.p1":"Інструкції до задач PitBoard. Кожна описує, коли вона потрібна, кроки і як перевірити результат. Значення кожного показника наведено в [довіднику](reference.html).","label_when":"Коли потрібно","label_worked":"Як перевірити результат","lang_en":"En","lang_label":"Мова","lang_uk":"Uk","move-the-state-directory.heading":"Перенесення каталогу стану","move-the-state-directory.li1":"Задати `PACELINE_STATE_DIR` у середовищі, яке запускає Claude Code: у shell, з якого запускають `claude`, або в середовищі користувача для Claude Code Desktop.","move-the-state-directory.li2":"Почати нову сесію.","move-the-state-directory.p1":"якщо ви зберігаєте файли PaceLine деінде, ніж у `<config>/state/paceline`, наприклад для другої ізольованої конфігурації. `<config>` — це `$CLAUDE_CONFIG_DIR`, інакше `~/.claude`.","move-the-state-directory.p2":"PitBoard знаходить файл лімітів за правилом самого PaceLine: `$PACELINE_STATE_DIR/rate-limits.json`, якщо змінну задано і вона не порожня, інакше `<config>/state/paceline/rate-limits.json`. PitBoard читає змінну з середовища, у якому стартує Claude Code.","move-the-state-directory.p3":"`rate-limits.json` з'являється в новому каталозі, щойно PaceLine запише показник, а сесія в простої показує ліміти, які бачили інші сесії. Якщо змінну бачить лише один із двох плагінів, вони шукають у різних каталогах.","nav_label":"Практичні інструкції","open-every-card-with-pitboard.heading":"Відкриття всіх карток через `/pitboard`","open-every-card-with-pitboard.li1":"Читайте панель із заголовком `pitboard` згори вниз:","open-every-card-with-pitboard.li2":"**Needs attention**, лише поки щось потребує рішення: кожне попередження з порадою, найтерміновіше першим.","open-every-card-with-pitboard.li3":"Усі картки в порядку рядка, з усіма їхніми рядками та поясненнями. Картка радника йде за карткою контексту, поки радника задано; картка сесії остання.","open-every-card-with-pitboard.li4":"Під `5h limit` і `Week` — смуга з використаною часткою та позначкою рівномірного темпу. Смуга `5h limit` також світлішим кольором показує, куди поточний темп приведе до скидання.","open-every-card-with-pitboard.li5":"Закрити панель її позначкою закриття або клавішею Escape. Повторне клацання на `pitboard` лишає її відкритою.","open-every-card-with-pitboard.p1":"Потрібні всі показники з поясненнями одразу, картка, обрізана у вузькому терміналі, або показники в мобільному застосунку Claude, який не має рядка.","open-every-card-with-pitboard.p2":"Запустити:","open-every-card-with-pitboard.p3":"Або клацнути `pitboard`: у CLI — у кінці рядка, поруч з `ⓘ`; у Desktop — у нижній панелі під промптом, між режимом і назвою моделі. Мобільний застосунок має лише команду.","open-every-card-with-pitboard.p4":"Панель показує картки; після `/pitboard` Claude Code також відповідає `pitboard pane opened.`","open-every-card-with-pitboard.p5":"Сторінка «Початок роботи» малює панель у CLI та в Desktop: див. [Початок роботи, крок 3](getting-started.html#install).","read-the-row-in-a-narrow-terminal.heading":"Читання рядка у вузькому терміналі","read-the-row-in-a-narrow-terminal.li1":"Дозволити рядку переноситися. Він розривається між групами: контекст, кеш, ліміти і `ⓘ` разом із `pitboard`. Група лишається цілою.","read-the-row-in-a-narrow-terminal.li2":"Щоб прочитати значення одного показника, клацнути його назву або натиснути Enter, коли назва має фокус. Його картка відкривається одним рядком під рядком стану, з `▲` під назвою. Картка `ⓘ` займає другий рядок, починаючи з `Claude Code`.","read-the-row-in-a-narrow-terminal.li3":"Рядок подробиць, ширший за термінал, обрізається в кінці. Щоб прочитати всі значення, клацнути `pitboard` у кінці рядка або запустити `/pitboard`.","read-the-row-in-a-narrow-terminal.p1":"Термінал завузький для всього рядка.","read-the-row-in-a-narrow-terminal.p2":"У CLI рядок розташований під промптом, під власним рядком режиму й підказки Claude Code, з короткою лінією над ним. Кожен показник — це його назва та індикатор із двох клітинок. Число з'являється, лише коли показник виходить зі стану calm, тож поки нічого не потребує уваги, рядок короткий.","read-the-row-in-a-narrow-terminal.p3":"Групи розташовуються в окремих рядках, а клацання на назві відкриває її рядок. Друге клацання на тій самій назві його закриває.","read-the-row-in-desktop.heading":"Читання рядка в Desktop","read-the-row-in-desktop.li1":"Наведіть на показник. PitBoard затінює його і показує картку: назву показника, по рядку на кожне значення, смугу для ліміту і пораду, коли показник потребує рішення. Поки панель `pitboard` відкрита, рядок не показує карток, бо панель містить їх усі; затінення лишається.","read-the-row-in-desktop.li2":"Прочитати смугу ліміту. Заповнення — використана частка. Позначка стоїть там, де зараз було б використання за рівномірного темпу до скидання, тобто на частці вікна, що минула. Заповнення за позначкою означає витрату швидшу, ніж дозволяє вікно.","read-the-row-in-desktop.li3":"Прочитати кольори: сірий нічого не вимагає, жовтий вартий погляду, червоний змінює наступні дії. Пороги наведено в розділі [Рівні](reference.html#levels).","read-the-row-in-desktop.li4":"Щоб побачити пояснення до картки, клацніть `pitboard` у нижній панелі під промптом, між режимом і назвою моделі, або запустіть `/pitboard`; див. розділ [Відкриття всіх карток через `/pitboard`](#open-every-card-with-pitboard).","read-the-row-in-desktop.li5":"У широкому вікні `5h` і `7d` показують смугу, відсоток і час до скидання.","read-the-row-in-desktop.li6":"Коли це не вміщується, смуги спершу втрачають час до скидання. Картка все одно його показує.","read-the-row-in-desktop.li7":"Коли не вміщується й це, `5h` і `7d` стають круговими діаграмами і показують числа, лише коли виходять зі стану calm.","read-the-row-in-desktop.p1":"Використовується Claude Code Desktop і треба зрозуміти, що означає кожна позначка в рядку.","read-the-row-in-desktop.p2":"Рядок розташований над промптом. Контекст і кеш — кругові діаграми розміром із власне кільце контексту Desktop. П'ятигодинний і тижневий ліміти — смуги. Кожен ліміт окремої моделі — кругова діаграма. Поки задано радника, він має власну групу між контекстом і кешем. Рядок закінчується `ⓘ`.","read-the-row-in-desktop.p3":"Смуги змінюють розмір разом із шириною вікна. Де це можливо, PitBoard вміщує рядок в одну лінію:","read-the-row-in-desktop.p4":"Картка з'являється під час наведення на показник і зникає, коли вказівник іде з нього. Якщо картка не зникає, див. [Картка Desktop не закривається](troubleshooting.html#a-desktop-card-stays-open).","series_label":"сторінки цієї серії","theme_dark":"Темна","theme_label":"Тема сторінки","theme_light":"Світла","theme_system":"Системна","title":"Практичні інструкції PitBoard","toc_label":"Розділи","use-pitboard-with-paceline.heading":"Використання PitBoard разом із PaceLine","use-pitboard-with-paceline.li1":"Почати нову сесію.","use-pitboard-with-paceline.li2":"Сесія, з якою зараз не працюють, показує показник ліміту, який бачила інша сесія, приблизно за 20 секунд після того, як PaceLine записав його у файл.","use-pitboard-with-paceline.li3":"`Pace` у картках `5h limit` і `Week` показує темп з першого малювання нової сесії, якщо в історії файлу є показник поточного вікна, старший щонайменше за 10 хвилин для п'ятигодинного ліміту або щонайменше за годину для тижневого.","use-pitboard-with-paceline.li4":"З увімкненим usage-watch кожен ліміт окремої моделі з'являється в групі лімітів під назвою моделі, наприклад `Fable`, після наступного показника usage-watch. Якщо ні, див. [Ліміт моделі зникає](troubleshooting.html#a-model-scoped-limit-disappears).","use-pitboard-with-paceline.p1":"Працює кілька сесій, і сесія без активності має показувати ліміти, які бачила інша сесія; потрібен Pace з першого малювання нової сесії; або в рядку потрібні тижневі ліміти окремих моделей.","use-pitboard-with-paceline.p2":"Сам по собі PitBoard показує п'ятигодинний і тижневий ліміти лише власної сесії, як їх повідомляє Claude Code після кожного запиту до моделі. [PaceLine](root:plugins/paceline/docs/getting-started.html) записує показники всіх сесій у свій файл лімітів, `rate-limits.json`, і веде їхню історію. PitBoard читає цей файл, коли він існує; для цього не потрібне жодне налаштування.","use-pitboard-with-paceline.p3":"Встановити paceline:","use-pitboard-with-paceline.p4":"Щоб показувати також тижневі ліміти окремих моделей, увімкніть usage-watch від PaceLine:","use-pitboard-with-paceline.p5":"usage-watch вимкнено, доки його не ввімкнено. Поки він увімкнений, PaceLine кожні 125 секунд читає використання акаунта, ті самі числа, що показує `/usage`, і зводить їх із лімітами окремих моделей у файл лімітів.","use-two-accounts-on-one-machine.heading":"Використання двох акаунтів на одній машині","use-two-accounts-on-one-machine.li1":"Без PaceLine рядок показує ліміти власної сесії. Після `/login` наступна відповідь приносить числа нового акаунта.","use-two-accounts-on-one-machine.li2":"З PaceLine рядок переходить на акаунт, в який ви ввійшли, приблизно за 20 секунд. `Pace` починається знову з показників нового акаунта, бо PitBoard відкидає вибірки старого акаунта. Для ходу одразу після `/login` власні числа сесії ще можуть належати старому акаунту.","use-two-accounts-on-one-machine.li3":"`Account` `unknown` на `5h limit`, `Week` або на картці ліміту окремої моделі означає, що число походить із файлу лімітів PaceLine, а PitBoard не може визначити, що показники файлу належать акаунту, в який ви ввійшли. Про рядок див. [довідник](reference.html), а причини та виправлення — у [Статус каже account unknown](root:plugins/paceline/docs/troubleshooting.html#status-says-account-unknown) в PaceLine.","use-two-accounts-on-one-machine.li4":"Оновіть обидва плагіни разом командою `/plugin marketplace update agentpit` і перезапустіть усі відкриті сесії. PitBoard 0.1.7 читає лише верхній рівень файлу лімітів, тобто акаунт, який записав останнім.","use-two-accounts-on-one-machine.li5":"Виконати `/login` і увійти в інший акаунт.","use-two-accounts-on-one-machine.li6":"Зачекати приблизно 20 секунд. Рядок показує ліміти нового акаунта.","use-two-accounts-on-one-machine.p1":"На цьому комп'ютері ви входите більш ніж в один акаунт Claude і хочете, щоб рядок показував ліміти акаунта, яким користуєтеся зараз.","use-two-accounts-on-one-machine.p2":"На картках немає рядка `Account`, а `Pace` знову заповнюється після перших показників нового акаунта.","use-two-accounts-on-one-machine.p3":"Щоб повністю розділити два акаунти, дайте кожному власний каталог конфігурації. Див. розділ [Перенесення каталогу стану](#move-the-state-directory) і [Використання двох акаунтів на одній машині](root:plugins/paceline/docs/how-to.html#use-two-accounts-on-one-machine) у PaceLine."}</script>
+<script type="application/json" id="pb-glossary">{"5h":{"name":"5h (п'ятигодинний ліміт)","react":"Жовтий від 70%: лишати субагентів для роботи, якій вони справді потрібні. Червоний від 90% або коли Pace вищий за Budget і ліміт закінчиться до скидання: відкласти субагентів.","short":"Використання п'ятигодинного вікна з позначкою там, де зараз було б використання за рівномірного темпу до скидання."},"7d":{"name":"7d (тижневий ліміт)","react":"Від 80% берегти його для роботи, якій він потрібен.","short":"Використання тижневого ліміту з позначкою там, де зараз було б використання за рівномірного темпу до скидання."},"API cost":{"name":"API cost","short":"Скільки коштувала б сесія за цінами API. Передплата не тарифікується за токени."},"Advisor":{"name":"Advisor","short":"Модель-радник, задана командою `/advisor`, і чи вона активна. У Desktop її назва курсивом піщаного кольору, якщо модель невідомої родини, і приглушена та перекреслена, коли радник неактивний."},"At reset":{"name":"At reset","short":"Яким буде використання в момент скидання, якщо поточний Pace збережеться."},"Auto-compact":{"name":"Auto-compact","short":"Чи стискає Claude Code контекст самостійно і хто задав менше вікно стиснення."},"Branch":{"name":"Branch","short":"Гілка git цієї теки, якщо вона є."},"Budget":{"name":"Budget","react":"Pace вище Budget означає, що без змін ліміт закінчиться раніше.","short":"Темп, за якого залишок витрачається рівно до скидання: відсоток, що лишився, поділений на години до скидання."},"Cache":{"name":"Cache","react":"Жовтий і червоний позначають час, що лишився до закінчення терміну кешу. Після цього наступний хід записує контекст наново: `If cold` показує кількість токенів і те, у скільки разів це дорожче за теплий хід.","short":"Скільки часу лишилося до закінчення терміну кешу промпту. Відповідь запускає відлік заново. Індикатор заповнюється в міру того, як спливає час."},"Claude Code":{"name":"Claude Code","short":"Версія Claude Code, що працює."},"Countdown":{"name":"Countdown","short":"Час до закінчення терміну кешу промпту: цілі хвилини, поки все спокійно, секунди після попередження."},"Ctx":{"name":"Ctx (контекст)","react":"Жовтий від 60%, червоний від 80% або коли `Turns left` доходить приблизно до трьох. Коли auto-compact вимкнено, контекст сам собою не стискається.","short":"Наскільки заповнений контекст відносно точки, у якій Claude Code його стискає, або відносно всього вікна, коли auto-compact вимкнено."},"Effort":{"name":"Effort","short":"Рівень effort, тобто глибини міркувань, моделі сесії."},"Hit":{"name":"Hit","react":"Низьке значення одразу після стиснення нормальне; наступні ходи його відновлюють.","short":"Частка вхідних даних останнього ходу, прочитана з кешу: reads / (reads + writes)."},"Idle compact":{"name":"Idle compact","short":"Чи очікується, що Claude Code стисне довгу розмову в простої до закінчення терміну її годинного кешу промпту: on, коли розмір сягає порогу (200k, якщо його не задано через `CLAUDE_CODE_IDLE_COMPACT_MIN_TOKENS`); on, але розмір поки нижчий за поріг; off; або n/a, якщо кеш п'ятихвилинний або TTL ще не відомий. PitBoard не бачить прапорця функції Claude Code, тому `on` означає, що стиснення очікується."},"If cold":{"name":"If cold","short":"Скільки токенів наступний хід знову запише після закінчення терміну кешу і наскільки такий хід дорожчий за хід із теплим кешем."},"Last turn":{"name":"Last turn","short":"Частка влучань у кеш за останній хід."},"Left":{"name":"Left","short":"Скільки токенів лишилося до запуску auto-compact."},"Main":{"name":"Main","short":"Основна модель сесії, з якою порівнюється радник."},"Model":{"name":"Model","short":"Модель радника або off."},"Overspent":{"name":"Overspent","react":"Сповільнитися, доки Week elapsed не наздожене використання.","short":"Наскільки тижневе використання випереджає рівномірний темп, у пунктах і в годинах бюджету. Жовтий, червоний після випередження більш ніж на добу."},"Pace":{"name":"Pace","react":"Порівняти з Budget одразу під ним.","short":"Як швидко ліміт витрачається зараз, у відсотках на годину: за останні 90 хвилин для 5h, за останні 6 годин для тижня."},"Resets":{"name":"Resets","short":"День і час скидання тижневого ліміту в системній локалі."},"Resets in":{"name":"Resets in","short":"Час до скидання п'ятигодинного вікна, після якого використання знову починається з 0%."},"Running":{"name":"Running","short":"Час від початку сесії."},"Runs out":{"name":"Runs out","react":"Відкласти субагентів і важку роботу до скидання або доки Pace не знизиться.","short":"Час, коли ліміт дійде до 100% за поточного Pace; показується замість At reset, якщо це станеться до скидання."},"Session":{"name":"Session","short":"Частка влучань у кеш від останнього стиснення."},"Spare":{"name":"Spare","short":"Наскільки тижневе використання нижче рівномірного темпу, у пунктах і в годинах бюджету."},"Started in":{"name":"Started in","short":"Остання частина шляху до теки, у якій почалася сесія."},"State":{"name":"State","short":"Чи активний радник; він неактивний, коли його модель слабша за основну."},"TTL":{"name":"TTL","short":"Час життя кешу, з яким зроблено останній запис: 1h або 5m."},"Turns":{"name":"Turns","short":"Кількість ходів у цій сесії."},"Turns left":{"name":"Turns left","short":"Скільки ходів лишилося до auto-compact за нинішнього приросту контексту на хід."},"Used":{"name":"Used","short":"Частка ліміту або вікна, яку вже витрачено."},"Week elapsed":{"name":"Week elapsed","short":"Частка тижня, що минула від останнього тижневого скидання: де зараз було б використання за рівномірного темпу."},"Window":{"name":"Window","short":"Вікно контексту, відносно якого рахує auto-compact, і повне вікно моделі, якщо вони різняться."},"act":{"name":"Дія (act)","short":"Червоний. Змінює наступні дії."},"calm":{"name":"Спокій (calm)","short":"Сірий. Нічого робити не треба."},"info":{"name":"Сесія (ⓘ)","short":"Модель, effort, радник, версія, тека, час роботи, ходи й вартість за цінами API. Також гілка, якщо вона є. У CLI відкривається клацанням, у Desktop наведенням. Кнопка `pitboard` відкриває панель `/pitboard`: у CLI вона стоїть після ⓘ, у Desktop у нижній панелі під полем введення, між режимом і моделлю."},"projection":{"name":"Проєкція","short":"Світліша частина смуги п'ятигодинного ліміту: куди дійде використання до скидання за поточного Pace. У смуги тижневого ліміту такої частини немає."},"scoped":{"name":"Ліміт моделі","react":"Від 80% перейти на іншу модель для роботи, якій ця не потрібна.","short":"Тижневий ліміт лише для однієї родини моделей, показаний поруч із 7d, доки usage-watch від PaceLine зчитував його протягом останніх 15 хвилин. Жовтий від 80%, червоний від 95%."},"tick":{"name":"Позначка рівномірного темпу","short":"Позначка на смузі ліміту там, де зараз було б використання за рівномірної витрати до скидання: частка вікна, що вже минула."},"watch":{"name":"Увага (watch)","short":"Жовтий. Варто глянути, але проблеми ще немає."}}</script>
+<script type="application/json" id="pb-facts">{"colours":{"efforts":[{"level":"low","theme":"warning"},{"level":"medium","theme":"success"},{"level":"high","theme":"suggestion"},{"level":"xhigh","theme":"autoAccept"},{"level":"max","theme":"error"}],"models":[{"desktop":"#d787ff","italic":false,"match":"opus","name":"Opus","theme":"autoAccept"},{"desktop":"#5fafff","italic":false,"match":"sonnet","name":"Sonnet","theme":"suggestion"},{"desktop":"#ff87d7","italic":false,"match":"fable","name":"Fable","theme":"bashBorder"},{"desktop":"#87d7af","italic":false,"match":"haiku","name":"Haiku","theme":"success"},{"desktop":"#b8925a","italic":true,"match":null,"name":"Other","theme":"text"}]},"env":["CLAUDE_CODE_IDLE_COMPACT_MIN_TOKENS","CLAUDE_CONFIG_DIR","DISABLE_AUTO_COMPACT","HOME","LANG","LC_ALL","LC_TIME","PACELINE_STATE_DIR","USERPROFILE"],"labels":["5h","7d","API cost","Advisor","At reset","Auto-compact","Branch","Budget","Cache","Claude Code","Countdown","Ctx","Effort","Hit","Idle compact","If cold","Last turn","Left","Main","Model","Overspent","Pace","Resets","Resets in","Running","Runs out","Session","Spare","Started in","State","TTL","Turns","Turns left","Used","Week elapsed","Window"],"levels":{"cache_1h_minutes_left":{"act":5,"watch":15},"cache_5m_minutes_left":{"act":1,"watch":2.5},"context_pct":{"act":80,"watch":60},"five_hour_pct":{"act":90,"watch":70},"week_pct":{"act":95,"watch":80}}}</script>
+<script type="application/json" id="pb-data">{}</script>
+<script>
+const __m = {}
+// Shared page behaviour: strings, glossary popovers, segmented switches, chips and the theme switch.
+// Pages read their data from the JSON script elements the build writes and call PB.* helpers.
+const PB = (() => {
+  const json = id => {
+    const el = document.getElementById(id)
+    return el ? JSON.parse(el.textContent) : {}
+  }
+  const strings = json('pb-strings')
+  const glossary = json('pb-glossary')
+  const facts = json('pb-facts')
+  const data = json('pb-data')
+
+  const t = (key, vars = {}) => {
+    const s = strings[key]
+    if (s === undefined) return `{{${key}}}`
+    return s.replace(/\{(\w+)\}/g, (_, k) => (vars[k] === undefined ? `{${k}}` : String(vars[k])))
+  }
+
+  const el = (tag, attrs = {}, ...children) => {
+    const node = document.createElement(tag)
+    for (const [k, v] of Object.entries(attrs)) {
+      if (v === null || v === undefined || v === false) continue
+      if (k === 'class') node.className = v
+      else if (k === 'text') node.textContent = v
+      else if (k === 'html') node.innerHTML = v
+      else if (k.startsWith('on')) node.addEventListener(k.slice(2), v)
+      else node.setAttribute(k, v === true ? '' : v)
+    }
+    for (const c of children.flat()) if (c !== null && c !== undefined && c !== false) node.append(c instanceof Node ? c : document.createTextNode(String(c)))
+    return node
+  }
+
+  // Text with backtick spans as nodes: code spans become <code>, the rest stays text, never markup.
+  // An unbalanced backtick leaves the whole string as text.
+  const rich = text => {
+    const s = text === undefined || text === null ? '' : String(text)
+    if (s === '') return []
+    const parts = s.split('`')
+    if (parts.length % 2 === 0) return [document.createTextNode(s)]
+    return parts.flatMap((part, i) => {
+      if (part === '') return []
+      return [i % 2 ? el('code', { text: part }) : document.createTextNode(part)]
+    })
+  }
+
+  const store = {
+    get(key) { try { return localStorage.getItem(`pb:${key}`) } catch { return null } },
+    set(key, value) { try { localStorage.setItem(`pb:${key}`, value) } catch { /* storage blocked */ } },
+  }
+
+  // Theme: system (no attribute), light or dark, remembered per viewer; an icon switch.
+  const ICONS = {
+    system: '<rect x="2.5" y="3.5" width="11" height="8" rx="1"/><path d="M6 14h4M8 11.5V14"/>',
+    light: '<circle cx="8" cy="8" r="3"/><path d="M8 1.5v1.5M8 13v1.5M1.5 8H3M13 8h1.5M3.4 3.4l1 1M11.6 11.6l1 1M3.4 12.6l1-1M11.6 4.4l1-1"/>',
+    dark: '<path d="M13 9.5A5.5 5.5 0 0 1 6.5 3a5.5 5.5 0 1 0 6.5 6.5z"/>',
+  }
+  function initTheme() {
+    const apply = v => {
+      if (v === 'light' || v === 'dark') document.documentElement.setAttribute('data-theme', v)
+      else document.documentElement.removeAttribute('data-theme')
+    }
+    apply(store.get('theme'))
+    for (const seg of document.querySelectorAll('[data-pb-theme]')) {
+      seg.classList.add('seg', 'theme-switch')
+      seg.setAttribute('role', 'group')
+      seg.setAttribute('aria-label', t('theme_label'))
+      // innerHTML parses the icon in the SVG namespace; createElement('svg') would not.
+      seg.replaceChildren(...['system', 'light', 'dark'].map(v => {
+        const b = el('button', { type: 'button', 'data-value': v, title: t(`theme_${v}`), html: `<svg viewBox="0 0 16 16" aria-hidden="true">${ICONS[v]}</svg>` })
+        b.append(el('span', { class: 'visually-hidden', text: t(`theme_${v}`) }))
+        return b
+      }))
+      seg.addEventListener('pb:change', e => { apply(e.detail); store.set('theme', e.detail); document.dispatchEvent(new CustomEvent('pb:theme')) })
+      setSeg(seg, store.get('theme') || 'system', false)
+    }
+  }
+
+  // Segmented switches and chip groups: one pressed button; a 'pb:change' event with its value.
+  function setSeg(group, value, notify = true) {
+    for (const b of group.querySelectorAll('button[data-value]')) b.setAttribute('aria-pressed', String(b.dataset.value === value))
+    group.dataset.current = value
+    if (notify) group.dispatchEvent(new CustomEvent('pb:change', { detail: value }))
+  }
+  function initSegs(root = document) {
+    for (const group of root.querySelectorAll('.seg, .chips[data-choice]')) {
+      if (group.dataset.bound) continue
+      group.dataset.bound = '1'
+      group.addEventListener('click', e => {
+        const b = e.target.closest('button[data-value]')
+        if (b && group.contains(b)) setSeg(group, b.dataset.value)
+      })
+      const pressed = group.querySelector('button[aria-pressed="true"]') || group.querySelector('button[data-value]')
+      if (pressed) setSeg(group, pressed.dataset.value, false)
+    }
+  }
+
+  // Glossary popovers: any element with data-term; hover and focus show it, a tap toggles it.
+  let pop = null
+  let owner = null
+  function hide() {
+    if (pop) pop.remove()
+    for (const hot of document.querySelectorAll('.glossary .is-hot')) hot.classList.remove('is-hot')
+    pop = null
+    owner = null
+  }
+  // With the glossary drawer open a term lights its entry there; otherwise it opens a popover.
+  function sideEntry(key) {
+    const entry = document.querySelector(`.glossary [data-entry="${CSS.escape(key)}"]`)
+    if (!entry) return null
+    return entry.closest('.glossary').hidden ? null : entry
+  }
+  function show(target) {
+    const key = target.dataset.term
+    const entry = glossary[key]
+    if (!entry) return
+    hide()
+    owner = target
+    const side = sideEntry(key)
+    if (side) {
+      side.classList.add('is-hot')
+      side.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+      return
+    }
+    pop = el('div', { class: 'popover', role: 'tooltip' }, el('strong', { text: entry.name || key }), el('span', {}, rich(entry.short || entry)))
+    document.body.append(pop)
+    const r = target.getBoundingClientRect()
+    const w = pop.offsetWidth
+    const left = Math.max(16, Math.min(window.scrollX + r.left, window.scrollX + document.documentElement.clientWidth - w - 16))
+    pop.style.left = `${left}px`
+    pop.style.top = `${window.scrollY + r.bottom + 6}px`
+  }
+  function initTerms() {
+    document.addEventListener('mouseover', e => { const x = e.target.closest('[data-term]'); if (x && x !== owner) show(x) })
+    document.addEventListener('mouseout', e => { const x = e.target.closest('[data-term]'); if (x && !x.contains(e.relatedTarget)) hide() })
+    document.addEventListener('focusin', e => { const x = e.target.closest('[data-term]'); if (x) show(x) })
+    document.addEventListener('focusout', e => { if (e.target.closest('[data-term]')) hide() })
+    document.addEventListener('click', e => {
+      const x = e.target.closest('[data-term]')
+      if (x) { if (owner === x) hide(); else show(x) } else if (!e.target.closest('.popover')) hide()
+    })
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') hide() })
+  }
+
+  function term(key, label) {
+    return el('span', { class: 'term', 'data-term': key, tabindex: '0', text: label ?? key })
+  }
+
+  // Section navigation with the current section marked. The build writes the list into the
+  // markup; a page built without one gets it here from its own section headings.
+  function initNav() {
+    const nav = document.querySelector('[data-pb-nav]')
+    if (!nav) return
+    if (!nav.querySelector('a')) {
+      const found = [...document.querySelectorAll('main section[id]')].filter(s => s.querySelector('h1, h2'))
+      const made = found.map(s => el('a', { href: `#${s.id}`, text: s.dataset.nav || s.querySelector('h1, h2').textContent }))
+      nav.replaceChildren(el('ol', {}, made.map(a => el('li', {}, a))))
+    }
+    const links = [...nav.querySelectorAll('a[href^="#"]')]
+    const sections = links.map(a => document.getElementById(a.getAttribute('href').slice(1))).filter(Boolean)
+    const mark = id => { for (const a of links) a.setAttribute('aria-current', String(a.getAttribute('href') === `#${id}`)) }
+    // A click names its target at once, and the scroll it starts (smooth, and often stopped short by the
+    // page end) must not move the mark until it has settled.
+    let locked = false
+    let settle = 0
+    const hold = () => { locked = true; clearTimeout(settle); settle = setTimeout(() => { locked = false }, 200) }
+    nav.addEventListener('click', e => {
+      const a = e.target.closest('a[href^="#"]')
+      if (a && nav.contains(a)) { mark(a.getAttribute('href').slice(1)); hold() }
+    })
+    // The last heading cannot reach the top of a page that ends first, so the page end marks it.
+    const last = sections[sections.length - 1]
+    const atEnd = () => window.scrollY + window.innerHeight >= document.documentElement.scrollHeight - 2
+    window.addEventListener('scroll', () => {
+      if (locked) { hold(); return }
+      if (last && atEnd()) mark(last.id)
+    }, { passive: true })
+    if (!('IntersectionObserver' in window)) return
+    const seen = new IntersectionObserver(entries => {
+      if (locked || (last && atEnd())) return
+      for (const e of entries) if (e.isIntersecting) mark(e.target.id)
+    }, { rootMargin: '-10% 0px -70% 0px' })
+    for (const s of sections) seen.observe(s)
+  }
+
+  // Filter bar (data-pb-filter="<selector of the items>"): items carry data-tags (single words); the bar shows a
+  // search box, one chip per tag and a live count. Its texts come from the bar's own attributes: data-label (search
+  // box), data-all (the chip for every item), data-count ("{shown} of {total}"). A tag's chip reads as the text of the
+  // bar's own [data-tag="<tag>"] element when it holds one (the markup a reader without scripts sees as a list of
+  // the groups), else as the tag. data-group="<selector>" also hides the group that holds no visible item.
+  function initFilters() {
+    for (const bar of document.querySelectorAll('[data-pb-filter]')) {
+      const items = [...document.querySelectorAll(bar.dataset.pbFilter)]
+      if (!items.length) continue
+      const names = new Map([...bar.querySelectorAll('[data-tag]')].map(x => [x.dataset.tag, x.textContent.trim()]))
+      const tagsOf = item => (item.dataset.tags || '').split(/\s+/).filter(Boolean)
+      const found = new Set(items.flatMap(tagsOf))
+      const tags = [...names.keys()].filter(x => found.has(x)).concat([...found].filter(x => !names.has(x)))
+      const box = el('input', { type: 'search', class: 'filter-box', 'aria-label': bar.dataset.label || '', placeholder: bar.dataset.label || '' })
+      const chips = el('div', { class: 'chips', 'data-choice': '', role: 'group' },
+        [['', bar.dataset.all || ''], ...tags.map(x => [x, names.get(x) || x])].map(([v, label]) => el('button', { type: 'button', class: 'chip', 'data-value': v, text: label })))
+      const count = el('p', { class: 'filter-count', 'aria-live': 'polite' })
+      bar.classList.add('filter-bar')
+      bar.replaceChildren(...[box, tags.length ? chips : null, count].filter(Boolean))
+      const groups = bar.dataset.group ? [...new Set(items.map(item => item.closest(bar.dataset.group)).filter(Boolean))] : []
+      const apply = () => {
+        const query = box.value.trim().toLowerCase()
+        const tag = chips.dataset.current || ''
+        let shown = 0
+        for (const item of items) {
+          const ok = (!tag || tagsOf(item).includes(tag)) && (!query || item.textContent.toLowerCase().includes(query))
+          item.hidden = !ok
+          if (ok) shown++
+        }
+        for (const g of groups) g.hidden = items.every(item => !g.contains(item) || item.hidden)
+        count.textContent = (bar.dataset.count || '').replace('{shown}', shown).replace('{total}', items.length)
+      }
+      initSegs(bar)
+      box.addEventListener('input', apply)
+      chips.addEventListener('pb:change', apply)
+      // A link to an entry or group the filter hides clears the filter, so the target can be shown. A link to the
+      // hash already in the address bar fires no hashchange, so a click covers it.
+      const reveal = hash => {
+        const target = hash.length > 1 ? document.getElementById(decodeURIComponent(hash.slice(1))) : null
+        if (!target || !target.closest('[hidden]') || ![...items, ...groups].some(x => x.contains(target))) return
+        box.value = ''
+        setSeg(chips, '')
+        target.scrollIntoView()
+      }
+      window.addEventListener('hashchange', () => reveal(location.hash))
+      document.addEventListener('click', e => {
+        const a = e.target.closest && e.target.closest('a[href^="#"]')
+        if (a && a.hash === location.hash) reveal(a.hash)
+      })
+      apply()
+    }
+  }
+
+  // Count bar (data-pb-counts="<selector of the items>"): one segment per group (the nearest section) in
+  // proportion to its items, each a link to the group with its heading and count.
+  function initCounts() {
+    for (const bar of document.querySelectorAll('[data-pb-counts]')) {
+      const groups = new Map()
+      for (const item of document.querySelectorAll(bar.dataset.pbCounts)) {
+        const g = item.closest('section[id]')
+        if (g) groups.set(g, (groups.get(g) || 0) + 1)
+      }
+      bar.classList.add('count-bar')
+      bar.replaceChildren(...[...groups].map(([g, n]) => el('a', { class: 'count-seg', href: `#${g.id}`, 'aria-label': `${g.querySelector('h2').textContent}: ${n}`, style: `flex-grow: ${n}` },
+        el('span', { class: 'count-n', text: String(n) }), el('span', { class: 'count-name', text: g.querySelector('h2').textContent }))))
+    }
+  }
+
+  // Copy button on commands, code blocks and transcripts, where the page defines copy_label and copied_label.
+  function initCopy() {
+    if (!navigator.clipboard || !strings.copy_label || !strings.copied_label) return
+    for (const block of document.querySelectorAll('main .cmd, main pre, main .transcript')) {
+      const wrap = el('div', { class: 'copy-wrap' })
+      block.replaceWith(wrap)
+      const button = el('button', { type: 'button', class: 'copy-btn', 'aria-live': 'polite', text: t('copy_label') })
+      button.addEventListener('click', () => {
+        navigator.clipboard.writeText(block.textContent.trim()).then(() => {
+          button.textContent = t('copied_label')
+          setTimeout(() => { button.textContent = t('copy_label') }, 1600)
+        }, () => {})
+      })
+      wrap.append(block, button)
+    }
+  }
+
+  // Decision walker (ol.walker): a question with its answers as a nested list. With scripts one node shows
+  // at a time, the answers as buttons (the answer's data-label, else its own text), with back and restart
+  // (walker_back, walker_restart). A node's data-outcome names its colour. Where the page lacks those strings the
+  // list stays as written.
+  function initWalkers() {
+    if (!strings.walker_back || !strings.walker_restart) return
+    for (const list of document.querySelectorAll('ol.walker')) {
+      const root = list.querySelector(':scope > li')
+      if (!root) continue
+      const trail = [root]
+      const view = el('div', { class: 'walker-view', tabindex: '-1', 'aria-live': 'polite' })
+      const own = li => {
+        const copy = li.cloneNode(true)
+        for (const inner of copy.querySelectorAll('ol')) inner.remove()
+        return copy
+      }
+      const go = change => { change(); render(); view.focus() }
+      const render = () => {
+        const li = trail[trail.length - 1]
+        view.dataset.outcome = li.dataset.outcome || ''
+        const options = [...li.querySelectorAll(':scope > ol > li')]
+        const answers = options.map(o => el('button', {
+          type: 'button', class: 'chip', text: o.dataset.label || own(o).textContent.trim(), onclick: () => go(() => trail.push(o)),
+        }))
+        view.replaceChildren(...[
+          el('div', { class: 'walker-text' }, el('p', {}, [...own(li).childNodes])),
+          answers.length ? el('div', { class: 'walker-options' }, answers) : null,
+          el('div', { class: 'walker-controls' },
+            el('button', { type: 'button', text: t('walker_back'), disabled: trail.length < 2, onclick: () => go(() => trail.pop()) }),
+            el('button', { type: 'button', text: t('walker_restart'), disabled: trail.length < 2, onclick: () => go(() => { trail.length = 1 }) })),
+        ].filter(Boolean))
+      }
+      list.hidden = true
+      list.after(view)
+      render()
+    }
+  }
+
+  // Segmented panels (div.seg-panels > div.seg-panel[data-label]): every panel shows without scripts; with
+  // scripts a segmented switch picks one.
+  function initPanels() {
+    for (const box of document.querySelectorAll('.seg-panels')) {
+      const panels = [...box.querySelectorAll(':scope > .seg-panel')]
+      if (panels.length < 2) continue
+      const seg = el('div', { class: 'seg', role: 'group' }, panels.map((p, i) => el('button', { type: 'button', 'data-value': String(i), text: p.dataset.label })))
+      seg.addEventListener('pb:change', e => panels.forEach((p, i) => { p.hidden = String(i) !== e.detail }))
+      box.classList.add('is-tabbed')
+      box.prepend(seg)
+      initSegs(box)
+      panels.forEach((p, i) => { p.hidden = i !== 0 })
+    }
+  }
+
+  // The glossary column: the entries a page lists in data-terms, or all of them.
+  function initGlossary() {
+    for (const aside of document.querySelectorAll('[data-pb-glossary]')) {
+      const keys = aside.dataset.terms ? aside.dataset.terms.split(',').map(k => k.trim()) : Object.keys(glossary)
+      aside.append(el('dl', {}, keys.filter(k => glossary[k]).map(k =>
+        el('div', { class: 'entry', 'data-entry': k }, el('dt', { text: glossary[k].name || k }), el('dd', {}, rich(glossary[k].short))))))
+    }
+  }
+
+  // List and detail built in markup (data-pb-md): an option shows the panel with the same data-panel.
+  function initMasterDetail() {
+    for (const box of document.querySelectorAll('[data-pb-md]')) {
+      const items = [...box.querySelectorAll('.sit-item[data-panel]')]
+      const panels = [...box.querySelectorAll('.md-panel[data-panel]')]
+      const choose = (i, focus) => {
+        items.forEach((it, j) => { it.setAttribute('aria-selected', String(i === j)); it.tabIndex = i === j ? 0 : -1 })
+        for (const p of panels) p.hidden = p.dataset.panel !== items[i].dataset.panel
+        if (focus) items[i].focus()
+      }
+      items.forEach((it, i) => it.addEventListener('click', () => choose(i, true)))
+      box.addEventListener('keydown', e => {
+        const at = items.findIndex(it => it.getAttribute('aria-selected') === 'true')
+        const next = { ArrowDown: at + 1, ArrowUp: at - 1, Home: 0, End: items.length - 1 }[e.key]
+        if (next === undefined || !e.target.closest('.sit-item')) return
+        e.preventDefault()
+        choose(Math.max(0, Math.min(items.length - 1, next)), true)
+      })
+      choose(0, false)
+    }
+  }
+
+  // Drawers: a button with data-pb-drawer opens the panel with that id; the close button, Escape
+  // or a second press closes it, and focus returns to the button.
+  function initDrawers() {
+    for (const opener of document.querySelectorAll('[data-pb-drawer]')) {
+      const panel = document.getElementById(opener.dataset.pbDrawer)
+      if (!panel) continue
+      const set = open => {
+        panel.hidden = !open
+        opener.setAttribute('aria-expanded', String(open))
+        document.body.classList.toggle('drawer-is-open', open)
+        if (open) panel.querySelector('button')?.focus()
+        else opener.focus()
+      }
+      opener.addEventListener('click', () => set(panel.hidden))
+      panel.querySelector('[data-pb-drawer-close]')?.addEventListener('click', () => set(false))
+      document.addEventListener('keydown', e => { if (e.key === 'Escape' && !panel.hidden) set(false) })
+    }
+  }
+
+  document.addEventListener('DOMContentLoaded', () => { initTheme(); initSegs(); initGlossary(); initNav(); initTerms(); initMasterDetail(); initDrawers(); initFilters(); initCounts(); initCopy(); initWalkers(); initPanels() })
+  return { t, el, rich, strings, glossary, facts, data, store, setSeg, initSegs, term }
+})()
+</script>
+</body>
+</html>

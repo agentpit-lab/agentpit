@@ -25,8 +25,8 @@ start a new session.
 - There is no Python 3.12 to 3.14 on the `PATH` of the environment Claude Code starts in. The
   launcher prints that dbWise needs Python 3.12 to 3.14 and exits with status 1. See [The server
   needs Python 3.12 to 3.14](limitations.md#the-server-needs-python-312-to-314).
-- `config.json` is invalid, so the server exits with status 1. See [An invalid config.json stops the
-  server](#an-invalid-configjson-stops-the-server).
+- `config.json` is invalid, so the server exits with status 1. See [An invalid `config.json` stops
+  the server](#an-invalid-configjson-stops-the-server).
 
 **Check:** run `python3 --version` (on Windows `py --list`) in the environment Claude Code starts
 from, and `dbwise doctor`.
@@ -62,7 +62,7 @@ is not.
 **Fix:** add an alias ([Add an alias](how-to.md#add-an-alias)) or correct `DBWISE_ALIASES`, then
 reconnect.
 
-## The server shows only dbwise_status
+## The server shows only `dbwise_status`
 
 The only tool is `dbwise_status`, and none of `list_databases`, `read_sql` and the rest.
 
@@ -109,13 +109,13 @@ cannot open stays in the list with no database. The tool's text and the alias's 
 dbwise doctor --alias prod
 ```
 
-The doctor tells these causes apart: `NO HOST` and `NO USER` (the config lacks them; the fix is a
+The `doctor` tells these causes apart: `NO HOST` and `NO USER` (the config lacks them; the fix is a
 `dbwise server add` or `dbwise credential add`, or `dbwise import --from-vault`), `NETWORK` (the
 host cannot be reached within 5 seconds; check the VPN, the tunnel, the host and the port), a
 missing password (`dbwise set-password NAME` in a terminal), `AUTH FAILED` (the server refused the
 user; the password changed or is wrong, so run `dbwise set-password NAME`), `NOT FOUND` and `NO
 ACCESS` for a database in the list (correct the list with `dbwise server add`, or have the database
-owner grant CONNECT), and a role check `REFUSED:`, in a database of the alias's list or in the
+owner grant `CONNECT`), and a role check `REFUSED:`, in a database of the alias's list or in the
 server's discovery database.
 
 When the cause was the network, the agent's `reconnect` tool probes the alias again. After a change
@@ -134,10 +134,10 @@ the role the alias's credential uses. After the fix, reconnect `plugin:dbwise:po
 |---|---|
 | `the role is a superuser`, `has BYPASSRLS`, `has CREATEROLE`, `has CREATEDB`, `has REPLICATION` | `ALTER ROLE dbwise_read NOSUPERUSER NOBYPASSRLS NOCREATEROLE NOCREATEDB NOREPLICATION;` or use another role |
 | `the role is a member of predefined role(s) pg_write_all_data` (or `pg_signal_backend`, `pg_maintain`, `pg_read_server_files`, `pg_write_server_files`, `pg_execute_server_program`, `pg_checkpoint`, `pg_create_subscription`) | `REVOKE pg_write_all_data FROM dbwise_read;` |
-| `the role is a member of non-predefined role(s) app_role` | `REVOKE app_role FROM dbwise_read;` Membership lets the role cancel and terminate that role's sessions and passes on what that role owns. Grant SELECT to the login directly, or through `pg_read_all_data`, instead |
+| `the role is a member of non-predefined role(s) app_role` | `REVOKE app_role FROM dbwise_read;` Membership lets the role cancel and terminate that role's sessions and passes on what that role owns. Grant `SELECT` to the login directly, or through `pg_read_all_data`, instead |
 | `the role owns the current database`, `owns relations`, `owns functions`, `owns schemas of this database` | Give the objects to another role, for example `ALTER TABLE orders OWNER TO app_owner;`. A role that owns objects can change them whatever its grants say |
-| `the role holds a write privilege on relation(s) public.orders` (up to three are listed) | `REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON ALL TABLES IN SCHEMA public FROM dbwise_read;` and, on PostgreSQL 17 and later, add `MAINTAIN` to the list. For a sequence: `REVOKE USAGE, UPDATE ON ALL SEQUENCES IN SCHEMA public FROM dbwise_read;`. A grant to `PUBLIC` counts: run the same statements with `FROM PUBLIC`, or the role keeps being refused. A REVOKE on a table also removes column-level INSERT and UPDATE grants |
-| `the role can execute functions of the dblink extension` | The REVOKE of [step 5 of the role recipe](how-to.md#5-revoke-the-functions-that-public-may-execute), run in that database; then `GRANT EXECUTE` on the functions to the roles that need `dblink` |
+| `the role holds a write privilege on relation(s) public.orders` (up to three are listed) | `REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON ALL TABLES IN SCHEMA public FROM dbwise_read;` and, on PostgreSQL 17 and later, add `MAINTAIN` to the list. For a sequence: `REVOKE USAGE, UPDATE ON ALL SEQUENCES IN SCHEMA public FROM dbwise_read;`. A grant to `PUBLIC` counts: run the same statements with `FROM PUBLIC`, or the role keeps being refused. A `REVOKE` on a table also removes column-level `INSERT` and `UPDATE` grants |
+| `the role can execute functions of the dblink extension` | The `REVOKE` of [step 5 of the role recipe](how-to.md#5-revoke-the-functions-that-public-may-execute), run in that database; then `GRANT EXECUTE` on the functions to the roles that need `dblink` |
 | `the role has USAGE on a foreign server` | `REVOKE USAGE ON FOREIGN SERVER server_name FROM dbwise_read;`, and the same `FROM PUBLIC` when it was granted there |
 | at `read`: `the role is a member of pg_monitor, ... which belong to the diagnose level` (the reason names `pg_monitor`, `pg_read_all_stats` or `pg_stat_scan_tables`) | `REVOKE pg_monitor FROM dbwise_read;` when the reason names `pg_monitor`: the other two come with it. Otherwise revoke the role the reason names. Use the monitoring roles on the `diagnose` credential only |
 
@@ -146,7 +146,7 @@ cleared it. Where the grants came from is easiest to see in `dbwise doctor`, who
 list what the role owns and the write grants that reach it, directly, through `PUBLIC` or through a
 role it inherits.
 
-### The server is configured with role_check warn
+### The server is configured with `role_check warn`
 
 On a server whose entry in `config.json` has `"role_check": "warn"`, a refused gate is a warning:
 the alias opens, and `list_databases` shows `role_check: warn` with the reasons. This is meant for
@@ -205,11 +205,11 @@ text is `diagnose`.
 raises the limit at `read` and `diagnose`. `write_sql` has no timeout, and using it is your
 decision.
 
-## A diagnose tool reports a permission problem
+## A `diagnose` tool reports a permission problem
 
 **The `Sequence health:` part of `analyze_db_health` ends with `<n> sequence(s) could not be read
-with this role's privileges and were not checked:`, followed by names.** The role has no SELECT on
-those sequences. Grant it, never USAGE, which the gate counts as a write grant:
+with this role's privileges and were not checked:`, followed by names.** The role has no `SELECT` on
+those sequences. Grant it, never `USAGE`, which the gate counts as a write grant:
 
 ```sql
 GRANT SELECT ON ALL SEQUENCES IN SCHEMA public TO dbwise_diagnose;
@@ -220,20 +220,20 @@ ALTER DEFAULT PRIVILEGES FOR ROLE app_owner IN SCHEMA public
 or make the role a member of `pg_read_all_data`. The other health checks ran.
 
 **A query on `hypopg_list_indexes` answers `permission denied for view hypopg_list_indexes`.**
-hypopg 1.4.3 grants that view to its owner only, and the `GRANT SELECT ON ALL TABLES IN SCHEMA
+`hypopg` 1.4.3 grants that view to its owner only, and the `GRANT SELECT ON ALL TABLES IN SCHEMA
 public` of the role recipe covers it only when the extension already exists in `public`. In the
 database with the extension, run `GRANT SELECT ON hypopg_list_indexes, hypopg_hidden_indexes TO
 dbwise_diagnose;`. If the extension lives in another schema, qualify both views with that schema and
-grant USAGE on the schema to every dbWise role (`dbwise_read`, `dbwise_diagnose`, `dbwise_write`):
+grant `USAGE` on the schema to every dbWise role (`dbwise_read`, `dbwise_diagnose`, `dbwise_write`):
 the pool reset after each call runs that schema's `hypopg_reset()` and `hypopg_unhide_all_indexes()`
 on the pools of all levels. The recipe is in [Create the database roles for
 dbWise](how-to.md#create-the-database-roles-for-dbwise). The index tools do not use these views.
 
 **`get_top_queries` or the workload index tool finds no `pg_stat_statements`, or the index tools no
-`hypopg`.** The doctor prints `note: extension ... is not installed in <database>`. Ask the database
-owner to create it, or create it through `write_sql` on an alias at level `write`.
+`hypopg`.** The `doctor` prints `note: extension ... is not installed in <database>`. Ask the
+database owner to create it, or create it through `write_sql` on an alias at level `write`.
 
-## An invalid config.json stops the server
+## An invalid `config.json` stops the server
 
 `plugin:dbwise:postgres` failed in `/mcp`, and no alias is offered, including the valid ones.
 
@@ -242,11 +242,11 @@ alias. A file that cannot be read, is not valid JSON or does not follow the
 [format](reference.md#configuration-format) makes it print the reason and exit with status 1.
 
 **Check:** `dbwise doctor` prints `config unusable:` with the file, what is wrong and, for a format
-violation, the JSON path of the first problem. The SessionStart hook's lines in the session list the
-config as unusable as well.
+violation, the JSON path of the first problem. The `SessionStart` hook's lines in the session list
+the config as unusable as well.
 
 **Fix:** correct the file, or copy `config.json.bak` over it when one exists, then reconnect. See
-[An invalid config.json stops the server](limitations.md#an-invalid-configjson-stops-the-server).
+[An invalid `config.json` stops the server](limitations.md#an-invalid-configjson-stops-the-server).
 
 ## The server fails at start on a slow machine
 

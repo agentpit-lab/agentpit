@@ -4,6 +4,88 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
+<meta name="pb-twin" content="uk/index.html">
+<script>
+// Language choice: remembered per viewer, followed from the browser on the first visit.
+// Inlined as the first script in <head>, so it runs before the body exists: the counterpart
+// comes from <meta name="pb-twin">, which the build writes before this script and omits when the
+// other language is a placeholder.
+;(() => {
+  const KEY = 'pb:lang'
+  const meta = name => {
+    const m = document.querySelector(`meta[name="${name}"]`)
+    return m ? m.getAttribute('content') : null
+  }
+  const valid = v => (v === 'uk' || v === 'en' ? v : null)
+
+  // A read alone cannot tell blocked storage from empty storage, and a redirect without a working
+  // store would bounce the reader back on every page.
+  let works = false
+  try {
+    localStorage.setItem(KEY + '-probe', '1')
+    localStorage.removeItem(KEY + '-probe')
+    works = true
+  } catch { /* storage blocked */ }
+
+  function preferred() {
+    try {
+      const stored = valid(localStorage.getItem(KEY))
+      if (stored) return stored
+    } catch { /* storage blocked */ }
+    for (const tag of navigator.languages || []) {
+      const primary = valid(String(tag).toLowerCase().split('-')[0])
+      if (primary) return primary
+    }
+    return 'en'
+  }
+
+  // A redirect carries ?pb-lang=<language>. Where each file has its own storage (some browsers
+  // scope localStorage per file:// file) the two pages can disagree forever; a page that arrives
+  // through a hop trusts it, stores it and never redirects, so a hop happens at most once.
+  const hop = (/[?&]pb-lang=([^&#]*)/.exec(location.search || '') || [])[1]
+  const hopped = valid(hop)
+  const marked = (href, code) => href.split('#')[0].split('?')[0] + '?pb-lang=' + code + location.hash
+
+  const twin = meta('pb-twin')
+  if (hop !== undefined) {
+    if (hopped && works) {
+      try { localStorage.setItem(KEY, hopped) } catch { /* storage blocked */ }
+    }
+    try {
+      if (typeof history !== 'undefined' && history.replaceState) {
+        const rest = (location.search || '').slice(1).split('&').filter(p => p && !p.startsWith('pb-lang='))
+        history.replaceState(history.state, '', location.pathname + (rest.length ? '?' + rest.join('&') : '') + location.hash)
+      }
+    } catch { /* a refused rewrite must not stop the click listener below */ }
+  }
+
+  // Going Back to the page the reader just left reruns this script with the stored choice, which
+  // would send the reader forward again and make Back unusable.
+  let traversal = false
+  try {
+    const entry = performance.getEntriesByType && performance.getEntriesByType('navigation')[0]
+    traversal = !!entry && entry.type === 'back_forward'
+  } catch { /* no navigation timing */ }
+
+  if (!hopped && !traversal && works && twin && preferred() !== document.documentElement.getAttribute('lang')) {
+    location.replace(marked(twin, preferred()))
+  }
+
+  document.addEventListener('click', event => {
+    const link = event.target && event.target.closest && event.target.closest('nav[data-pb-lang] a')
+    if (!link) return
+    const code = valid(link.getAttribute('hreflang'))
+    const href = link.getAttribute('href')
+    // The English page of a placeholder is a way out of an empty page, not a choice of language.
+    if (code && !(code === 'en' && meta('pb-placeholder'))) {
+      try { localStorage.setItem(KEY, code) } catch { /* storage blocked */ }
+      if (href) link.setAttribute('href', marked(href, code))
+    } else if (href) {
+      link.setAttribute('href', href.split('#')[0].split('?')[0] + location.hash)
+    }
+  })
+})()
+</script>
 <title>agentpit documentation</title>
 <style>
 :root { --bg: #f8f7f3; --surface: #ffffff; --ink: #1d1f1c; --muted: #67695f; --line: #e2dfd5; --accent: #0b6a88; color-scheme: light; }
@@ -16,12 +98,18 @@ p { margin: 0; color: var(--muted); }
 section { display: grid; gap: 12px; }
 a.card { display: grid; gap: 4px; padding: 16px; background: var(--surface); border: 1px solid var(--line); border-radius: 6px; color: var(--ink); text-decoration: none; }
 a.card:hover, a.card:focus-visible { border-color: var(--accent); }
+a.card small.soon { justify-self: start; font-size: 0.75rem; line-height: 1.4; color: var(--muted); border: 1px solid var(--line); border-radius: 999px; padding: 0 0.6em; }
 a.card strong { color: var(--accent); }
 .cards { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); }
+[data-pb-lang] { justify-self: start; display: inline-flex; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); padding: 2px; gap: 2px; }
+[data-pb-lang] a { font-size: 0.875rem; color: var(--muted); text-decoration: none; padding: 0.3em 0.8em; border-radius: 4px; }
+[data-pb-lang] a:hover, [data-pb-lang] a:focus-visible { color: var(--ink); }
+[data-pb-lang] a[aria-current="page"] { background: var(--surface); color: var(--ink); box-shadow: 0 0 0 1px var(--line); font-weight: 600; }
 </style>
 </head>
 <body>
 <main>
+  <nav data-pb-lang aria-label="Language"><a href="index.html" hreflang="en" lang="en" aria-current="page">En</a><a href="uk/index.html" hreflang="uk" lang="uk">Uk</a></nav>
   <header>
     <h1>agentpit documentation</h1>
     <p>Guides and interactive pages for the plugins of the agentpit Claude Code marketplace.</p>
@@ -41,7 +129,7 @@ a.card strong { color: var(--accent); }
   </section>
   <section>
     <h2>PaceLine</h2>
-    <p>Keeps a session's context and the subscription's usage limits in shape.</p>
+    <p>Keeps a session&#x27;s context and the subscription&#x27;s usage limits in shape.</p>
     <div class="cards">
       <a class="card" href="plugins/paceline/docs/getting-started.html"><strong>Getting started</strong><span>Its four functions and where pace speaks.</span></a>
       <a class="card" href="plugins/paceline/docs/budget-simulator.html"><strong>Budget simulator</strong><span>What pace will tell you, before it does.</span></a>
@@ -54,10 +142,10 @@ a.card strong { color: var(--accent); }
   </section>
   <section>
     <h2>dbWise</h2>
-    <p>Database access for a session at three levels per alias: read, diagnose and write.</p>
+    <p>Database access for a session at three levels per alias: <code>read</code>, <code>diagnose</code> and <code>write</code>.</p>
     <div class="cards">
       <a class="card" href="plugins/dbwise/docs/getting-started.html"><strong>Getting started</strong><span>Install it, add one alias, and see what each level may run.</span></a>
-      <a class="card" href="plugins/dbwise/docs/how-to.html"><strong>How-to guides</strong><span>Add an alias, give an agent diagnose, create the database roles.</span></a>
+      <a class="card" href="plugins/dbwise/docs/how-to.html"><strong>How-to guides</strong><span>Add an alias, give an agent <code>diagnose</code>, create the database roles.</span></a>
       <a class="card" href="plugins/dbwise/docs/explanation.html"><strong>Explanation</strong><span>How each level is enforced and what its SQL policy admits.</span></a>
       <a class="card" href="plugins/dbwise/docs/reference.html"><strong>Reference</strong><span>Commands, tools and levels, configuration, the role gate.</span></a>
       <a class="card" href="plugins/dbwise/docs/troubleshooting.html"><strong>Troubleshooting</strong><span>The server does not start, an alias or a query is refused.</span></a>

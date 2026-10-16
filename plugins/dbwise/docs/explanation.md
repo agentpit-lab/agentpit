@@ -14,15 +14,15 @@ call never does more than its alias's level allows.
 
 | Level | What the agent can do | Login |
 |---|---|---|
-| `read` | Look at schemas and objects, and run SELECT and SHOW statements | The alias's `read` credential |
-| `diagnose` | Everything at `read`, plus EXPLAIN with ANALYZE, health checks, top queries from `pg_stat_statements` and index advice | The `diagnose` credential for the diagnose tools; `read_sql` keeps using the `read` credential |
+| `read` | Look at schemas and objects, and run `SELECT` and `SHOW` statements | The alias's `read` credential |
+| `diagnose` | Everything at `read`, plus `EXPLAIN` with `ANALYZE`, health checks, top queries from `pg_stat_statements` and index advice | The `diagnose` credential for the `diagnose` tools; `read_sql` keeps using the `read` credential |
 | `write` | Everything at `diagnose`, plus any SQL, committed | The `write` credential for `write_sql`; the other tools use the credential of their own level |
 
 **The three levels as a ladder: each level can call the tools of the level below and adds its own**
 
-1. `read`: schemas and objects, and SELECT and SHOW statements.
-2. `diagnose`: everything at `read`, plus EXPLAIN with ANALYZE, health checks, top queries and index
-   advice.
+1. `read`: schemas and objects, and `SELECT` and `SHOW` statements.
+2. `diagnose`: everything at `read`, plus `EXPLAIN` with `ANALYZE`, health checks, top queries and
+   index advice.
 3. `write`: everything at `diagnose`, plus any SQL, committed.
 
 Each level can name its own credential, so each can have its own database role. That is the point of
@@ -76,9 +76,10 @@ remote databases. Four layers hold that, and they are not equally strong.
    `FROM` clauses, `ROWS FROM`, `LATERAL`, `VALUES` and CTEs. This layer stops the side effects that
    PostgreSQL lets a plain role execute by default: `pg_terminate_backend`, `pg_cancel_backend`,
    `pg_logical_emit_message`, `pg_advisory_lock`, `dblink_exec` and `set_config`. None of them is in
-   the `read` or `diagnose` function set. The role recipe adds REVOKEs where the DBA can apply them.
-3. **The read-only transaction and its ROLLBACK.** Every call at `read` and `diagnose` runs in a
-   read-only transaction and ends with ROLLBACK. This is defence in depth: it stops DML and DDL
+   the `read` or `diagnose` function set. The role recipe adds `REVOKE` statements where the DBA can
+   apply them.
+3. **The read-only transaction and its `ROLLBACK`.** Every call at `read` and `diagnose` runs in a
+   read-only transaction and ends with `ROLLBACK`. This is defence in depth: it stops DML and DDL
    hidden in views and functions, `nextval`, `SELECT ... FOR UPDATE` and `CREATE EXTENSION`. It
    holds because the policy refuses the statements that would make the transaction writable (`SET
    TRANSACTION READ WRITE`, `SET transaction_read_only = off`, `BEGIN READ WRITE`).
@@ -87,13 +88,13 @@ remote databases. Four layers hold that, and they are not equally strong.
    boundary, because a session could set it to 0; the policy refuses `set_config` and `SET`, which
    keeps the agent from doing so.
 
-**The four layers that hold the guarantee at read and diagnose**
+**The four layers that hold the guarantee at `read` and `diagnose`**
 
 1. The database role decides what the connection may do at all. A statement in the session cannot
    switch it off.
 2. The SQL policy parses every statement and checks it before it is sent.
-3. The read-only transaction ends every call with ROLLBACK. It holds because the policy refuses the
-   statements that would make the transaction writable.
+3. The read-only transaction ends every call with `ROLLBACK`. It holds because the policy refuses
+   the statements that would make the transaction writable.
 4. The statement timeout stops a call after 30 seconds. It bounds availability and is not a security
    boundary.
 
@@ -109,25 +110,26 @@ needs, and why the role gate does not apply to it.
 
 |  | `read` | `diagnose` |
 |---|---|---|
-| Statements | SELECT without a locking clause, SHOW | The same, plus EXPLAIN with any options, ANALYZE included, when the explained statement passes the policy |
+| Statements | `SELECT` without a locking clause, `SHOW` | The same, plus `EXPLAIN` with any options, `ANALYZE` included, when the explained statement passes the policy |
 | Functions | A fixed list of functions for aggregates, math, strings, dates, JSON, arrays, catalog information and the like | The same list, plus `hypopg_create_index`, `hypopg_reset`, `hypopg_list_indexes`, `hypopg_relation_size`, `hypopg_get_indexdef`, `hypopg`, `pg_last_wal_receive_lsn`, `pg_last_wal_replay_lsn` and `pg_last_xact_replay_timestamp` |
 
-Neither level admits the statements VACUUM and ANALYZE, CREATE EXTENSION, PREPARE and DEALLOCATE,
-DECLARE, FETCH and CLOSE, or NOTIFY. Neither admits `pg_current_xact_id` (each call consumes a
-transaction id), `gen_salt` and `crypt`, `ts_stat` and `ts_rewrite` (each executes SQL passed as an
-argument), `set_config`, `pg_sleep`, or the `pg_advisory_*`, `lo_*` and `dblink*` functions.
+Neither level admits the statements `VACUUM` and `ANALYZE`, `CREATE EXTENSION`, `PREPARE` and
+`DEALLOCATE`, `DECLARE`, `FETCH` and `CLOSE`, or `NOTIFY`. Neither admits `pg_current_xact_id` (each
+call consumes a transaction id), `gen_salt` and `crypt`, `ts_stat` and `ts_rewrite` (each executes
+SQL passed as an argument), `set_config`, `pg_sleep`, or the `pg_advisory_*`, `lo_*` and `dblink*`
+functions.
 
-`EXPLAIN ANALYZE` of an INSERT, UPDATE or DELETE is refused before it reaches PostgreSQL, because
-the explained statement has to pass the same policy. `EXPLAIN ANALYZE` of a SELECT executes it, with
-its full load, inside the transaction that is rolled back. The policy matches function names as
-written, with a `pg_catalog.` prefix stripped, while PostgreSQL resolves the name through
-`search_path`. It does not look at relations, operators or casts, so what the policy leaves open is
-closed by the role and by the read-only transaction.
+`EXPLAIN ANALYZE` of an `INSERT`, `UPDATE` or `DELETE` is refused before it reaches PostgreSQL,
+because the explained statement has to pass the same policy. `EXPLAIN ANALYZE` of a `SELECT`
+executes it, with its full load, inside the transaction that is rolled back. The policy matches
+function names as written, with a `pg_catalog.` prefix stripped, while PostgreSQL resolves the name
+through `search_path`. It does not look at relations, operators or casts, so what the policy leaves
+open is closed by the role and by the read-only transaction.
 
 Every query text a tool sends starts with a marker comment, `/* dbwise read */`, `/* dbwise diagnose
 */` or `/* dbwise write */`, so a DBA reading `pg_stat_activity` can see which level sent it.
 
-## What separates read from diagnose
+## What separates `read` from `diagnose`
 
 The database role of each level's credential does, enforced by the role gate, together with the tool
 split and the per-level statement and function sets. A `diagnose` role is a member of `pg_monitor`,

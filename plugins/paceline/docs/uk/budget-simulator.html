@@ -1,0 +1,2047 @@
+<!doctype html>
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<meta name="pb-twin" content="../budget-simulator.html">
+<script>
+// Language choice: remembered per viewer, followed from the browser on the first visit.
+// Inlined as the first script in <head>, so it runs before the body exists: the counterpart
+// comes from <meta name="pb-twin">, which the build writes before this script and omits when the
+// other language is a placeholder.
+;(() => {
+  const KEY = 'pb:lang'
+  const meta = name => {
+    const m = document.querySelector(`meta[name="${name}"]`)
+    return m ? m.getAttribute('content') : null
+  }
+  const valid = v => (v === 'uk' || v === 'en' ? v : null)
+
+  // A read alone cannot tell blocked storage from empty storage, and a redirect without a working
+  // store would bounce the reader back on every page.
+  let works = false
+  try {
+    localStorage.setItem(KEY + '-probe', '1')
+    localStorage.removeItem(KEY + '-probe')
+    works = true
+  } catch { /* storage blocked */ }
+
+  function preferred() {
+    try {
+      const stored = valid(localStorage.getItem(KEY))
+      if (stored) return stored
+    } catch { /* storage blocked */ }
+    for (const tag of navigator.languages || []) {
+      const primary = valid(String(tag).toLowerCase().split('-')[0])
+      if (primary) return primary
+    }
+    return 'en'
+  }
+
+  // A redirect carries ?pb-lang=<language>. Where each file has its own storage (some browsers
+  // scope localStorage per file:// file) the two pages can disagree forever; a page that arrives
+  // through a hop trusts it, stores it and never redirects, so a hop happens at most once.
+  const hop = (/[?&]pb-lang=([^&#]*)/.exec(location.search || '') || [])[1]
+  const hopped = valid(hop)
+  const marked = (href, code) => href.split('#')[0].split('?')[0] + '?pb-lang=' + code + location.hash
+
+  const twin = meta('pb-twin')
+  if (hop !== undefined) {
+    if (hopped && works) {
+      try { localStorage.setItem(KEY, hopped) } catch { /* storage blocked */ }
+    }
+    try {
+      if (typeof history !== 'undefined' && history.replaceState) {
+        const rest = (location.search || '').slice(1).split('&').filter(p => p && !p.startsWith('pb-lang='))
+        history.replaceState(history.state, '', location.pathname + (rest.length ? '?' + rest.join('&') : '') + location.hash)
+      }
+    } catch { /* a refused rewrite must not stop the click listener below */ }
+  }
+
+  // Going Back to the page the reader just left reruns this script with the stored choice, which
+  // would send the reader forward again and make Back unusable.
+  let traversal = false
+  try {
+    const entry = performance.getEntriesByType && performance.getEntriesByType('navigation')[0]
+    traversal = !!entry && entry.type === 'back_forward'
+  } catch { /* no navigation timing */ }
+
+  if (!hopped && !traversal && works && twin && preferred() !== document.documentElement.getAttribute('lang')) {
+    location.replace(marked(twin, preferred()))
+  }
+
+  document.addEventListener('click', event => {
+    const link = event.target && event.target.closest && event.target.closest('nav[data-pb-lang] a')
+    if (!link) return
+    const code = valid(link.getAttribute('hreflang'))
+    const href = link.getAttribute('href')
+    // The English page of a placeholder is a way out of an empty page, not a choice of language.
+    if (code && !(code === 'en' && meta('pb-placeholder'))) {
+      try { localStorage.setItem(KEY, code) } catch { /* storage blocked */ }
+      if (href) link.setAttribute('href', marked(href, code))
+    } else if (href) {
+      link.setAttribute('href', href.split('#')[0].split('?')[0] + location.hash)
+    }
+  })
+})()
+</script>
+<title>Симулятор бюджету PaceLine</title>
+<style>
+/* Layout: page sections on the left, the reading column in the middle, the glossary on the right;
+   the column opens with a TL;DR and an instrument (the thing explained, live), then sections that
+   each answer one question. Page chrome stays quiet: the plugins' own signal
+   colours (calm, watch, act) are the only loud colours on a page. */
+:root {
+  --bg: #f8f7f3;
+  --surface: #ffffff;
+  --surface-2: #f1efe8;
+  --ink: #1d1f1c;
+  --muted: #67695f;
+  --line: #e2dfd5;
+  --accent: #0b6a88;
+  --accent-ink: #ffffff;
+  --accent-soft: #e1eef2;
+  --focus: #0b6a88;
+
+  /* Signal colours as Claude Code Desktop draws them (plugins/pitboard/hooks/desktop.ts). */
+  --calm: #8a8a85;
+  --watch: #c4841d;
+  --act: #e0483e;
+  --cold: #2a9db5;
+  --on: #3d9a5c;
+  --watch-soft: #f6ead6;
+  --act-soft: #fadedb;
+
+  /* The specimen surfaces: a terminal and the Desktop app, each in its own theme. */
+  --term-bg: #fbfbf9;
+  --term-fg: #000000;
+  --term-line: #dcdcd6;
+  /* Claude Code's theme keys as its light and dark themes resolve them: the terminal row draws in
+     these keys, so a specimen shows the colours a reader's own terminal would. */
+  --term-text: #000000;
+  --term-inactive: #666666;
+  --term-subtle: #afafaf;
+  --term-warning: #966c1e;
+  --term-error: #ab2b3f;
+  --term-success: #2c7a39;
+  --term-planMode: #006666;
+  --term-suggestion: #5769f7;
+  --term-autoAccept: #8700ff;
+  --term-bashBorder: #ff0087;
+  --desk-bg: #ffffff;
+  --desk-fg: #2b2b29;
+  --desk-line: #e4e4df;
+
+  /* System faces only: a page loads nothing from outside its file. */
+  --font-display: "Iowan Old Style", Charter, "Bitstream Charter", "Sitka Text", Cambria, Georgia, serif;
+  --font-ui: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "Cascadia Mono", "JetBrains Mono", "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+
+  --step--1: 0.8125rem;
+  --step-0: 1rem;
+  --step-1: 1.1875rem;
+  --step-2: 1.5rem;
+  --step-3: 2.125rem;
+
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2.25rem;
+  --space-7: 3.5rem;
+
+  --radius: 6px;
+  --measure: 720px;
+  --page: 1120px;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #121413;
+    --surface: #1a1d1b;
+    --surface-2: #20231f;
+    --ink: #e8e6df;
+    --muted: #9d9f96;
+    --line: #30332e;
+    --accent: #55b6d3;
+    --accent-ink: #0b1a20;
+    --accent-soft: #173039;
+    --focus: #55b6d3;
+    --watch-soft: #3a2d15;
+    --act-soft: #3d1c19;
+    --desk-bg: #1e1f1d;
+    --desk-fg: #e6e5df;
+    --desk-line: #33342f;
+    --term-bg: #15181b;
+    --term-fg: #ffffff;
+    --term-line: #2c3136;
+    --term-text: #ffffff;
+    --term-inactive: #999999;
+    --term-subtle: #505050;
+    --term-warning: #ffc107;
+    --term-error: #ff6b80;
+    --term-success: #4eba65;
+    --term-planMode: #48968c;
+    --term-suggestion: #b1b9f9;
+    --term-autoAccept: #af87ff;
+    --term-bashBorder: #fd5db1;
+    color-scheme: dark;
+  }
+}
+
+:root[data-theme="dark"] {
+  --bg: #121413;
+  --surface: #1a1d1b;
+  --surface-2: #20231f;
+  --ink: #e8e6df;
+  --muted: #9d9f96;
+  --line: #30332e;
+  --accent: #55b6d3;
+  --accent-ink: #0b1a20;
+  --accent-soft: #173039;
+  --focus: #55b6d3;
+  --watch-soft: #3a2d15;
+  --act-soft: #3d1c19;
+  --desk-bg: #1e1f1d;
+  --desk-fg: #e6e5df;
+  --desk-line: #33342f;
+  --term-bg: #15181b;
+  --term-fg: #ffffff;
+  --term-line: #2c3136;
+  --term-text: #ffffff;
+  --term-inactive: #999999;
+  --term-subtle: #505050;
+  --term-warning: #ffc107;
+  --term-error: #ff6b80;
+  --term-success: #4eba65;
+  --term-planMode: #48968c;
+  --term-suggestion: #b1b9f9;
+  --term-autoAccept: #af87ff;
+  --term-bashBorder: #fd5db1;
+  color-scheme: dark;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font: 400 var(--step-0)/1.6 var(--font-ui);
+}
+img, svg { max-width: 100%; }
+[hidden] { display: none !important; }
+
+
+h1, h2, h3 { line-height: 1.2; text-wrap: balance; overflow-wrap: break-word; margin: 0; }
+h1, h2 { font-family: var(--font-display); font-weight: 500; letter-spacing: -0.005em; }
+h1 { font-size: var(--step-3); }
+h2 { font-size: var(--step-2); }
+h3 { font-size: var(--step-1); font-weight: 600; }
+p { margin: 0; }
+a { color: var(--accent); text-underline-offset: 2px; }
+code, kbd, .mono { font-family: var(--font-mono); font-size: 0.92em; }
+code { background: var(--surface-2); border: 1px solid var(--line); border-radius: 4px; padding: 0 0.3em; overflow-wrap: anywhere; }
+td code, th code { overflow-wrap: normal; }
+.card-quote { font-family: var(--font-mono); font-size: var(--step--1); background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--radius); padding: var(--space-2) var(--space-3); overflow-wrap: anywhere; }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 3px; }
+
+.eyebrow { font: 500 0.6875rem/1.4 var(--font-mono); letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+.lede { font-size: var(--step-1); color: var(--muted); }
+.muted { color: var(--muted); }
+.stack { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-4); }
+.stack-lg { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-6); }
+.row { display: flex; flex-wrap: wrap; gap: var(--space-3); align-items: center; }
+
+
+
+section { scroll-margin-top: var(--space-4); }
+.section-head { display: grid; gap: var(--space-2); margin-bottom: var(--space-4); }
+
+/* Panels: used only where an element is a separate object (an instrument, a card). */
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: var(--space-4); min-width: 0; }
+.grid-auto { display: grid; gap: var(--space-4); grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); }
+.split { display: grid; gap: var(--space-5); }
+
+/* Segmented switch. */
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface-2); padding: 2px; gap: 2px; }
+.seg button { font: inherit; font-size: var(--step--1); border: 0; background: transparent; color: var(--muted); padding: 0.3em 0.8em; border-radius: 4px; cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--surface); color: var(--ink); box-shadow: 0 0 0 1px var(--line); font-weight: 600; }
+.control { display: grid; gap: var(--space-1); }
+.control > .label { font-size: var(--step--1); color: var(--muted); }
+
+/* Chips: a choice among named states. */
+.chips { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.chip { font: inherit; font-size: var(--step--1); border: 1px solid var(--line); background: var(--surface); color: var(--ink); padding: 0.3em 0.75em; border-radius: 999px; cursor: pointer; display: inline-flex; gap: 0.4em; align-items: center; }
+.chip[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); }
+.dot { width: 0.6em; height: 0.6em; border-radius: 50%; background: var(--calm); display: inline-block; flex: none; }
+.dot.watch { background: var(--watch); }
+.dot.act { background: var(--act); }
+.dot.cold { background: var(--cold); }
+
+/* Level pill: state in form as well as words. */
+.pill { display: inline-flex; align-items: center; gap: 0.35em; font-size: var(--step--1); font-weight: 600; padding: 0.05em 0.6em; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); }
+.pill.watch { color: var(--watch); border-color: var(--watch); background: var(--watch-soft); }
+.pill.act { color: var(--act); border-color: var(--act); background: var(--act-soft); }
+
+/* Glossary terms: dotted underline, popover on hover, focus or tap. */
+.term { border-bottom: 1px dotted currentColor; cursor: help; }
+.popover { position: absolute; z-index: 20; max-width: min(340px, calc(100vw - 32px)); background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: 0 8px 24px rgb(0 0 0 / 0.18); padding: var(--space-3); font-size: var(--step--1); line-height: 1.5; }
+.popover strong { display: block; margin-bottom: var(--space-1); }
+
+/* Disclosure: what to do first, detail on demand. */
+details.more { border-top: 1px solid var(--line); padding-block: var(--space-3); }
+details.more > summary { cursor: pointer; font-weight: 600; list-style: none; display: flex; gap: var(--space-2); align-items: center; }
+details.more > summary::-webkit-details-marker { display: none; }
+details.more > summary::before { content: "+"; font-family: var(--font-mono); color: var(--accent); width: 1ch; }
+details.more[open] > summary::before { content: "\2212"; }
+details.more > .body { padding-top: var(--space-3); display: grid; gap: var(--space-3); }
+
+/* Key-value lists aligned on one column. */
+.kv { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: var(--space-1) var(--space-4); font-size: var(--step--1); margin: 0; }
+.kv dt { color: var(--muted); }
+.kv dd { margin: 0; font-variant-numeric: tabular-nums; }
+
+/* Range slider. */
+input[type="range"] { width: 100%; accent-color: var(--accent); }
+.slider { display: grid; gap: var(--space-1); }
+.slider .readout { display: flex; justify-content: space-between; font-size: var(--step--1); color: var(--muted); font-variant-numeric: tabular-nums; }
+.slider .readout b { color: var(--ink); font-weight: 600; }
+
+/* Tables that may run wider than a phone scroll inside their own box. */
+.table-wrap { overflow-x: auto; }
+.facts-list { columns: 9rem; column-gap: var(--space-4); list-style: none; margin: 0; padding: 0; }
+.facts-list li { break-inside: avoid; }
+table { border-collapse: collapse; width: 100%; font-size: var(--step--1); }
+th, td { text-align: left; padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--line); vertical-align: top; }
+th { color: var(--muted); font-weight: 600; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+
+/* A transcript of what Claude Code shows: monospace on the terminal surface. */
+.transcript { background: var(--term-bg); color: var(--term-fg); border-radius: var(--radius); padding: var(--space-3) var(--space-4); font: 0.875rem/1.55 var(--font-mono); overflow-x: auto; white-space: pre; }
+.transcript .dim { color: var(--term-inactive); }
+.transcript .hl { color: #e0b000; }
+
+.callout { display: grid; gap: var(--space-1); border-left: 3px solid var(--accent); padding: var(--space-1) var(--space-3); }
+
+footer.page-foot { margin-top: var(--space-7); padding-top: var(--space-4); border-top: 1px solid var(--line); font-size: var(--step--1); color: var(--muted); display: flex; flex-wrap: wrap; gap: var(--space-4); justify-content: space-between; }
+
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; scroll-behavior: auto !important; } }
+
+/* Steps: a real sequence, so numbered. */
+.steps { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-6); counter-reset: step; }
+.steps > li { display: grid; grid-template-columns: 2.25rem minmax(0, 1fr); gap: var(--space-4); counter-increment: step; }
+.steps > li::before { content: counter(step); width: 2.25rem; height: 2.25rem; border-radius: 50%; display: grid; place-items: center; font-weight: 700; color: var(--accent-ink); background: var(--accent); font-variant-numeric: tabular-nums; }
+.steps > li > div { display: grid; gap: var(--space-3); min-width: 0; }
+.cmd { display: flex; gap: var(--space-2); align-items: center; background: var(--term-bg); color: var(--term-fg); border-radius: var(--radius); padding: var(--space-2) var(--space-3); font: 0.9375rem/1.4 var(--font-mono); overflow-x: auto; }
+.cmd::before { content: "›"; color: var(--term-inactive); }
+
+.annot { display: grid; gap: var(--space-2); font-size: var(--step--1); }
+.annot { margin: 0; padding-left: 1.2em; }
+
+/* One grid for the whole series: sections, a content column of one width, the glossary column.
+   Every block in the content column spans it, so all edges line up on every page. */
+.doc { max-width: calc(190px + var(--measure) + 260px + 2 * var(--space-6) + 2 * var(--space-6)); margin: 0 auto; padding-inline: 16px; padding-block: var(--space-5) var(--space-7); display: grid; gap: var(--space-6); }
+.doc > * { min-width: 0; }
+.doc > main { width: 100%; max-width: var(--measure); }
+@media (min-width: 1180px) { .doc { grid-template-columns: 190px var(--measure) 260px; padding-inline: var(--space-6); justify-content: center; } }
+@media (min-width: 900px) and (max-width: 1179px) { .doc { grid-template-columns: 180px minmax(0, var(--measure)); padding-inline: var(--space-5); } }
+.side { display: grid; gap: var(--space-5); align-content: start; font-size: var(--step--1); }
+@media (min-width: 900px) { .side { position: sticky; top: var(--space-4); max-height: calc(100vh - 2rem); overflow-y: auto; } }
+.side nav ol { list-style: none; margin: 0; padding: 0 0 0 var(--space-3); border-left: 1px solid var(--line); display: grid; gap: var(--space-2); }
+.side nav a { color: var(--muted); text-decoration: none; }
+.side nav a:hover, .side nav a[aria-current="true"] { color: var(--ink); }
+.side nav a[aria-current="true"] { font-weight: 600; }
+.sources { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-1); font: 0.75rem/1.4 var(--font-mono); color: var(--muted); word-break: break-all; }
+@media (max-width: 899px) { .side nav ol { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-4); border: 0; padding: 0; } .side .sources-block { display: none; } }
+
+.glossary { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: var(--space-4); display: grid; gap: var(--space-3); align-content: start; }
+.glossary dl { margin: 0; display: grid; gap: var(--space-3); }
+.glossary dt { font: 500 var(--step-0)/1.3 var(--font-display); }
+.glossary dd { margin: 0; font-size: var(--step--1); color: var(--muted); line-height: 1.5; }
+.glossary .entry { border-radius: 4px; padding: var(--space-1) var(--space-2); margin-inline: calc(-1 * var(--space-2)); transition: background-color 0.15s; }
+.glossary .entry.is-hot { background: var(--accent-soft); }
+.glossary .entry.is-hot dd { color: var(--ink); }
+
+/* TL;DR: the page's answer before its detail. */
+.tldr { border: 1px solid var(--line); border-left: 3px solid var(--accent); background: var(--surface); border-radius: var(--radius); padding: var(--space-3) var(--space-4); }
+.tldr strong:first-child { margin-right: 0.35em; }
+.brand { display: grid; gap: var(--space-2); }
+/* Navigation uses the interface face; the serif belongs to the document's own headings. */
+.brand .mono { font: 500 0.6875rem/1.4 var(--font-mono); letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+.series { display: grid; gap: 2px; }
+.series a { font-size: var(--step--1); color: var(--muted); text-decoration: none; padding: 0.15em 0 0.15em var(--space-3); border-left: 2px solid transparent; }
+.series a:hover { color: var(--ink); }
+.series a[aria-current="page"] { color: var(--ink); font-weight: 600; border-left-color: var(--accent); }
+.page-head { display: grid; gap: var(--space-4); padding-bottom: var(--space-2); }
+.changed { font-size: var(--step--1); color: var(--muted); min-height: 1.5em; }
+.changed b { color: var(--ink); font-weight: 600; }
+
+/* Theme switch: icons, named for screen readers and on hover. */
+.theme-switch button { display: grid; place-items: center; width: 2rem; height: 1.75rem; padding: 0; }
+.theme-switch svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* A pair of specimens: the same moment in the CLI and in Desktop. */
+.pair { display: grid; gap: var(--space-2); }
+.pair .surface-label { font: 500 0.6875rem/1 var(--font-mono); letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+
+/* The specimen: a terminal or the Desktop app, in its own theme whatever the page's. */
+.specimen { display: grid; gap: var(--space-2); }
+.specimen-frame { overflow-x: auto; border-radius: var(--radius); }
+.specimen-hint { font-size: var(--step--1); color: var(--muted); }
+.cli { background: var(--term-bg); color: var(--term-fg); font: 0.9375rem/1.5 var(--font-mono); padding: var(--space-3) var(--space-4); white-space: pre; width: max-content; min-width: 100%; }
+
+.desk { background: var(--desk-bg); color: var(--desk-fg); border: 1px solid var(--desk-line); border-radius: var(--radius); padding: var(--space-2) var(--space-3); width: max-content; min-width: 100%; }
+.svg { display: inline-flex; line-height: 0; }
+.svg svg { display: block; }
+
+.specimen, .specimen-frame, .pair { min-width: 0; }
+
+/* Terms with their meaning, read down one column. */
+.term-list { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: var(--space-3) var(--space-5); margin: 0; }
+.term-list dt { font: 500 var(--step-1)/1.3 var(--font-display); }
+.term-list dd { margin: 0; display: grid; gap: var(--space-1); }
+@media (max-width: 600px) { .term-list { grid-template-columns: minmax(0, 1fr); gap: var(--space-1); } .term-list dd { margin-bottom: var(--space-3); } }
+.side .theme-switch { justify-self: start; }
+
+/* Language switch: two plain links that look like the theme segment, current one pressed. */
+[data-pb-lang] { display: inline-flex; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface-2); padding: 2px; gap: 2px; }
+.side [data-pb-lang] { justify-self: start; }
+.side [data-pb-lang] a { font-size: var(--step--1); color: var(--muted); text-decoration: none; padding: 0.3em 0.8em; border-radius: 4px; }
+.side [data-pb-lang] a:hover { color: var(--ink); }
+.side [data-pb-lang] a[aria-current="page"] { background: var(--surface); color: var(--ink); box-shadow: 0 0 0 1px var(--line); font-weight: 600; }
+
+/* List and detail: moments in order on the left, the chosen one in full on the right. */
+.md { display: grid; gap: var(--space-4); }
+@media (min-width: 640px) { .md { grid-template-columns: 172px minmax(0, 1fr); align-items: start; } }
+.md-list, .md-detail { display: grid; gap: var(--space-3); min-width: 0; }
+.sit-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; border-left: 1px solid var(--line); }
+.sit-item { display: grid; gap: 1px; padding: var(--space-2) var(--space-3); margin-left: -1px; border-left: 2px solid transparent; cursor: pointer; border-radius: 0 4px 4px 0; }
+.sit-item:hover { background: var(--surface-2); }
+.sit-item[aria-selected="true"] { border-left-color: var(--accent); background: var(--accent-soft); }
+.sit-time { font: 500 0.6875rem/1.2 var(--font-mono); color: var(--muted); font-variant-numeric: tabular-nums; }
+.sit-name { display: flex; gap: 0.45em; align-items: baseline; font-size: var(--step--1); line-height: 1.35; }
+.sit-name .dot { flex: none; transform: translateY(-1px); }
+.md-panel { display: grid; gap: var(--space-3); }
+.surface-head { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-3); align-items: center; justify-content: space-between; }
+.desk-fit { overflow: hidden; }
+.desk-fit > .desk { transform-origin: left top; width: max-content; }
+.small-seg button { font-size: 0.75rem; padding: 0.15em 0.6em; }
+/* Specimen trees: the plugin's boxes and runs. */
+.tbox { display: flex; min-width: 0; }
+.cli .tbox, .cli span { white-space: pre; }
+.cli .dim { opacity: 0.62; }
+.desk .dim { opacity: 0.62; }
+.cli .italic, .desk .italic { font-style: italic; }
+.cli .strike, .desk .strike { text-decoration: line-through; }
+.btn { cursor: pointer; }
+.reading { cursor: pointer; border-radius: 3px; }
+.reading[aria-pressed="true"] { outline: 1px solid var(--accent); outline-offset: 1px; }
+.reading:hover { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+/* Wide figures: text keeps the content column; a live row or a chart also takes the empty column on
+   its right, the same on every page of the series. */
+@media (min-width: 1180px) { .wide { margin-right: calc(-1 * (260px + var(--space-6))); } }
+
+/* The glossary drawer: over the page's right side, on demand. */
+.drawer { position: fixed; top: 0; right: 0; bottom: 0; width: min(360px, 100vw); z-index: 30; border-radius: 0; border-width: 0 0 0 1px; box-shadow: -12px 0 32px rgb(0 0 0 / 0.16); overflow-y: auto; padding-block: calc(var(--space-4) + env(safe-area-inset-top, 0px)) var(--space-6); }
+.drawer-head { display: flex; justify-content: space-between; align-items: center; }
+.drawer-close { font: 400 1.5rem/1 var(--font-ui); background: transparent; border: 0; color: var(--muted); cursor: pointer; padding: 0 var(--space-1); }
+.drawer-open { justify-self: start; font: 500 var(--step--1) var(--font-ui); color: var(--accent); background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 0.35em 0.9em; cursor: pointer; }
+.drawer-open[aria-expanded="true"] { border-color: var(--accent); background: var(--accent-soft); }
+
+/* Document components. Each works from its markup alone; the script only adds controls
+   (filter bar, copy buttons, walker, panel tabs), and every one of them is absent without scripts. */
+
+/* Entry card: one symptom, one limit, one term; parts carry their label as data-label. */
+article.entry { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-3); background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: var(--space-4); min-width: 0; }
+article.entry h3 { overflow-wrap: anywhere; }
+article.entry > .part { display: grid; gap: var(--space-1); min-width: 0; }
+.part[data-label]::before, .callout[data-label]::before, .seg-panel[data-label]::before { content: attr(data-label); font: 500 0.6875rem/1.4 var(--font-mono); letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+.part > ul, .part > ol { margin: 0; padding-left: 1.2em; }
+
+/* Filter bar over a list of entries: a search box, tag chips, a live count. */
+.filter-bar { display: grid; gap: var(--space-3); }
+.filter-box { font: inherit; font-size: var(--step--1); color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 0.4em 0.75em; width: 100%; max-width: 24rem; }
+.filter-count { font-size: var(--step--1); color: var(--muted); }
+
+/* Copy button over a block of commands or text. */
+.copy-wrap { position: relative; min-width: 0; }
+.copy-btn { position: absolute; top: var(--space-1); right: var(--space-1); font: 500 0.75rem/1 var(--font-ui); color: var(--term-fg); background: transparent; border: 1px solid var(--term-inactive); border-radius: 4px; padding: 0.35em 0.6em; cursor: pointer; opacity: 0.8; }
+.copy-btn:hover, .copy-btn:focus-visible { opacity: 1; }
+pre[data-lang] { background: var(--term-bg); color: var(--term-fg); border-radius: var(--radius); padding: var(--space-3) var(--space-4); font: 0.875rem/1.55 var(--font-mono); overflow-x: auto; margin: 0; }
+.copy-wrap > .cmd, .copy-wrap > pre, .copy-wrap > .transcript { padding-right: 5rem; }
+
+/* Figure: an inline SVG coloured through the theme tokens, its caption and its text form. */
+figure.diagram { margin: 0; display: grid; gap: var(--space-3); }
+figure.diagram svg { width: 100%; height: auto; }
+figure.diagram figcaption { font-size: var(--step--1); color: var(--muted); }
+figure.diagram .text-form { margin: 0; padding-left: 1.4em; font-size: var(--step--1); color: var(--muted); display: grid; gap: var(--space-1); }
+figure.diagram .node { fill: var(--surface); stroke: var(--line); stroke-width: 1.5; }
+figure.diagram .node.accent { stroke: var(--accent); fill: var(--accent-soft); }
+figure.diagram .edge { fill: none; stroke: var(--muted); stroke-width: 1.5; }
+figure.diagram text { fill: var(--ink); font: 400 13px var(--font-ui); }
+figure.diagram text.muted { fill: var(--muted); }
+
+/* Decision walker: the nested list stays for readers without scripts; with scripts one node at a time. */
+ol.walker, ol.walker ol { padding-left: 1.4em; display: grid; gap: var(--space-2); }
+.walker-view { display: grid; gap: var(--space-3); border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); padding: var(--space-4); }
+.walker-view:focus { outline: none; }
+.walker-text { display: grid; gap: var(--space-2); font-size: var(--step-1); }
+.walker-options, .walker-controls { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.walker-controls button { font: inherit; font-size: var(--step--1); color: var(--accent); background: transparent; border: 0; padding: 0.2em 0; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
+.walker-controls button:disabled { color: var(--muted); cursor: default; text-decoration: none; }
+
+/* Segmented panels: every panel shows without scripts, headed by its label; with scripts one at a time. */
+.seg-panels { display: grid; gap: var(--space-3); }
+.seg-panel { display: grid; gap: var(--space-2); min-width: 0; }
+.seg-panels.is-tabbed > .seg-panel::before { display: none; }
+.seg-panels > .seg { justify-self: start; }
+
+/* A decision walker's outcome takes the colour of its exit: start, wait or stop. */
+.walker-view[data-outcome] { border-left: 4px solid var(--outcome, var(--line)); }
+.walker-view[data-outcome="start"] { --outcome: var(--on); }
+.walker-view[data-outcome="wait"] { --outcome: var(--watch); }
+.walker-view[data-outcome="stop"] { --outcome: var(--act); }
+
+/* Count bar: one link per group, as wide as the group has entries. */
+.count-bar { display: flex; flex-wrap: wrap; gap: 2px; }
+.count-seg { flex-basis: 6rem; min-width: 0; display: grid; gap: 1px; padding: var(--space-2) var(--space-3); background: var(--accent-soft); border-bottom: 3px solid var(--accent); border-radius: 4px 4px 0 0; color: var(--ink); text-decoration: none; font-size: var(--step--1); line-height: 1.3; }
+.count-seg:hover { background: var(--surface-2); }
+.count-n { font: 600 var(--step-1)/1.1 var(--font-display); font-variant-numeric: tabular-nums; }
+.count-name { overflow-wrap: anywhere; }
+
+/* Level scale: a track per reading, zones calm, watch and act, the values where it changes marked under it. */
+.scale-list { display: grid; gap: var(--space-3); }
+.scale-row { display: grid; gap: var(--space-2); }
+@media (min-width: 720px) { .scale-row { grid-template-columns: 200px minmax(0, 1fr); align-items: center; } }
+.scale-name { font-size: var(--step--1); }
+.scale-track { position: relative; height: 34px; margin-right: 1.5rem; }
+.scale-zone { position: absolute; top: 0; height: 12px; }
+.scale-zone.calm { background: color-mix(in srgb, var(--calm) 35%, transparent); border-radius: 3px 0 0 3px; }
+.scale-zone.watch { background: var(--watch); }
+.scale-zone.act { background: var(--act); border-radius: 0 3px 3px 0; }
+.scale-mark { position: absolute; top: 14px; transform: translateX(-50%); font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.scale-mark::before { content: ""; position: absolute; left: 50%; top: -14px; height: 14px; border-left: 1px solid var(--ink); }
+.scale-legend { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-4); font-size: var(--step--1); color: var(--muted); }
+.scale-legend li { display: flex; align-items: center; gap: var(--space-2); }
+
+.sim { display: grid; gap: var(--space-4); }
+@media (min-width: 900px) { .sim { grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr); align-items: start; } }
+.sim > * { min-width: 0; }
+.h-small { font-size: var(--step-1); }
+.small { font-size: var(--step--1); }
+.stack-sm { display: grid; gap: var(--space-2); }
+
+.big { display: grid; gap: var(--space-1); }
+.big-number { font: 700 3.25rem/1 var(--font-ui); font-variant-numeric: tabular-nums; letter-spacing: -0.02em; display: flex; align-items: baseline; gap: var(--space-2); }
+.big-number .unit { font-size: var(--step-1); font-weight: 500; color: var(--muted); }
+.kv-out { font-size: var(--step-0); }
+
+.decision { display: grid; gap: var(--space-2); }
+.decision-pill { justify-self: start; font-weight: 650; padding: 0.3em 0.9em; border-radius: 999px; border: 1px solid var(--line); background: var(--surface-2); }
+.decision-pill.go { color: var(--on); border-color: var(--on); background: color-mix(in srgb, var(--on) 14%, transparent); }
+.decision-pill.watch { color: var(--watch); border-color: var(--watch); background: var(--watch-soft); }
+.decision-pill.act { color: var(--act); border-color: var(--act); background: var(--act-soft); }
+.hard { color: var(--act); font-weight: 600; }
+.transcript { white-space: pre-wrap; word-break: break-word; }
+
+.week-chart { margin: 0; }
+.chart { width: 100%; height: auto; display: block; }
+.chart .grid { stroke: var(--line); }
+.chart .axis { fill: var(--muted); font: 11px var(--font-ui); }
+.chart .axis.planned { fill: var(--accent); font-weight: 700; }
+.chart .val { fill: var(--ink); font: 600 11px var(--font-ui); }
+.chart .bar-day { fill: var(--accent); opacity: 0.75; }
+.chart .bar-day.today { opacity: 1; }
+.chart .bar-night { fill: var(--muted); opacity: 0.45; }
+.legend { display: flex; flex-wrap: wrap; gap: var(--space-4); font-size: var(--step--1); color: var(--muted); padding-top: var(--space-2); }
+.legend .key::before { content: ""; display: inline-block; width: 12px; height: 12px; border-radius: 2px; vertical-align: -1px; margin-right: 6px; background: var(--accent); }
+.legend .key.night::before { background: var(--muted); opacity: 0.45; }
+
+.sit-card { display: grid; gap: var(--space-3); align-content: start; }
+.sit-card .chip { justify-self: start; }
+.sit-figure { display: flex; gap: var(--space-3); align-items: baseline; flex-wrap: wrap; }
+.sit-budget { font: 700 var(--step-2)/1 var(--font-ui); font-variant-numeric: tabular-nums; }
+#situation-cards { grid-template-columns: repeat(auto-fit, minmax(min(100%, 190px), 1fr)); }
+</style>
+</head>
+<body>
+<div class="doc no-glossary">
+  <aside class="side">
+    <div class="brand"><span class="mono" translate="no">PaceLine</span><nav class="series" aria-label="сторінки цієї серії"><a href="getting-started.html">Початок роботи</a><a href="budget-simulator.html" aria-current="page">Симулятор бюджету</a><a href="how-to.html">Практичні інструкції</a><a href="explanation.html">Пояснення</a><a href="reference.html">Довідник</a><a href="troubleshooting.html">Усунення проблем</a><a href="limitations.html">Обмеження</a></nav></div>
+    <nav data-pb-nav aria-label="Розділи"><ol><li><a href="#simulator">Симулятор</a></li><li><a href="#week">Тиждень</a></li><li><a href="#situations">Ситуації</a></li><li><a href="#details">Подробиці</a></li></ol></nav>
+    <nav data-pb-lang aria-label="Мова"><a href="../budget-simulator.html" hreflang="en" lang="en">En</a><a href="budget-simulator.html" hreflang="uk" lang="uk" aria-current="page">Uk</a></nav>
+    <div data-pb-theme></div>
+  </aside>
+
+  <main class="stack-lg">
+    <header class="page-head">
+      <h1>Симулятор бюджету PaceLine</h1>
+      <p class="lede">pace не має власного вікна. Він перетворює ліміти на бюджет на годину і повідомляє його одним рядком перед кожним запуском Agent і Workflow. Змінювати вхідні дані й дивитися, як змінюється цей рядок.</p>
+      <p class="tldr"><strong>Коротко</strong>pace розподіляє залишок тижневого ліміту між денними годинами до скидання; частка поточної години і є бюджетом. Що нижчий бюджет відносно норми для такого типу години, то менше агентів він радить, а нижче 70% норми переходить на дешевшу модель. На жорсткому ліміті він питає перед запуском.</p>
+    </header>
+
+    <section id="simulator" class="stack" aria-labelledby="h-sim" data-nav="Симулятор">
+      <div class="section-head">
+        <span class="eyebrow">Симулятор</span>
+        <h2 id="h-sim">Що скаже pace: наперед</h2>
+      </div>
+
+      <div class="sim wide">
+        <form class="panel sim-inputs stack" id="inputs" aria-labelledby="h-inputs">
+          <h2 class="h-small" id="h-inputs">Ситуація</h2>
+          <div class="slider">
+            <label for="in-week" class="readout"><span>Використано тижневого ліміту</span><b id="out-in-week"></b></label>
+            <input type="range" id="in-week" min="0" max="100" step="1" value="42">
+          </div>
+          <div class="slider">
+            <label for="in-reset" class="readout"><span>Тижневе скидання через</span><b id="out-in-reset"></b></label>
+            <input type="range" id="in-reset" min="1" max="167" step="1" value="98">
+          </div>
+          <div class="slider">
+            <label for="in-five" class="readout"><span>Використано п&#x27;ятигодинного вікна</span><b id="out-in-five"></b></label>
+            <input type="range" id="in-five" min="0" max="100" step="1" value="23">
+          </div>
+          <div class="slider">
+            <label for="in-clock" class="readout"><span>Зараз (день тижня, у часовому поясі профілю)</span><b id="out-in-clock"></b></label>
+            <input type="range" id="in-clock" min="0" max="167" step="1" value="58">
+          </div>
+          <div class="control">
+            <span class="label" id="l-plan">Оголошений план на завтра</span>
+            <div class="chips" data-choice id="in-plan" role="group" aria-labelledby="l-plan">
+              <button type="button" class="chip" data-value="none" aria-pressed="true">Немає</button>
+              <button type="button" class="chip" data-value="away">Відсутність</button>
+              <button type="button" class="chip" data-value="heavy">Напружений день</button>
+            </div>
+          </div>
+          <p class="muted small">Типові значення профілю, рахунок в UTC: день з 08:00 до 22:00, ніч з 00:00 до 08:00, п&#x27;ятигодинний поріг 80% удень і 95% уночі, 8% у резерві.</p>
+        </form>
+
+        <div class="panel sim-outputs stack" aria-live="polite">
+          <div class="big">
+            <span class="eyebrow">Бюджет на цю годину</span>
+            <div class="big-number"><span id="out-budget"></span><span class="unit" translate="no">%/h</span></div>
+            <p class="muted" id="out-budget-note"></p>
+            <p class="changed" id="out-changed" aria-live="polite"></p>
+          </div>
+          <dl class="kv kv-out" id="out-kv"></dl>
+          <div class="decision" id="out-decision"></div>
+          <div class="stack-sm">
+            <span class="eyebrow">Що бачить агент перед запуском</span>
+            <div class="transcript" id="out-line"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="week" aria-labelledby="h-week" data-nav="Тиждень">
+      <div class="section-head">
+        <span class="eyebrow">Тиждень</span>
+        <h2 id="h-week">Куди йде решта тижневого бюджету</h2>
+        <p class="muted">Залишок розподіляється між денними годинами, що лишилися, з вагами профілю; ночі отримують нічну квоту. Оголошений план переносить бюджет між днями.</p>
+      </div>
+      <div class="panel wide">
+        <figure class="week-chart" id="week-chart" aria-label="Денний бюджет на кожен день, що лишився"></figure>
+      </div>
+    </section>
+
+    <section id="situations" aria-labelledby="h-situations" data-nav="Ситуації">
+      <div class="section-head">
+        <span class="eyebrow">Ситуації</span>
+        <h2 id="h-situations">Типові моменти, одним клацанням</h2>
+      </div>
+      <div class="grid-auto" id="situation-cards"></div>
+    </section>
+
+    <section id="details" aria-labelledby="h-details" data-nav="Подробиці">
+      <div class="section-head">
+        <span class="eyebrow">Подробиці</span>
+        <h2 id="h-details">Як це обчислюється і чого тут немає</h2>
+      </div>
+      <div>
+        <details class="more"><summary>Як обчислюється бюджет на годину</summary><div class="body"><p>Залишок тижня за вирахуванням резерву розподіляється між денними годинами, що лишилися, за вагами; кожна година обмежена тим, що вміщує п&#x27;ятигодинне вікно. Частка поточної години і є бюджетом.</p></div></details>
+        <details class="more"><summary>Чого не враховує цей симулятор</summary><div class="body"><p>Історія використання (прогноз і калібрування), активні резервування, перевірки пам&#x27;яті машини та ліміти окремих моделей. <code>paceline status</code> на машині враховує їх.</p></div></details>
+        <details class="more"><summary>Як вирішує нічна черга</summary><div class="body"><p>Перед кожним елементом <code>paceline auto</code> повертає start, wait або stop з кодом виходу (0, 10, 11); черга виконує це рішення, не ухвалюючи його знову.</p></div></details>
+      </div>
+    </section>
+    <footer class="page-foot">
+        <span>PaceLine перетворює використання на бюджет; ця сторінка показує ті самі правила на зразкових числах.</span>
+        <a href="getting-started.html">Початок роботи з PaceLine</a>
+      </footer>
+  </main>
+
+
+</div>
+<script type="application/json" id="pb-strings">{"changed_line":"{input}: бюджет {b0} → {b1} %/h, агенти ≤{a0} → ≤{a1}, модель {m0} → {m1}.","changed_none":"Змінити будь-яке вхідне значення, щоб побачити, на що воно впливає.","days_short":"Пн,Вт,Ср,Чт,Пт,Сб,Нд","decision_day":"День: нічна черга не працює","decision_start":"Нічна черга: start","decision_stop":"Нічна черга: stop","decision_wait":"Нічна черга: wait","details_eyebrow":"Подробиці","details_left_out":"Чого не враховує цей симулятор","details_left_out_body":"Історія використання (прогноз і калібрування), активні резервування, перевірки пам'яті машини та ліміти окремих моделей. `paceline status` на машині враховує їх.","details_queue":"Як вирішує нічна черга","details_queue_body":"Перед кожним елементом `paceline auto` повертає start, wait або stop з кодом виходу (0, 10, 11); черга виконує це рішення, не ухвалюючи його знову.","details_rule":"Як обчислюється бюджет на годину","details_rule_body":"Залишок тижня за вирахуванням резерву розподіляється між денними годинами, що лишилися, за вагами; кожна година обмежена тим, що вміщує п'ятигодинне вікно. Частка поточної години і є бюджетом.","details_title":"Як це обчислюється і чого тут немає","fmt_clock":"{day} {hh}:00","fmt_in":"{d} д {h} год","foot_getting_started":"Початок роботи з PaceLine","foot_source":"PaceLine перетворює використання на бюджет; ця сторінка показує ті самі правила на зразкових числах.","hard_limit":"Жорсткий ліміт: запуск зараз попросить підтвердження.","in_clock":"Зараз (день тижня, у часовому поясі профілю)","in_five":"Використано п'ятигодинного вікна","in_plan":"Оголошений план на завтра","in_profile_note":"Типові значення профілю, рахунок в UTC: день з 08:00 до 22:00, ніч з 00:00 до 08:00, п'ятигодинний поріг 80% удень і 95% уночі, 8% у резерві.","in_reset":"Тижневе скидання через","in_week":"Використано тижневого ліміту","inputs_title":"Ситуація","label_clock":"Зараз","label_five":"Використано п'ятигодинного вікна","label_plan":"План на завтра","label_reset":"Тижневе скидання через","label_week":"Використано тижневого ліміту","lang_en":"En","lang_label":"Мова","lang_uk":"Uk","legend_day":"Денний бюджет","legend_night_note":"Ночі: квота нічної черги, {night}% цієї ночі.","nav_label":"Симулятор бюджету","out_agents":"Паралельні агенти","out_budget":"Бюджет на цю годину","out_budget_day":"Відсоток тижня, який pace може витратити за цю годину, щоб тижня вистачило до скидання.","out_budget_night":"Уночі це бюджет наступної денної години; нічна черга витрачає власну квоту.","out_budget_off":"Поза денними годинами: це бюджет наступної денної години.","out_line":"Що бачить агент перед запуском","out_model":"Модель","out_night":"Нічна квота","out_threshold":"П'ятигодинний поріг","plan_away":"Відсутність","plan_heavy":"Напружений день","plan_none":"Немає","series_label":"сторінки цієї серії","sim_eyebrow":"Симулятор","sim_lede":"pace не має власного вікна. Він перетворює ліміти на бюджет на годину і повідомляє його одним рядком перед кожним запуском Agent і Workflow. Змінювати вхідні дані й дивитися, як змінюється цей рядок.","sim_title":"Що скаже pace: наперед","sit_ahead":"Тиждень витрачено наперед","sit_ahead_story":"Більшу частину тижня витрачено, а днів ще кілька: бюджет зменшується, модель стає дешевшою.","sit_apply":"Завантажити цю ситуацію","sit_away":"Оголошено вихідний","sit_away_story":"Завтра оголошено днем відсутності, тож його бюджет переходить на інші дні.","sit_fresh":"Новий тиждень","sit_fresh_story":"Використано мало, до скидання далеко: бюджет біля норми, і pace радить звичну кількість агентів.","sit_morning":"Напружений ранок","sit_morning_story":"П'ятигодинне вікно заповнилося рано. pace радить відкласти субагентів до його скидання.","sit_night":"Ніч із залишком бюджету","sit_night_story":"Нічні години з невитраченою квотою: нічна черга може почати наступний елемент.","situations_eyebrow":"Ситуації","situations_title":"Типові моменти, одним клацанням","theme_dark":"Темна","theme_label":"Тема сторінки","theme_light":"Світла","theme_system":"Системна","title":"Симулятор бюджету PaceLine","tldr_body":"pace розподіляє залишок тижневого ліміту між денними годинами до скидання; частка поточної години і є бюджетом. Що нижчий бюджет відносно норми для такого типу години, то менше агентів він радить, а нижче 70% норми переходить на дешевшу модель. На жорсткому ліміті він питає перед запуском.","tldr_label":"Коротко","toc_details":"Подробиці","toc_label":"Розділи","toc_simulator":"Симулятор","toc_situations":"Ситуації","toc_week":"Тиждень","week_chart_label":"Денний бюджет на кожен день, що лишився","week_eyebrow":"Тиждень","week_lede":"Залишок розподіляється між денними годинами, що лишилися, з вагами профілю; ночі отримують нічну квоту. Оголошений план переносить бюджет між днями.","week_title":"Куди йде решта тижневого бюджету","why_day":"Черга працює лише вночі. Удень pace радить і питає перед запуском на жорсткому ліміті."}</script>
+<script type="application/json" id="pb-glossary">{"budget":{"name":"Бюджет на годину","short":"Відсоток тижня, який pace може витратити за поточну денну годину, а вночі за наступну, щоб тижня вистачило до скидання; денні години будніх і вихідних днів зважуються за профілем."},"forecast":{"name":"Прогноз невикористаного","short":"Відсоток тижня, який за останнього темпу, імовірно, лишиться невитраченим на момент скидання."},"night":{"name":"Нічна квота","short":"Відсоток тижня, який нічна черга може витратити цієї ночі."},"plan":{"name":"План","short":"Оголошена зміна для дня: away (день не отримує бюджету) або heavy (його години важать більше, типово вдвічі). План перерозподіляє бюджет між днями, що лишилися."},"reservation":{"name":"Резервування","short":"Частка тижневого ліміту, утримана для субагента, gate або елемента черги, що виконується. Нічна черга враховує її перед стартом наступного елемента; удень рядок запуску показує, скільки резервувань активні."},"threshold":{"name":"П'ятигодинний поріг","short":"Використання п'ятигодинного вікна, вище якого pace не радить фонову роботу: нижчий удень, вищий уночі."}}</script>
+<script type="application/json" id="pb-facts">{"commands":[{"command":"paceline on","help":"turn the pace hooks on"},{"command":"paceline off","help":"turn the pace hooks off (every command still runs)"},{"command":"paceline status","help":"interactive one-line recommendation"},{"command":"paceline auto","help":"autonomous parameters for the next queue item"},{"command":"paceline calibrate","help":"propose parameter corrections from history"},{"command":"paceline profile","help":"print, change or check the profile (creates it with the detected time zone)"},{"command":"paceline profile show","help":"print the profile (the default)"},{"command":"paceline profile set","help":"change one key, with checks"},{"command":"paceline profile check","help":"the time zone against this machine's, with a hint"},{"command":"paceline doctor","help":"diagnose pace on this machine; read-only without --live"},{"command":"paceline merge","help":"merge the sessions' readings from the inbox into rate-limits.json"},{"command":"paceline plan","help":"declared future plan changes"},{"command":"paceline plan add","help":""},{"command":"paceline plan list","help":""},{"command":"paceline plan find","help":""},{"command":"paceline plan modify","help":""},{"command":"paceline plan cancel","help":""},{"command":"paceline plan confirm","help":""},{"command":"paceline plan tomorrow","help":""},{"command":"paceline reserve","help":"reservation registry"},{"command":"paceline reserve acquire","help":""},{"command":"paceline reserve renew","help":""},{"command":"paceline reserve release","help":""},{"command":"paceline reserve release-session","help":""},{"command":"paceline reserve prune","help":""},{"command":"paceline reserve list","help":""},{"command":"paceline reserve reconcile","help":""},{"command":"paceline queue","help":"night queue and leftover pool (--pool)"},{"command":"paceline queue add","help":""},{"command":"paceline queue list","help":""},{"command":"paceline queue report","help":""},{"command":"paceline queue approve","help":""},{"command":"paceline queue clear-done","help":""},{"command":"paceline queue start","help":""},{"command":"paceline queue done","help":""},{"command":"paceline queue defer","help":""},{"command":"paceline queue fail","help":""},{"command":"paceline queue retry","help":""},{"command":"paceline queue remove","help":""},{"command":"paceline cache-watch","help":"keep an idle session's one-hour prompt cache alive: on|off|status|config"},{"command":"paceline context-watch","help":"context against the auto-compaction point: config|status"},{"command":"paceline usage-watch","help":"read the account's exact usage through Claude Code: on|off|status"}],"env":["ANTHROPIC_MODEL","CLAUDE_CONFIG_DIR","CLAUDE_PLUGIN_DATA","CLAUDE_PROJECT_DIR","CLAUDE_SESSION_ID","HOME","PACELINE_DEBUG","PACELINE_FREE_COMMIT_MB","PACELINE_MODEL","PACELINE_NOW","PACELINE_NO_MERGE","PACELINE_SCRIPT","PACELINE_STATE_DIR","PACELINE_USAGE_FILE","USERPROFILE"],"exit_codes":{"EXIT_ERROR":1,"EXIT_NONE":4,"EXIT_OK":0,"EXIT_SEVERAL":3,"EXIT_STOP":11,"EXIT_USAGE":2,"EXIT_WAIT":10},"profile":[{"default":240,"internal":false,"key":"agent_lease_ttl_min"},{"default":125,"internal":false,"key":"auto_refresh_cache_sec"},{"default":85.0,"internal":false,"key":"auto_refresh_five_hour_pct"},{"default":14,"internal":false,"key":"calibration_min_days"},{"default":0.9,"internal":false,"key":"capacity_warn_ratio"},{"default":2048,"internal":false,"key":"commit_reserve_mb"},{"default":[8,22],"internal":false,"key":"day_hours"},{"default":95.0,"internal":false,"key":"five_hour_hard_stop"},{"default":80.0,"internal":false,"key":"five_hour_threshold_day"},{"default":95.0,"internal":false,"key":"five_hour_threshold_night"},{"default":10.0,"internal":false,"key":"five_hour_to_week_pct"},{"default":3,"internal":false,"key":"gate_fix_attempts"},{"default":6000,"internal":false,"key":"heavy_job_mb"},{"default":2.0,"internal":false,"key":"heavy_weight"},{"default":null,"internal":false,"key":"host_night_capacity_pct"},{"default":30,"internal":false,"key":"lease_ttl_min"},{"default":10.0,"internal":false,"key":"leftover_suggest_pct"},{"default":6,"internal":false,"key":"max_agents"},{"default":3,"internal":false,"key":"max_heavy_runs"},{"default":2048,"internal":false,"key":"min_free_commit_mb"},{"default":["opus","sonnet","haiku"],"internal":false,"key":"models"},{"default":1,"internal":true,"key":"next_plan_id"},{"default":5.0,"internal":false,"key":"night_base_pct"},{"default":[0,8],"internal":false,"key":"night_hours"},{"default":[],"internal":true,"key":"plans"},{"default":{"hour":18,"weekday":4},"internal":false,"key":"reserve_decay_start"},{"default":8.0,"internal":false,"key":"reserve_pct"},{"default":["sonnet","haiku"],"internal":false,"key":"routine_models"},{"default":95.0,"internal":false,"key":"scoped_exhausted_pct"},{"default":30,"internal":false,"key":"stale_threshold_min"},{"default":1.0,"internal":false,"key":"subagent_estimate_pct"},{"default":85.0,"internal":false,"key":"throttle_weekly_pct"},{"default":"UTC","internal":false,"key":"timezone"},{"default":false,"internal":true,"key":"timezone_confirmed"},{"default":300,"internal":false,"key":"usage_snapshot_max_age_sec"},{"default":1,"internal":true,"key":"version"},{"default":1.0,"internal":false,"key":"weekday_weight"},{"default":20.0,"internal":false,"key":"weekend_cap_pct"},{"default":1.0,"internal":false,"key":"weekend_weight"}]}</script>
+<script type="application/json" id="pb-data">{}</script>
+<script>
+const __m = {}
+// Shared page behaviour: strings, glossary popovers, segmented switches, chips and the theme switch.
+// Pages read their data from the JSON script elements the build writes and call PB.* helpers.
+const PB = (() => {
+  const json = id => {
+    const el = document.getElementById(id)
+    return el ? JSON.parse(el.textContent) : {}
+  }
+  const strings = json('pb-strings')
+  const glossary = json('pb-glossary')
+  const facts = json('pb-facts')
+  const data = json('pb-data')
+
+  const t = (key, vars = {}) => {
+    const s = strings[key]
+    if (s === undefined) return `{{${key}}}`
+    return s.replace(/\{(\w+)\}/g, (_, k) => (vars[k] === undefined ? `{${k}}` : String(vars[k])))
+  }
+
+  const el = (tag, attrs = {}, ...children) => {
+    const node = document.createElement(tag)
+    for (const [k, v] of Object.entries(attrs)) {
+      if (v === null || v === undefined || v === false) continue
+      if (k === 'class') node.className = v
+      else if (k === 'text') node.textContent = v
+      else if (k === 'html') node.innerHTML = v
+      else if (k.startsWith('on')) node.addEventListener(k.slice(2), v)
+      else node.setAttribute(k, v === true ? '' : v)
+    }
+    for (const c of children.flat()) if (c !== null && c !== undefined && c !== false) node.append(c instanceof Node ? c : document.createTextNode(String(c)))
+    return node
+  }
+
+  // Text with backtick spans as nodes: code spans become <code>, the rest stays text, never markup.
+  // An unbalanced backtick leaves the whole string as text.
+  const rich = text => {
+    const s = text === undefined || text === null ? '' : String(text)
+    if (s === '') return []
+    const parts = s.split('`')
+    if (parts.length % 2 === 0) return [document.createTextNode(s)]
+    return parts.flatMap((part, i) => {
+      if (part === '') return []
+      return [i % 2 ? el('code', { text: part }) : document.createTextNode(part)]
+    })
+  }
+
+  const store = {
+    get(key) { try { return localStorage.getItem(`pb:${key}`) } catch { return null } },
+    set(key, value) { try { localStorage.setItem(`pb:${key}`, value) } catch { /* storage blocked */ } },
+  }
+
+  // Theme: system (no attribute), light or dark, remembered per viewer; an icon switch.
+  const ICONS = {
+    system: '<rect x="2.5" y="3.5" width="11" height="8" rx="1"/><path d="M6 14h4M8 11.5V14"/>',
+    light: '<circle cx="8" cy="8" r="3"/><path d="M8 1.5v1.5M8 13v1.5M1.5 8H3M13 8h1.5M3.4 3.4l1 1M11.6 11.6l1 1M3.4 12.6l1-1M11.6 4.4l1-1"/>',
+    dark: '<path d="M13 9.5A5.5 5.5 0 0 1 6.5 3a5.5 5.5 0 1 0 6.5 6.5z"/>',
+  }
+  function initTheme() {
+    const apply = v => {
+      if (v === 'light' || v === 'dark') document.documentElement.setAttribute('data-theme', v)
+      else document.documentElement.removeAttribute('data-theme')
+    }
+    apply(store.get('theme'))
+    for (const seg of document.querySelectorAll('[data-pb-theme]')) {
+      seg.classList.add('seg', 'theme-switch')
+      seg.setAttribute('role', 'group')
+      seg.setAttribute('aria-label', t('theme_label'))
+      // innerHTML parses the icon in the SVG namespace; createElement('svg') would not.
+      seg.replaceChildren(...['system', 'light', 'dark'].map(v => {
+        const b = el('button', { type: 'button', 'data-value': v, title: t(`theme_${v}`), html: `<svg viewBox="0 0 16 16" aria-hidden="true">${ICONS[v]}</svg>` })
+        b.append(el('span', { class: 'visually-hidden', text: t(`theme_${v}`) }))
+        return b
+      }))
+      seg.addEventListener('pb:change', e => { apply(e.detail); store.set('theme', e.detail); document.dispatchEvent(new CustomEvent('pb:theme')) })
+      setSeg(seg, store.get('theme') || 'system', false)
+    }
+  }
+
+  // Segmented switches and chip groups: one pressed button; a 'pb:change' event with its value.
+  function setSeg(group, value, notify = true) {
+    for (const b of group.querySelectorAll('button[data-value]')) b.setAttribute('aria-pressed', String(b.dataset.value === value))
+    group.dataset.current = value
+    if (notify) group.dispatchEvent(new CustomEvent('pb:change', { detail: value }))
+  }
+  function initSegs(root = document) {
+    for (const group of root.querySelectorAll('.seg, .chips[data-choice]')) {
+      if (group.dataset.bound) continue
+      group.dataset.bound = '1'
+      group.addEventListener('click', e => {
+        const b = e.target.closest('button[data-value]')
+        if (b && group.contains(b)) setSeg(group, b.dataset.value)
+      })
+      const pressed = group.querySelector('button[aria-pressed="true"]') || group.querySelector('button[data-value]')
+      if (pressed) setSeg(group, pressed.dataset.value, false)
+    }
+  }
+
+  // Glossary popovers: any element with data-term; hover and focus show it, a tap toggles it.
+  let pop = null
+  let owner = null
+  function hide() {
+    if (pop) pop.remove()
+    for (const hot of document.querySelectorAll('.glossary .is-hot')) hot.classList.remove('is-hot')
+    pop = null
+    owner = null
+  }
+  // With the glossary drawer open a term lights its entry there; otherwise it opens a popover.
+  function sideEntry(key) {
+    const entry = document.querySelector(`.glossary [data-entry="${CSS.escape(key)}"]`)
+    if (!entry) return null
+    return entry.closest('.glossary').hidden ? null : entry
+  }
+  function show(target) {
+    const key = target.dataset.term
+    const entry = glossary[key]
+    if (!entry) return
+    hide()
+    owner = target
+    const side = sideEntry(key)
+    if (side) {
+      side.classList.add('is-hot')
+      side.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+      return
+    }
+    pop = el('div', { class: 'popover', role: 'tooltip' }, el('strong', { text: entry.name || key }), el('span', {}, rich(entry.short || entry)))
+    document.body.append(pop)
+    const r = target.getBoundingClientRect()
+    const w = pop.offsetWidth
+    const left = Math.max(16, Math.min(window.scrollX + r.left, window.scrollX + document.documentElement.clientWidth - w - 16))
+    pop.style.left = `${left}px`
+    pop.style.top = `${window.scrollY + r.bottom + 6}px`
+  }
+  function initTerms() {
+    document.addEventListener('mouseover', e => { const x = e.target.closest('[data-term]'); if (x && x !== owner) show(x) })
+    document.addEventListener('mouseout', e => { const x = e.target.closest('[data-term]'); if (x && !x.contains(e.relatedTarget)) hide() })
+    document.addEventListener('focusin', e => { const x = e.target.closest('[data-term]'); if (x) show(x) })
+    document.addEventListener('focusout', e => { if (e.target.closest('[data-term]')) hide() })
+    document.addEventListener('click', e => {
+      const x = e.target.closest('[data-term]')
+      if (x) { if (owner === x) hide(); else show(x) } else if (!e.target.closest('.popover')) hide()
+    })
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') hide() })
+  }
+
+  function term(key, label) {
+    return el('span', { class: 'term', 'data-term': key, tabindex: '0', text: label ?? key })
+  }
+
+  // Section navigation with the current section marked. The build writes the list into the
+  // markup; a page built without one gets it here from its own section headings.
+  function initNav() {
+    const nav = document.querySelector('[data-pb-nav]')
+    if (!nav) return
+    if (!nav.querySelector('a')) {
+      const found = [...document.querySelectorAll('main section[id]')].filter(s => s.querySelector('h1, h2'))
+      const made = found.map(s => el('a', { href: `#${s.id}`, text: s.dataset.nav || s.querySelector('h1, h2').textContent }))
+      nav.replaceChildren(el('ol', {}, made.map(a => el('li', {}, a))))
+    }
+    const links = [...nav.querySelectorAll('a[href^="#"]')]
+    const sections = links.map(a => document.getElementById(a.getAttribute('href').slice(1))).filter(Boolean)
+    const mark = id => { for (const a of links) a.setAttribute('aria-current', String(a.getAttribute('href') === `#${id}`)) }
+    // A click names its target at once, and the scroll it starts (smooth, and often stopped short by the
+    // page end) must not move the mark until it has settled.
+    let locked = false
+    let settle = 0
+    const hold = () => { locked = true; clearTimeout(settle); settle = setTimeout(() => { locked = false }, 200) }
+    nav.addEventListener('click', e => {
+      const a = e.target.closest('a[href^="#"]')
+      if (a && nav.contains(a)) { mark(a.getAttribute('href').slice(1)); hold() }
+    })
+    // The last heading cannot reach the top of a page that ends first, so the page end marks it.
+    const last = sections[sections.length - 1]
+    const atEnd = () => window.scrollY + window.innerHeight >= document.documentElement.scrollHeight - 2
+    window.addEventListener('scroll', () => {
+      if (locked) { hold(); return }
+      if (last && atEnd()) mark(last.id)
+    }, { passive: true })
+    if (!('IntersectionObserver' in window)) return
+    const seen = new IntersectionObserver(entries => {
+      if (locked || (last && atEnd())) return
+      for (const e of entries) if (e.isIntersecting) mark(e.target.id)
+    }, { rootMargin: '-10% 0px -70% 0px' })
+    for (const s of sections) seen.observe(s)
+  }
+
+  // Filter bar (data-pb-filter="<selector of the items>"): items carry data-tags (single words); the bar shows a
+  // search box, one chip per tag and a live count. Its texts come from the bar's own attributes: data-label (search
+  // box), data-all (the chip for every item), data-count ("{shown} of {total}"). A tag's chip reads as the text of the
+  // bar's own [data-tag="<tag>"] element when it holds one (the markup a reader without scripts sees as a list of
+  // the groups), else as the tag. data-group="<selector>" also hides the group that holds no visible item.
+  function initFilters() {
+    for (const bar of document.querySelectorAll('[data-pb-filter]')) {
+      const items = [...document.querySelectorAll(bar.dataset.pbFilter)]
+      if (!items.length) continue
+      const names = new Map([...bar.querySelectorAll('[data-tag]')].map(x => [x.dataset.tag, x.textContent.trim()]))
+      const tagsOf = item => (item.dataset.tags || '').split(/\s+/).filter(Boolean)
+      const found = new Set(items.flatMap(tagsOf))
+      const tags = [...names.keys()].filter(x => found.has(x)).concat([...found].filter(x => !names.has(x)))
+      const box = el('input', { type: 'search', class: 'filter-box', 'aria-label': bar.dataset.label || '', placeholder: bar.dataset.label || '' })
+      const chips = el('div', { class: 'chips', 'data-choice': '', role: 'group' },
+        [['', bar.dataset.all || ''], ...tags.map(x => [x, names.get(x) || x])].map(([v, label]) => el('button', { type: 'button', class: 'chip', 'data-value': v, text: label })))
+      const count = el('p', { class: 'filter-count', 'aria-live': 'polite' })
+      bar.classList.add('filter-bar')
+      bar.replaceChildren(...[box, tags.length ? chips : null, count].filter(Boolean))
+      const groups = bar.dataset.group ? [...new Set(items.map(item => item.closest(bar.dataset.group)).filter(Boolean))] : []
+      const apply = () => {
+        const query = box.value.trim().toLowerCase()
+        const tag = chips.dataset.current || ''
+        let shown = 0
+        for (const item of items) {
+          const ok = (!tag || tagsOf(item).includes(tag)) && (!query || item.textContent.toLowerCase().includes(query))
+          item.hidden = !ok
+          if (ok) shown++
+        }
+        for (const g of groups) g.hidden = items.every(item => !g.contains(item) || item.hidden)
+        count.textContent = (bar.dataset.count || '').replace('{shown}', shown).replace('{total}', items.length)
+      }
+      initSegs(bar)
+      box.addEventListener('input', apply)
+      chips.addEventListener('pb:change', apply)
+      // A link to an entry or group the filter hides clears the filter, so the target can be shown. A link to the
+      // hash already in the address bar fires no hashchange, so a click covers it.
+      const reveal = hash => {
+        const target = hash.length > 1 ? document.getElementById(decodeURIComponent(hash.slice(1))) : null
+        if (!target || !target.closest('[hidden]') || ![...items, ...groups].some(x => x.contains(target))) return
+        box.value = ''
+        setSeg(chips, '')
+        target.scrollIntoView()
+      }
+      window.addEventListener('hashchange', () => reveal(location.hash))
+      document.addEventListener('click', e => {
+        const a = e.target.closest && e.target.closest('a[href^="#"]')
+        if (a && a.hash === location.hash) reveal(a.hash)
+      })
+      apply()
+    }
+  }
+
+  // Count bar (data-pb-counts="<selector of the items>"): one segment per group (the nearest section) in
+  // proportion to its items, each a link to the group with its heading and count.
+  function initCounts() {
+    for (const bar of document.querySelectorAll('[data-pb-counts]')) {
+      const groups = new Map()
+      for (const item of document.querySelectorAll(bar.dataset.pbCounts)) {
+        const g = item.closest('section[id]')
+        if (g) groups.set(g, (groups.get(g) || 0) + 1)
+      }
+      bar.classList.add('count-bar')
+      bar.replaceChildren(...[...groups].map(([g, n]) => el('a', { class: 'count-seg', href: `#${g.id}`, 'aria-label': `${g.querySelector('h2').textContent}: ${n}`, style: `flex-grow: ${n}` },
+        el('span', { class: 'count-n', text: String(n) }), el('span', { class: 'count-name', text: g.querySelector('h2').textContent }))))
+    }
+  }
+
+  // Copy button on commands, code blocks and transcripts, where the page defines copy_label and copied_label.
+  function initCopy() {
+    if (!navigator.clipboard || !strings.copy_label || !strings.copied_label) return
+    for (const block of document.querySelectorAll('main .cmd, main pre, main .transcript')) {
+      const wrap = el('div', { class: 'copy-wrap' })
+      block.replaceWith(wrap)
+      const button = el('button', { type: 'button', class: 'copy-btn', 'aria-live': 'polite', text: t('copy_label') })
+      button.addEventListener('click', () => {
+        navigator.clipboard.writeText(block.textContent.trim()).then(() => {
+          button.textContent = t('copied_label')
+          setTimeout(() => { button.textContent = t('copy_label') }, 1600)
+        }, () => {})
+      })
+      wrap.append(block, button)
+    }
+  }
+
+  // Decision walker (ol.walker): a question with its answers as a nested list. With scripts one node shows
+  // at a time, the answers as buttons (the answer's data-label, else its own text), with back and restart
+  // (walker_back, walker_restart). A node's data-outcome names its colour. Where the page lacks those strings the
+  // list stays as written.
+  function initWalkers() {
+    if (!strings.walker_back || !strings.walker_restart) return
+    for (const list of document.querySelectorAll('ol.walker')) {
+      const root = list.querySelector(':scope > li')
+      if (!root) continue
+      const trail = [root]
+      const view = el('div', { class: 'walker-view', tabindex: '-1', 'aria-live': 'polite' })
+      const own = li => {
+        const copy = li.cloneNode(true)
+        for (const inner of copy.querySelectorAll('ol')) inner.remove()
+        return copy
+      }
+      const go = change => { change(); render(); view.focus() }
+      const render = () => {
+        const li = trail[trail.length - 1]
+        view.dataset.outcome = li.dataset.outcome || ''
+        const options = [...li.querySelectorAll(':scope > ol > li')]
+        const answers = options.map(o => el('button', {
+          type: 'button', class: 'chip', text: o.dataset.label || own(o).textContent.trim(), onclick: () => go(() => trail.push(o)),
+        }))
+        view.replaceChildren(...[
+          el('div', { class: 'walker-text' }, el('p', {}, [...own(li).childNodes])),
+          answers.length ? el('div', { class: 'walker-options' }, answers) : null,
+          el('div', { class: 'walker-controls' },
+            el('button', { type: 'button', text: t('walker_back'), disabled: trail.length < 2, onclick: () => go(() => trail.pop()) }),
+            el('button', { type: 'button', text: t('walker_restart'), disabled: trail.length < 2, onclick: () => go(() => { trail.length = 1 }) })),
+        ].filter(Boolean))
+      }
+      list.hidden = true
+      list.after(view)
+      render()
+    }
+  }
+
+  // Segmented panels (div.seg-panels > div.seg-panel[data-label]): every panel shows without scripts; with
+  // scripts a segmented switch picks one.
+  function initPanels() {
+    for (const box of document.querySelectorAll('.seg-panels')) {
+      const panels = [...box.querySelectorAll(':scope > .seg-panel')]
+      if (panels.length < 2) continue
+      const seg = el('div', { class: 'seg', role: 'group' }, panels.map((p, i) => el('button', { type: 'button', 'data-value': String(i), text: p.dataset.label })))
+      seg.addEventListener('pb:change', e => panels.forEach((p, i) => { p.hidden = String(i) !== e.detail }))
+      box.classList.add('is-tabbed')
+      box.prepend(seg)
+      initSegs(box)
+      panels.forEach((p, i) => { p.hidden = i !== 0 })
+    }
+  }
+
+  // The glossary column: the entries a page lists in data-terms, or all of them.
+  function initGlossary() {
+    for (const aside of document.querySelectorAll('[data-pb-glossary]')) {
+      const keys = aside.dataset.terms ? aside.dataset.terms.split(',').map(k => k.trim()) : Object.keys(glossary)
+      aside.append(el('dl', {}, keys.filter(k => glossary[k]).map(k =>
+        el('div', { class: 'entry', 'data-entry': k }, el('dt', { text: glossary[k].name || k }), el('dd', {}, rich(glossary[k].short))))))
+    }
+  }
+
+  // List and detail built in markup (data-pb-md): an option shows the panel with the same data-panel.
+  function initMasterDetail() {
+    for (const box of document.querySelectorAll('[data-pb-md]')) {
+      const items = [...box.querySelectorAll('.sit-item[data-panel]')]
+      const panels = [...box.querySelectorAll('.md-panel[data-panel]')]
+      const choose = (i, focus) => {
+        items.forEach((it, j) => { it.setAttribute('aria-selected', String(i === j)); it.tabIndex = i === j ? 0 : -1 })
+        for (const p of panels) p.hidden = p.dataset.panel !== items[i].dataset.panel
+        if (focus) items[i].focus()
+      }
+      items.forEach((it, i) => it.addEventListener('click', () => choose(i, true)))
+      box.addEventListener('keydown', e => {
+        const at = items.findIndex(it => it.getAttribute('aria-selected') === 'true')
+        const next = { ArrowDown: at + 1, ArrowUp: at - 1, Home: 0, End: items.length - 1 }[e.key]
+        if (next === undefined || !e.target.closest('.sit-item')) return
+        e.preventDefault()
+        choose(Math.max(0, Math.min(items.length - 1, next)), true)
+      })
+      choose(0, false)
+    }
+  }
+
+  // Drawers: a button with data-pb-drawer opens the panel with that id; the close button, Escape
+  // or a second press closes it, and focus returns to the button.
+  function initDrawers() {
+    for (const opener of document.querySelectorAll('[data-pb-drawer]')) {
+      const panel = document.getElementById(opener.dataset.pbDrawer)
+      if (!panel) continue
+      const set = open => {
+        panel.hidden = !open
+        opener.setAttribute('aria-expanded', String(open))
+        document.body.classList.toggle('drawer-is-open', open)
+        if (open) panel.querySelector('button')?.focus()
+        else opener.focus()
+      }
+      opener.addEventListener('click', () => set(panel.hidden))
+      panel.querySelector('[data-pb-drawer-close]')?.addEventListener('click', () => set(false))
+      document.addEventListener('keydown', e => { if (e.key === 'Escape' && !panel.hidden) set(false) })
+    }
+  }
+
+  document.addEventListener('DOMContentLoaded', () => { initTheme(); initSegs(); initGlossary(); initNav(); initTerms(); initMasterDetail(); initDrawers(); initFilters(); initCounts(); initCopy(); initWalkers(); initPanels() })
+  return { t, el, rich, strings, glossary, facts, data, store, setSeg, initSegs, term }
+})()
+
+// A port of the parts of plugins/paceline/scripts/pace.py the budget simulator needs, with the
+// pre-agent hook's hard limits from plugins/paceline/hooks/pace_pre_agent.py. Names and structure
+// follow the Python so the two can be read side by side; pages/paceline-budget/golden.json, written
+// by .ci/pace_golden.py from the real functions, pins the port (pages/tests/golden.test.mjs).
+// Only the UTC time zone is supported: the simulator's clock is UTC hour-of-week.
+const PBPace = (() => {
+  const HOUR = 3600 * 1000
+  const DAY = 24 * HOUR
+  const WEEK = 7 * DAY
+
+  const EXIT_OK = 0
+  const EXIT_WAIT = 10
+  const EXIT_STOP = 11
+
+  // The state every simulated point shares; .ci/pace_golden.py pins the same values.
+  const PINS = {
+    anchor: '2026-10-12T00:00:00.000Z',
+    five_hour_reset_hours: 3,
+    commit_mb: 65536,
+    data_age_min: 0,
+    data_source: 'exact',
+    queue_item_estimate_pct: 1.0,
+  }
+
+  // ------------------------------------------------------------ Python semantics
+
+  // CPython 3.12+ sums floats with Neumaier compensation; a plain loop drifts in the last bits.
+  function py_sum(xs) {
+    let s = 0
+    let c = 0
+    for (const x of xs) {
+      const t = s + x
+      if (Math.abs(s) >= Math.abs(x)) c += (s - t) + x
+      else c += (x - t) + s
+      s = t
+    }
+    if (c && Number.isFinite(c)) s += c
+    return s
+  }
+
+  // A tie at n decimals is x * 2**(n+1) being an odd integer; toFixed breaks ties away from zero,
+  // Python breaks them to even.
+  function is_tie(a, n) {
+    const m = a * 2 ** (n + 1)
+    return Number.isInteger(m) && m % 2 === 1
+  }
+
+  // f"{x:.{n}f}"
+  function py_fixed(x, n) {
+    if (x === Infinity) return 'inf'
+    if (x === -Infinity) return '-inf'
+    if (Number.isNaN(x)) return 'nan'
+    const neg = x < 0 || Object.is(x, -0)
+    let s = Math.abs(x).toFixed(n)
+    if (is_tie(Math.abs(x), n)) {
+      const last = s.charCodeAt(s.length - 1) - 48
+      if (last % 2 === 1) s = s.slice(0, -1) + String(last - 1)
+    }
+    return (neg ? '-' : '') + s
+  }
+
+  // round(x, n)
+  function py_round(x, n) {
+    if (!Number.isFinite(x)) return x
+    return Number(py_fixed(x, n))
+  }
+
+  // round(x) to an int
+  function py_round_int(x) {
+    return Number(py_fixed(x, 0)) + 0
+  }
+
+  // str(x) of a float
+  function py_str(x) {
+    if (Number.isInteger(x) && Math.abs(x) < 1e16) return x.toFixed(1)
+    return String(x)
+  }
+
+  // ------------------------------------------------------------ time (UTC only)
+
+  const weekday = t => (new Date(t).getUTCDay() + 6) % 7
+  const hour_of = t => new Date(t).getUTCHours()
+  const date_of = t => Math.floor(t / DAY) * DAY
+  const date_iso = d => new Date(d).toISOString().slice(0, 10)
+  const parse_iso = s => (s == null ? null : Date.parse(s))
+
+  function local_dt(day, hour) {
+    return day + hour * HOUR
+  }
+
+  function iso_ms(t) {
+    return new Date(t).toISOString()
+  }
+
+  // datetime.isoformat() of a UTC instant
+  function iso_seconds(t) {
+    return new Date(t).toISOString().slice(0, 19) + '+00:00'
+  }
+
+  function fmt_local(t) {
+    const s = new Date(t).toISOString()
+    return `${s.slice(0, 10)} ${s.slice(11, 16)}+00:00`
+  }
+
+  const total_seconds = ms => ms / 1000
+
+  function load_zone(key) {
+    if (key !== 'UTC' && key !== 'Etc/UTC') throw new Error(`time zone ${key} unsupported here: the port runs in UTC`)
+    return 'UTC'
+  }
+
+  // ------------------------------------------------------------ usage
+
+  function scoped_match(scoped, model) {
+    if (!model) return []
+    const m = model.toLowerCase()
+    return (scoped || []).filter(s => typeof s.name === 'string' && m.includes(s.name.toLowerCase()))
+  }
+
+  function effective_used(record, model) {
+    const values = [Number(record.seven_day.used_percentage)]
+    for (const s of scoped_match(record.scoped, model)) values.push(Number(s.used_percentage))
+    return Math.max(...values)
+  }
+
+  // ------------------------------------------------------------ plans
+
+  function plan_weight(profile, plan) {
+    if (plan.type === 'away') return 0.0
+    return Number(plan.weight || profile.heavy_weight)
+  }
+
+  function plan_at(plans, t) {
+    let best = null
+    for (const plan of plans) {
+      if (parse_iso(plan.start) <= t && t < parse_iso(plan.end)) {
+        if (best === null || plan.declared_at > best.declared_at
+            || (plan.declared_at === best.declared_at && plan.id > best.id)) best = plan
+      }
+    }
+    return best
+  }
+
+  function plans_starting_tomorrow(profile, now) {
+    const today = date_of(now)
+    return profile.plans.filter(p => date_of(parse_iso(p.start)) === today + DAY && p.confirmed_on !== date_iso(today))
+  }
+
+  // ------------------------------------------------------------ budget model
+
+  function classify(local, profile) {
+    const h = hour_of(local)
+    const [n0, n1] = profile.night_hours
+    const [d0, d1] = profile.day_hours
+    if (n0 <= h && h < n1) return 'night'
+    if (d0 <= h && h < d1) return weekday(local) >= 5 ? 'weekend' : 'work'
+    return 'off'
+  }
+
+  function build_slots(start, end, profile, plans) {
+    const per_hour = profile.five_hour_to_week_pct / 5.0
+    const night_share = profile.five_hour_threshold_night / 100.0
+    const slots = []
+    let t = start
+    while (t < end) {
+      const boundary = Math.floor(t / HOUR) * HOUR + HOUR
+      const stop = Math.min(boundary, end)
+      const hours = total_seconds(stop - t) / 3600.0
+      const local = t
+      const kind = classify(local, profile)
+      let weight
+      if (kind === 'work') weight = Number(profile.weekday_weight)
+      else if (kind === 'weekend') weight = Number(profile.weekend_weight)
+      else weight = 0.0
+      if ((kind === 'work' || kind === 'weekend') && plans.length) {
+        const plan = plan_at(plans, t)
+        if (plan) weight = plan.type === 'away' ? 0.0 : weight * plan_weight(profile, plan)
+      }
+      const cap = per_hour * hours * (kind === 'night' ? night_share : 1.0)
+      slots.push({ start: t, hours, local, kind, weight, cap, eff: weight * hours })
+      t = stop
+    }
+    return slots
+  }
+
+  function waterfill(total, items) {
+    const alloc = items.map(() => 0.0)
+    const active = []
+    items.forEach(([w, c], i) => { if (w > 0 && c > 0) active.push([i, w, c]) })
+    if (total <= 0 || !active.length) return [0.0, alloc]
+    if (py_sum(active.map(([, , c]) => c)) <= total) {
+      for (const [i, , c] of active) alloc[i] = c
+      return [Infinity, alloc]
+    }
+    active.sort((a, b) => a[2] / a[1] - b[2] / b[1])
+    let remaining = total
+    let wsum = py_sum(active.map(([, w]) => w))
+    let k = 0
+    while (k < active.length) {
+      const [i, w, c] = active[k]
+      if (w * remaining / wsum >= c) {
+        alloc[i] = c
+        remaining -= c
+        wsum -= w
+        k += 1
+      } else break
+    }
+    const rate = remaining / wsum
+    for (const [i, w] of active.slice(k)) alloc[i] = w * rate
+    return [rate, alloc]
+  }
+
+  function allocate(total, slots, weekend_cap_left) {
+    const day = []
+    slots.forEach((s, i) => { if (s.kind === 'work' || s.kind === 'weekend') day.push(i) })
+    const alloc = slots.map(() => 0.0)
+    const [rate, part] = waterfill(total, day.map(i => [slots[i].eff, slots[i].cap]))
+    let rates = { work: rate, weekend: rate }
+    const weekend = day.filter(i => slots[i].kind === 'weekend')
+    if (py_sum(weekend.map(i => part[day.indexOf(i)])) > weekend_cap_left + 1e-9) {
+      const [wrate, wpart] = waterfill(Math.max(0.0, weekend_cap_left), weekend.map(i => [slots[i].eff, slots[i].cap]))
+      const work = day.filter(i => slots[i].kind === 'work')
+      const [drate, dpart] = waterfill(total - py_sum(wpart), work.map(i => [slots[i].eff, slots[i].cap]))
+      weekend.forEach((i, j) => { alloc[i] = wpart[j] })
+      work.forEach((i, j) => { alloc[i] = dpart[j] })
+      rates = { work: drate, weekend: wrate }
+    } else {
+      day.forEach((i, j) => { alloc[i] = part[j] })
+    }
+    return [rates, alloc]
+  }
+
+  function reserve_at(t, reset, profile) {
+    const base = Number(profile.reserve_pct)
+    const decay = profile.reserve_decay_start
+    const reset_day = date_of(reset)
+    let start = null
+    for (let back = 0; back < 8; back++) {
+      const day = reset_day - back * DAY
+      if (weekday(day) === decay.weekday) {
+        const candidate = local_dt(day, decay.hour)
+        if (candidate < reset) {
+          start = candidate
+          break
+        }
+      }
+    }
+    if (t >= reset) return 0.0
+    if (start === null || t <= start) return base
+    return base * total_seconds(reset - t) / total_seconds(reset - start)
+  }
+
+  function used_at(history, t, reset, model) {
+    if (t <= reset - WEEK) return 0.0
+    let best = null
+    for (const record of history) {
+      if (record._at > t) break
+      const r = parse_iso(record.seven_day.resets_at)
+      if (r && Math.abs(total_seconds(r - reset)) < 600) best = record
+    }
+    return best ? effective_used(best, model) : null
+  }
+
+  function weekend_day_spend(history, now, reset, profile, model, effective, runs) {
+    const local = now
+    const saturday = date_of(local) - (weekday(local) - 5) * DAY
+    const start = Math.max(local_dt(saturday, 0), reset - WEEK)
+    const before = used_at(history, start, reset, model)
+    let spent = effective - (before !== null ? before : 0.0)
+    const [n0, n1] = profile.night_hours
+    for (const day of [saturday, saturday + DAY]) {
+      const a = Math.max(local_dt(day, n0), start)
+      const b = Math.min(local_dt(day, n1), now)
+      if (b <= a) continue
+      const run = (runs || []).find(r => r.night_date === date_iso(day)
+        && (r.reset == null || r.reset === iso_ms(reset))) ?? null
+      if (run !== null) {
+        const last = b === now ? effective : (run.last_effective ?? run.used_at_start)
+        spent -= Math.max(0.0, last - run.used_at_start)
+        continue
+      }
+      const u0 = used_at(history, a, reset, model)
+      const u1 = b === now ? effective : used_at(history, b, reset, model)
+      if (u0 !== null && u1 !== null) spent -= Math.max(0.0, u1 - u0)
+    }
+    return Math.max(0.0, spent)
+  }
+
+  function roll_bucket(bucket, now, period) {
+    if (!bucket) return [0.0, null, false]
+    const used = Number(bucket.used_percentage || 0)
+    let reset = parse_iso(bucket.resets_at)
+    if (reset === null || reset > now) return [used, reset, false]
+    if (period === null) return [0.0, null, true]
+    while (reset <= now) reset += period
+    return [0.0, reset, true]
+  }
+
+  function compute(now, profile, usage, model = null, commit_mb = null, outstanding = 0.0, runs = null) {
+    const record = usage.record
+    if (!record || !record.seven_day) throw new Error('no usage data yet')
+    load_zone(profile.timezone)
+    const history = usage.history || []
+    const k = Number(profile.five_hour_to_week_pct)
+    const [seven_used, reset, rolled] = roll_bucket(record.seven_day, now, WEEK)
+    if (reset === null) throw new Error('usage record has no seven_day.resets_at')
+    const scoped = rolled ? [] : (record.scoped || []).map(s => ({ ...s }))
+    const matched = scoped_match(scoped, model)
+    const effective = Math.max(seven_used, ...matched.map(s => Number(s.used_percentage)))
+    const window_start = reset - WEEK
+    const remaining = Math.max(0.0, 100.0 - effective)
+    const reserve = reserve_at(now, reset, profile)
+    const spendable = Math.max(0.0, remaining - reserve)
+
+    const age_min = record._at != null ? total_seconds(now - record._at) / 60.0 : Infinity
+    const stale = age_min > profile.stale_threshold_min
+
+    const plans = profile.plans || []
+    const slots = build_slots(now, reset, profile, plans)
+    const local_now = now
+
+    let weekend_spent = 0.0
+    if (weekday(local_now) >= 5) weekend_spent = weekend_day_spend(history, now, reset, profile, model, effective, runs)
+    const weekend_cap_left = Math.max(0.0, Number(profile.weekend_cap_pct) - weekend_spent)
+    const [rates, alloc] = allocate(spendable, slots, weekend_cap_left)
+
+    const week_slots = build_slots(window_start, reset, profile, [])
+    const [normal_rates] = allocate(100.0 - Number(profile.reserve_pct), week_slots, Number(profile.weekend_cap_pct))
+    const expected = { work: 0.0, weekend: 0.0 }
+    for (const s of slots) {
+      if (s.kind in expected && normal_rates[s.kind] !== Infinity) {
+        expected[s.kind] += Math.min(normal_rates[s.kind] * s.eff, s.cap)
+      } else if (s.kind in expected) {
+        expected[s.kind] += s.weight > 0 ? s.cap : 0.0
+      }
+    }
+    const expected_spend = expected.work + Math.min(expected.weekend, weekend_cap_left)
+    const surplus = Math.max(0.0, spendable - expected_spend)
+
+    const day_share = profile.five_hour_threshold_day / 100.0
+    const day_capacity = py_sum(slots.filter(s => (s.kind === 'work' || s.kind === 'weekend') && s.weight > 0)
+      .map(s => s.cap * day_share))
+    const unallocated = Math.max(0.0, spendable - py_sum(alloc))
+    const capacity_warning = remaining >= profile.capacity_warn_ratio * day_capacity
+
+    const current = slots.find(s => (s.kind === 'work' || s.kind === 'weekend') && s.weight > 0) ?? null
+    const per_hour_cap = k / 5.0
+    let budget_per_hour
+    if (current === null) {
+      budget_per_hour = 0.0
+    } else {
+      const rate = rates[current.kind]
+      budget_per_hour = rate === Infinity ? per_hour_cap : Math.min(rate * current.weight, per_hour_cap)
+    }
+    const normal_kind = current !== null ? current.kind : 'work'
+    const normal_rate = normal_rates[normal_kind] !== Infinity ? normal_rates[normal_kind] : per_hour_cap
+    const in_day = slots.length > 0 && (slots[0].kind === 'work' || slots[0].kind === 'weekend')
+    const current_plan = plan_at(plans, now)
+
+    const [five_used, five_reset] = roll_bucket(record.five_hour, now, null)
+    const in_night = classify(local_now, profile) === 'night'
+    const five_threshold = Number(profile[in_night ? 'five_hour_threshold_night' : 'five_hour_threshold_day'])
+
+    const night = night_info(now, reset, profile, slots, alloc, spendable, surplus, commit_mb)
+
+    let heavy_runs = null
+    if (commit_mb !== null) {
+      heavy_runs = Math.max(0, Math.min(Math.trunc(profile.max_heavy_runs),
+        Math.trunc(Math.floor((commit_mb - profile.commit_reserve_mb) / profile.heavy_job_mb))))
+    }
+
+    const forecast = forecast_unused(history, now, reset, remaining, model)
+    const hours_to_reset = total_seconds(reset - now) / 3600.0
+    const elapsed_pct = 100.0 * (1 - hours_to_reset / 168.0)
+
+    return {
+      now: iso_ms(now),
+      now_local: fmt_local(now),
+      data: {
+        source: usage.source, error: usage.error ?? null,
+        observed_at: record._at != null ? iso_ms(record._at) : record.observed_at ?? null,
+        age_min: age_min !== Infinity ? py_round(age_min, 1) : null, stale,
+      },
+      weekly: {
+        seven_day_pct: seven_used, scoped, model, matched_scoped: matched.map(s => s.name), effective_pct: effective,
+        remaining_pct: remaining, reset: iso_ms(reset), reset_local: fmt_local(reset),
+        hours_to_reset: py_round(hours_to_reset, 2), elapsed_pct: py_round(elapsed_pct, 1),
+      },
+      reserve_pct: py_round(reserve, 3),
+      spendable_pct: py_round(spendable, 3),
+      budget_per_hour_pct: py_round(budget_per_hour, 3),
+      normal_per_hour_pct: py_round(normal_rate, 3),
+      normal_pct_kind: normal_kind,
+      rates: Object.fromEntries(Object.entries(rates).map(([k2, v]) => [k2, v === Infinity ? null : py_round(v, 4)])),
+      weekend: {
+        cap_pct: profile.weekend_cap_pct, spent_pct: py_round(weekend_spent, 3),
+        cap_left_pct: py_round(weekend_cap_left, 3),
+      },
+      surplus_pct: py_round(surplus, 3),
+      expected_day_spend_pct: py_round(expected_spend, 3),
+      day_capacity_pct: py_round(day_capacity, 3),
+      unallocated_pct: py_round(unallocated, 3),
+      capacity_warning,
+      in_day_hours: in_day,
+      current_plan,
+      five_hour: {
+        used_pct: five_used, reset: five_reset ? iso_ms(five_reset) : null,
+        reset_local: five_reset ? fmt_local(five_reset) : null,
+        threshold_pct: five_threshold, hard_stop_pct: profile.five_hour_hard_stop,
+      },
+      night,
+      host: {
+        free_commit_mb: commit_mb === null ? null : py_round_int(commit_mb),
+        min_free_commit_mb: profile.min_free_commit_mb, max_heavy_runs: heavy_runs,
+      },
+      outstanding_reservations_pct: py_round(outstanding, 3),
+      forecast_unused_pct: forecast === null ? null : py_round(forecast, 1),
+      _slots: slots,
+      _alloc: alloc,
+    }
+  }
+
+  function night_info(now, reset, profile, slots, alloc, spendable, surplus, commit_mb) {
+    const local = now
+    const day_start = profile.day_hours[0]
+    let night_date
+    let start
+    if (hour_of(local) < profile.night_hours[1]) {
+      night_date = date_of(local)
+      start = Math.max(now, local_dt(night_date, profile.night_hours[0]))
+    } else {
+      night_date = date_of(local) + DAY
+      start = local_dt(night_date, profile.night_hours[0])
+    }
+    let end = local_dt(night_date, profile.night_hours[1])
+    start = Math.min(start, reset)
+    end = Math.min(end, reset)
+    const hours = Math.max(0.0, total_seconds(end - start) / 3600.0)
+    const window_capacity = hours * profile.five_hour_to_week_pct / 5.0 * profile.five_hour_threshold_night / 100.0
+    let host = profile.host_night_capacity_pct
+    host = host == null ? Infinity : Number(host)
+    if (commit_mb !== null && commit_mb < profile.min_free_commit_mb) host = 0.0
+    const last_night = local_dt(night_date, day_start) >= reset
+    let next_day_share = 0.0
+    if (!last_night) {
+      next_day_share = py_sum(slots.map((s, i) => [s, alloc[i]])
+        .filter(([s]) => (s.kind === 'work' || s.kind === 'weekend') && date_of(s.local) === night_date)
+        .map(([, a]) => a))
+    }
+    const base = Number(profile.night_base_pct)
+    const allowance = Math.max(0.0, Math.min(base + surplus, window_capacity, host, spendable - next_day_share))
+    return {
+      date: date_iso(night_date), start: iso_ms(start), end: iso_ms(end), hours: py_round(hours, 2),
+      last_before_reset: last_night, base_pct: base, window_capacity_pct: py_round(window_capacity, 3),
+      host_capacity_pct: host === Infinity ? null : host, next_day_share_pct: py_round(next_day_share, 3),
+      allowance_pct: py_round(allowance, 3),
+    }
+  }
+
+  function forecast_unused(history, now, reset, remaining, model) {
+    const points = history.filter(r => {
+      if (!(now - DAY <= r._at && r._at <= now)) return false
+      const x = parse_iso(r.seven_day.resets_at)
+      return x && Math.abs(total_seconds(x - reset)) < 600
+    })
+    if (points.length < 2) return null
+    const span = total_seconds(points[points.length - 1]._at - points[0]._at) / 3600.0
+    if (span < 3) return null
+    const burn = Math.max(0.0, effective_used(points[points.length - 1], model) - effective_used(points[0], model)) / span
+    return Math.max(0.0, remaining - burn * total_seconds(reset - now) / 3600.0)
+  }
+
+  // ------------------------------------------------------------ recommendation
+
+  function recommend(calc, profile) {
+    const reasons = []
+    const commit = calc.host.free_commit_mb
+    const five = calc.five_hour
+    const weekly = calc.weekly
+    let blocked = false
+    if (commit !== null && commit < profile.min_free_commit_mb) {
+      blocked = true
+      reasons.push(`free commit ${py_fixed(commit / 1024, 1)} GB < ${py_fixed(profile.min_free_commit_mb / 1024, 0)} GB`)
+    }
+    if (five.used_pct >= five.hard_stop_pct) {
+      blocked = true
+      reasons.push(`5h ${py_fixed(five.used_pct, 0)}% >= ${py_fixed(five.hard_stop_pct, 0)}%`)
+    }
+    if (weekly.effective_pct >= 100) {
+      blocked = true
+      reasons.push('weekly limit exhausted')
+    }
+    const background_paused = !blocked && five.used_pct >= five.threshold_pct
+    if (background_paused) {
+      reasons.push(`5h ${py_fixed(five.used_pct, 0)}% >= ${py_fixed(five.threshold_pct, 0)}%: no new background work `
+        + `until ${five.reset_local || 'window reset'}`)
+    }
+    const normal = calc.normal_per_hour_pct || 0.0
+    const ratio = normal > 0 ? calc.budget_per_hour_pct / normal : 1.0
+    const throttle = ratio < 0.7 || (weekly.effective_pct >= profile.throttle_weekly_pct && weekly.hours_to_reset > 24)
+    let agents
+    if (blocked || background_paused) agents = 0
+    else agents = Math.max(1, Math.min(Math.trunc(profile.max_agents), py_round_int(ratio * 2)))
+    const models = allowed_models(calc, profile, throttle)
+    const model = blocked ? 'none' : models.length ? models[0] : 'none'
+    if (throttle && !blocked) reasons.push('throttle: routine subagent work on ' + profile.routine_models.join('/'))
+    return {
+      blocked, background_paused, pace_ratio: py_round(ratio, 2), throttle, max_parallel_agents: agents,
+      max_heavy_runs: calc.host.max_heavy_runs, model, allowed_models: models, reasons,
+    }
+  }
+
+  function allowed_models(calc, profile, throttle, need_pct = 0.0) {
+    const models = [...(throttle ? profile.routine_models : profile.models)]
+    const out = []
+    for (const m of models) {
+      const bucket = calc.weekly.scoped.filter(s => typeof s.name === 'string' && m.includes(s.name.toLowerCase()))
+      if (bucket.length) {
+        const used = Math.max(...bucket.map(s => Number(s.used_percentage)))
+        if (used >= profile.scoped_exhausted_pct || 100 - used < need_pct) continue
+      }
+      out.push(m)
+    }
+    return out
+  }
+
+  const KIND_LABEL = { work: 'weekday', weekend: 'weekend' }
+
+  function status_line(calc, rec, extras) {
+    const w = calc.weekly
+    const scoped = w.scoped.map(s => `${s.name} ${py_fixed(s.used_percentage, 0)}%`).join(', ')
+    const normal_label = KIND_LABEL[calc.normal_pct_kind] ?? calc.normal_pct_kind
+    const normal = `${normal_label} norm ${py_fixed(calc.normal_per_hour_pct, 2)}`
+    const parts = [
+      `7d ${py_fixed(w.effective_pct, 0)}%` + (scoped ? ` (${scoped})` : '') + ` reset ${w.reset_local}`,
+      `budget ${py_fixed(calc.budget_per_hour_pct, 2)}%/h` + (
+        calc.rates.work !== null && Math.abs(calc.rates.work - calc.budget_per_hour_pct) > 0.005
+          ? ` (weekday ${py_fixed(calc.rates.work, 2)}, ${normal})`
+          : ` (${normal})`),
+    ]
+    if (calc.forecast_unused_pct !== null) parts.push(`forecast unused ${py_fixed(calc.forecast_unused_pct, 0)}%`)
+    parts.push(`agents <=${rec.max_parallel_agents} model ${rec.model}`)
+    parts.push(`5h ${py_fixed(calc.five_hour.used_pct, 0)}%/${py_fixed(calc.five_hour.threshold_pct, 0)}`)
+    parts.push(`night ${py_fixed(calc.night.allowance_pct, 1)}%`)
+    const age = calc.data.age_min
+    let data = age !== null ? `data ${py_fixed(age, 0)} min old` : 'data age unknown'
+    if (calc.data.stale) data = 'STALE ' + data
+    if (calc.data.source === 'fallback' && calc.data.error) data += ` (${calc.data.error})`
+    parts.push(data)
+    if (calc.host.free_commit_mb === null) parts.push('host memory unknown')
+    if (calc.pace_on === false) parts.push('pace hooks off (paceline on)')
+    if (calc.capacity_warning) {
+      parts.push(`WARNING remainder ${py_fixed(w.remaining_pct, 0)}% near day capacity ${py_fixed(calc.day_capacity_pct, 0)}%`)
+    }
+    parts.push(...rec.reasons)
+    parts.push(...extras)
+    return parts.join(' | ')
+  }
+
+  // ------------------------------------------------------------ night queue
+
+  function item_view(item) {
+    const out = {}
+    for (const k of ['id', 'title', 'repo', 'estimate_pct', 'independent', 'depends_on', 'status', 'reason',
+      'attempts', 'actual_pct']) out[k] = item[k] ?? null
+    return out
+  }
+
+  function pick_next(items, budget, running_ids) {
+    const status = Object.fromEntries(items.map(i => [i.id, i.status]))
+    const pending = items.filter(i => i.status === 'pending')
+    if (!pending.length) {
+      if (items.some(i => i.status === 'running')) return [null, 'waiting']
+      return [null, items.some(i => i.status === 'deferred') ? 'blocked' : 'empty']
+    }
+    const runnable = []
+    let waiting = false
+    for (const item of pending) {
+      const deps = item.depends_on || []
+      if (deps.some(d => status[d] === 'deferred' || status[d] === undefined)) continue
+      if (deps.every(d => status[d] === 'done')) runnable.push(item)
+      else waiting = true
+    }
+    if (!runnable.length) return [null, waiting ? 'waiting' : 'blocked']
+    const running = items.filter(i => running_ids.has(i.id))
+    const exclusive = running.some(i => !i.independent)
+    for (const item of runnable) {
+      if (running.length && (exclusive || !item.independent)) continue
+      if (item.estimate_pct <= budget + 1e-9) return [item, null]
+    }
+    if (running.length) return [null, 'waiting']
+    return [null, 'budget']
+  }
+
+  function autonomous(now, calc, store, profile, start_run = false) {
+    const queue = store.queue
+    const pool = store.pool
+    const effective = calc.weekly.effective_pct
+    const night = calc.night
+    const local = now
+    let run = queue.run
+    const reused = Boolean(start_run && run && run.night_date === night.date)
+    if (start_run && !reused) {
+      if (run) queue.past_runs = [...(queue.past_runs || []), run].slice(-14)
+      run = {
+        started_at: iso_ms(now), night_date: night.date, reset: calc.weekly.reset, used_at_start: effective,
+        allowance_pct: night.allowance_pct, surplus_pct: calc.surplus_pct,
+        last_before_reset: night.last_before_reset, pool_spent_pct: 0.0,
+      }
+      queue.run = run
+    }
+    if (!run) {
+      return {
+        mode: 'autonomous', action: 'stop', may_start_next_item: false, max_parallel_agents: 0,
+        max_heavy_runs: calc.host.max_heavy_runs, allowed_models: [], budget_for_next_item_pct: 0.0, next_item: null,
+        wait_until: null, reasons: ['no queue run: start one with auto --start-run'], run: null,
+        stale: calc.data.stale, weekly_effective_pct: effective, five_hour_used_pct: calc.five_hour.used_pct,
+      }
+    }
+    const spent = Math.max(0.0, effective - run.used_at_start)
+    const today = date_iso(date_of(local))
+    if (!(today > run.night_date || (today === run.night_date && hour_of(local) >= profile.night_hours[1]))) {
+      run.last_effective = effective
+      run.last_seen = iso_ms(now)
+    }
+    const budget = Math.max(0.0, run.allowance_pct - spent - calc.outstanding_reservations_pct)
+    const reasons = []
+    let action = 'start'
+    let wait_until = null
+    const commit = calc.host.free_commit_mb
+    const five = calc.five_hour
+    let stop = null
+    if (commit !== null && commit < profile.min_free_commit_mb) {
+      stop = `free commit ${py_fixed(commit / 1024, 1)} GB < ${py_fixed(profile.min_free_commit_mb / 1024, 0)} GB`
+    } else if ((today === run.night_date && hour_of(local) >= profile.night_hours[1]) || today > run.night_date) {
+      stop = 'night ended'
+    }
+    const running_ids = new Set([...queue.items, ...pool.items].filter(i => i.status === 'running').map(i => i.id))
+    let [item, why] = pick_next(queue.items, budget, running_ids)
+    let source = 'queue'
+    const pool_ok = run.last_before_reset && pool.approved_reset === calc.weekly.reset
+    if (item === null && pool_ok) {
+      const pool_budget = Math.min(budget, Math.max(0.0, run.surplus_pct - (run.pool_spent_pct ?? 0.0)))
+      const [pitem, pwhy] = pick_next(pool.items, pool_budget, running_ids)
+      if (pitem !== null || why === 'empty' || why === 'blocked') {
+        item = pitem
+        why = pwhy
+        source = 'pool'
+      }
+    }
+    if (stop === null && item === null) {
+      if (why === 'empty') stop = 'queue empty'
+      else if (why === 'blocked') stop = 'all remaining items need owner permission'
+      else if (why === 'budget') stop = 'night budget exhausted'
+      else {
+        action = 'wait'
+        reasons.push('waiting for running items or dependencies')
+      }
+    }
+    if (stop) {
+      action = 'stop'
+      reasons.unshift(stop)
+    }
+    if (action === 'start') {
+      if (calc.data.stale) {
+        action = 'wait'
+        reasons.push(`usage data stale (${calc.data.age_min === null ? 'None' : py_str(calc.data.age_min)} min)`)
+      }
+      if (five.used_pct >= Math.min(five.threshold_pct, five.hard_stop_pct)) {
+        action = 'wait'
+        wait_until = five.reset
+        reasons.push(`5h ${py_fixed(five.used_pct, 0)}% >= ${py_fixed(five.threshold_pct, 0)}%, wait for window reset`)
+      }
+    }
+    const heavy = calc.host.max_heavy_runs
+    const agents = action === 'stop' ? 0 : Math.max(1, Math.min(Math.trunc(profile.max_agents), heavy !== null ? heavy : 3))
+    const throttle = effective >= profile.throttle_weekly_pct && calc.weekly.hours_to_reset > 24
+    const models = allowed_models(calc, profile, throttle, item ? item.estimate_pct : 0.0)
+    const may = action === 'start' && item !== null && models.length > 0
+    if (action === 'start' && !models.length) {
+      action = 'wait'
+      reasons.push('no model has weekly headroom')
+    }
+    return {
+      mode: 'autonomous', action, may_start_next_item: may, max_parallel_agents: agents, max_heavy_runs: heavy,
+      allowed_models: models, budget_for_next_item_pct: py_round(budget, 3),
+      next_item: item ? { ...item_view(item), source } : null, wait_until, reasons,
+      run: {
+        night_date: run.night_date, allowance_pct: run.allowance_pct, spent_pct: py_round(spent, 3),
+        last_before_reset: run.last_before_reset, started_at: run.started_at, reused,
+        remaining_pct: py_round(Math.max(0.0, run.allowance_pct - spent), 3),
+      },
+      stale: calc.data.stale, weekly_effective_pct: effective, five_hour_used_pct: five.used_pct,
+    }
+  }
+
+  // cmd_auto's printed line and exit code
+  function auto_line(result) {
+    let line = `auto: ${result.may_start_next_item ? 'START ' + result.next_item.id : result.action.toUpperCase()}`
+      + ` | budget ${py_fixed(result.budget_for_next_item_pct, 2)}% | agents <=${result.max_parallel_agents}`
+      + ` models ${result.allowed_models.join(',') || 'none'}`
+    if (result.run && result.run.reused) {
+      line += ` | run of ${result.run.night_date} kept, ${py_fixed(result.run.remaining_pct, 2)}% of`
+        + ` ${py_fixed(result.run.allowance_pct, 2)}% left`
+    }
+    if (result.reasons.length) line += ' | ' + result.reasons.join('; ')
+    return line
+  }
+
+  const AUTO_EXIT = { start: EXIT_OK, wait: EXIT_WAIT, stop: EXIT_STOP }
+
+  // ------------------------------------------------------------ pre-agent hook
+
+  function hard_limits(status) {
+    const reasons = []
+    const host = status.host || {}
+    const commit = host.free_commit_mb ?? null
+    const floor = host.min_free_commit_mb ?? null
+    if (commit !== null && floor !== null && commit < floor) {
+      reasons.push(`free memory ${py_fixed(commit / 1024, 1)} GB < ${py_fixed(floor / 1024, 0)} GB, a runaway process can crash the host`)
+    }
+    if ((status.data || {}).stale) return reasons
+    const five = status.five_hour || {}
+    const used = five.used_pct ?? null
+    const threshold = five.threshold_pct ?? null
+    if (used !== null && threshold !== null && used >= threshold) {
+      reasons.push(`5h window ${py_fixed(used, 0)}% >= ${py_fixed(threshold, 0)}% background threshold, `
+        + `resets ${five.reset_local || 'later'}`)
+    }
+    if (((status.weekly || {}).effective_pct || 0) >= 100) reasons.push('weekly limit exhausted')
+    return reasons
+  }
+
+  function advice(status) {
+    const rec = status.recommendation || {}
+    const five = status.five_hour || {}
+    const data = status.data || {}
+    const parts = [
+      `agents <=${rec.max_parallel_agents} (active reservations ${status.active_reservations ?? 0})`,
+      `model ${rec.model} of ${(rec.allowed_models || []).join('/') || 'none'}`,
+      `5h ${py_fixed(five.used_pct ?? 0, 0)}%/${py_fixed(five.threshold_pct ?? 0, 0)}`,
+      `budget ${py_fixed(status.budget_per_hour_pct ?? 0, 2)}%/h vs norm ${py_fixed(status.normal_per_hour_pct || 0, 2)}`,
+    ]
+    if (data.stale) parts.push(`STALE data ${data.age_min === null ? 'None' : py_str(data.age_min)} min old`)
+    parts.push(...(rec.reasons || []))
+    return 'pace: ' + parts.join(' | ')
+  }
+
+  // ------------------------------------------------------------ the simulator's entry point
+
+  // inputs: week (weekly used %), reset (hours to the weekly reset, 1-167), five (five-hour used %),
+  // clock (UTC hour of week, 0 = Monday 00:00), plan ('none' | 'away' | 'heavy' for tomorrow).
+  function simulate(inputs, profile) {
+    profile = { ...profile, plans: [] }
+    const now = Date.parse(PINS.anchor) + inputs.clock * HOUR
+    const reset = now + inputs.reset * HOUR
+    if (inputs.plan === 'away' || inputs.plan === 'heavy') {
+      const tomorrow = date_of(now) + DAY
+      profile.plans = [{
+        id: 'P1', type: inputs.plan, start: iso_seconds(local_dt(tomorrow, 0)), end: iso_seconds(local_dt(tomorrow + DAY, 0)),
+        phrase: '', declared_at: iso_ms(now), weight: inputs.plan === 'away' ? 0.0 : profile.heavy_weight, confirmed_on: null,
+      }]
+    }
+    const record = {
+      seven_day: { used_percentage: inputs.week, resets_at: iso_ms(reset) },
+      five_hour: { used_percentage: inputs.five, resets_at: iso_ms(now + PINS.five_hour_reset_hours * HOUR) },
+      scoped: [],
+      _at: now - PINS.data_age_min * 60 * 1000,
+    }
+    const usage = { record, source: PINS.data_source, error: null, history: [] }
+    const calc = compute(now, profile, usage, null, PINS.commit_mb, 0.0, [])
+    const rec = recommend(calc, profile)
+    const extras = []
+    const tomorrow = plans_starting_tomorrow(profile, now)
+    if (tomorrow.length) extras.push(`${tomorrow.length} plan(s) start tomorrow, unconfirmed: ` + tomorrow.map(p => p.id).join(','))
+    const line = status_line(calc, rec, extras)
+
+    const status = { ...calc, recommendation: rec, active_reservations: 0 }
+    const limits = hard_limits(status)
+
+    let queue
+    if (classify(now, profile) === 'night') {
+      const store = {
+        queue: {
+          run: null, next_id: 2, items: [{
+            id: 'Q1', title: 'simulated item', repo: 'example', estimate_pct: PINS.queue_item_estimate_pct,
+            independent: true, depends_on: [], status: 'pending', reason: null, attempts: 0, actual_pct: null,
+          }],
+        },
+        pool: { approved_on: null, approved_reset: null, next_id: 1, items: [] },
+      }
+      const result = autonomous(now, calc, store, profile, true)
+      queue = {
+        action: result.action, exit_code: AUTO_EXIT[result.action], line: auto_line(result), reasons: result.reasons,
+        budget_for_next_item_pct: result.budget_for_next_item_pct, max_parallel_agents: result.max_parallel_agents,
+        allowed_models: result.allowed_models, may_start_next_item: result.may_start_next_item,
+        wait_until: result.wait_until,
+      }
+    } else {
+      queue = { action: 'day', exit_code: null, line: null, reasons: [], budget_for_next_item_pct: null,
+        max_parallel_agents: null, allowed_models: [], may_start_next_item: false, wait_until: null }
+    }
+
+    const days = []
+    calc._slots.forEach((s, i) => {
+      const date = date_iso(date_of(s.local))
+      if (!days.length || days[days.length - 1].date !== date) days.push({ date, allocs: [] })
+      days[days.length - 1].allocs.push(calc._alloc[i])
+    })
+
+    return {
+      now_local: calc.now_local,
+      kind: classify(now, profile),
+      budget_per_hour_pct: calc.budget_per_hour_pct,
+      rates: calc.rates,
+      normal_per_hour_pct: calc.normal_per_hour_pct,
+      normal_pct_kind: calc.normal_pct_kind,
+      reserve_pct: calc.reserve_pct,
+      spendable_pct: calc.spendable_pct,
+      surplus_pct: calc.surplus_pct,
+      expected_day_spend_pct: calc.expected_day_spend_pct,
+      day_capacity_pct: calc.day_capacity_pct,
+      unallocated_pct: calc.unallocated_pct,
+      capacity_warning: calc.capacity_warning,
+      in_day_hours: calc.in_day_hours,
+      weekly: calc.weekly,
+      weekend: calc.weekend,
+      five_hour: calc.five_hour,
+      night: calc.night,
+      forecast_unused_pct: calc.forecast_unused_pct,
+      recommendation: rec,
+      queue,
+      hook: { hard_limit: limits.length > 0, reasons: limits, reason: limits.length ? `pace hard limit: ${limits.join('; ')}` : null,
+        advice: advice(status) },
+      day_alloc: days.map(d => ({ date: d.date, alloc_pct: py_sum(d.allocs) })),
+      status_line: line,
+    }
+  }
+
+  return { simulate, PINS, py_sum, py_fixed, py_round }
+})()
+
+// The budget simulator: pace's rules from port.js on the reader's inputs.
+;(() => {
+  const { t, el, facts, setSeg } = PB
+  const P = Object.fromEntries((facts.profile ?? []).map(p => [p.key, p.default]))
+  const DAYS = t('days_short').split(',')
+  const pad = n => String(n).padStart(2, '0')
+
+  const inputs = { week: 42, reset: 98, five: 23, clock: 58, plan: 'none' }
+
+  const PROFILE = { ...P, timezone: 'UTC' }
+
+  // pace's own rules, ported in port.js and pinned to pace.py by a golden test.
+  function model(x) {
+    const r = PBPace.simulate(x, PROFILE)
+    return {
+      budget: r.budget_per_hour_pct,
+      threshold: r.five_hour.threshold_pct,
+      night: r.night.allowance_pct,
+      hard: r.hook.hard_limit,
+      hardReason: r.hook.reason,
+      agents: r.recommendation.max_parallel_agents,
+      model: r.recommendation.model ?? '-',
+      decision: r.queue.action,
+      reasons: r.queue.reasons,
+      kind: r.kind,
+      isNight: r.kind === 'night',
+      days: r.day_alloc,
+      launchLine: r.hook.advice,
+    }
+  }
+
+  const fmtIn = h => t('fmt_in', { d: Math.floor(h / 24), h: h % 24 })
+  const fmtClock = h => t('fmt_clock', { day: DAYS[Math.floor(h / 24) % 7], hh: pad(h % 24) })
+
+  // The last input moved, and the outputs before it moved, for the "what changed" line.
+  let before = null
+  let moved = null
+
+  function renderChanged(m) {
+    const out = document.getElementById('out-changed')
+    if (!before || !moved) { out.textContent = t('changed_none'); return }
+    out.textContent = t('changed_line', { input: t(`label_${moved}`), b0: before.budget.toFixed(2), b1: m.budget.toFixed(2), a0: before.agents, a1: m.agents, m0: before.model, m1: m.model })
+  }
+
+  function render() {
+    const x = inputs
+    const m = model(x)
+    renderChanged(m)
+    document.getElementById('out-in-week').textContent = `${x.week}%`
+    document.getElementById('out-in-reset').textContent = fmtIn(x.reset)
+    document.getElementById('out-in-five').textContent = `${x.five}%`
+    document.getElementById('out-in-clock').textContent = fmtClock(x.clock)
+    document.getElementById('out-budget').textContent = m.budget.toFixed(2)
+    document.getElementById('out-budget-note').textContent = t(m.kind === 'night' ? 'out_budget_night' : m.kind === 'off' ? 'out_budget_off' : 'out_budget_day')
+    const over = x.five >= m.threshold
+    document.getElementById('out-kv').replaceChildren(
+      el('dt', {}, PB.term('threshold', t('out_threshold'))), el('dd', {}, el('span', { class: `pill ${over ? 'act' : ''}`, text: `${x.five}% / ${m.threshold}%` })),
+      el('dt', { text: t('out_agents') }), el('dd', { text: `≤ ${m.agents}` }),
+      el('dt', { text: t('out_model') }), el('dd', { text: m.model }),
+      el('dt', {}, PB.term('night', t('out_night'))), el('dd', { text: `${m.night.toFixed(1)}%` }),
+    )
+    const cls = m.decision === 'start' ? 'go' : m.decision === 'wait' ? 'watch' : m.decision === 'stop' ? 'act' : 'idle'
+    const why = m.decision === 'day' ? t('why_day') : m.reasons.join('; ')
+    document.getElementById('out-decision').replaceChildren(...[
+      el('div', { class: `decision-pill ${cls}`, text: t(`decision_${m.decision}`) }),
+      why ? el('p', { class: 'muted', text: why }) : null,
+      m.hard ? el('p', { class: 'hard', text: `${t('hard_limit')} (${m.hardReason})` }) : null,
+    ].filter(Boolean))
+    document.getElementById('out-line').textContent = m.launchLine
+    drawWeek(x, m)
+  }
+
+  function drawWeek(x, m) {
+    const entries = m.days.slice(0, 8)
+    const W = 720, H = 240, L = 44, R = 12, T = 16, B = 34
+    const max = Math.max(4, ...entries.map(e => e.alloc_pct))
+    const top = Math.ceil(max / 2) * 2
+    const bw = (W - L - R) / Math.max(1, entries.length)
+    const y = v => T + (1 - v / top) * (H - T - B)
+    const ns = 'http://www.w3.org/2000/svg'
+    const s = document.createElementNS(ns, 'svg')
+    s.setAttribute('viewBox', `0 0 ${W} ${H}`)
+    s.setAttribute('class', 'chart')
+    const add = (tag, attrs, text) => {
+      const n = document.createElementNS(ns, tag)
+      for (const [k, v] of Object.entries(attrs)) n.setAttribute(k, v)
+      if (text !== undefined) n.textContent = text
+      s.append(n)
+    }
+    for (let v = 0; v <= top; v += top / 4) {
+      add('line', { x1: L, x2: W - R, y1: y(v), y2: y(v), class: 'grid' })
+      add('text', { x: L - 6, y: y(v) + 4, 'text-anchor': 'end', class: 'axis' }, `${v.toFixed(1)}%`)
+    }
+    const tomorrow = Math.floor(x.clock / 24) + 1
+    entries.forEach((e, i) => {
+      const x0 = L + i * bw + bw * 0.18
+      const w = bw * 0.64
+      const day = (new Date(`${e.date}T00:00:00Z`).getUTCDay() + 6) % 7
+      add('rect', { x: x0, y: y(e.alloc_pct), width: w, height: y(0) - y(e.alloc_pct), class: `bar-day ${i === 0 ? 'today' : ''}` })
+      add('text', { x: x0 + w / 2, y: y(e.alloc_pct) - 5, 'text-anchor': 'middle', class: 'val' }, e.alloc_pct.toFixed(1))
+      add('text', { x: x0 + w / 2, y: H - 12, 'text-anchor': 'middle', class: `axis ${i === 1 && x.plan !== 'none' && day === tomorrow % 7 ? 'planned' : ''}` }, DAYS[day])
+    })
+    document.getElementById('week-chart').replaceChildren(s, el('figcaption', { class: 'legend' },
+      el('span', { class: 'key day', text: t('legend_day') }), el('span', { class: 'muted', text: t('legend_night_note', { night: m.night.toFixed(1) }) })))
+  }
+
+  const SITUATIONS = [
+    ['fresh', { week: 6, reset: 160, five: 4, clock: 9, plan: 'none' }],
+    ['morning', { week: 38, reset: 100, five: 86, clock: 59, plan: 'none' }],
+    ['ahead', { week: 81, reset: 90, five: 30, clock: 82, plan: 'none' }],
+    ['away', { week: 44, reset: 98, five: 12, clock: 58, plan: 'away' }],
+    ['night', { week: 51, reset: 70, five: 20, clock: 98, plan: 'none' }],
+  ]
+
+  function load(values) {
+    before = null
+    moved = null
+    Object.assign(inputs, values)
+    for (const k of ['week', 'reset', 'five', 'clock']) document.getElementById(`in-${k}`).value = inputs[k]
+    setSeg(document.getElementById('in-plan'), inputs.plan, false)
+    render()
+  }
+
+  document.addEventListener('DOMContentLoaded', () => {
+    for (const k of ['week', 'reset', 'five', 'clock']) {
+      document.getElementById(`in-${k}`).addEventListener('input', e => { if (moved !== k) before = model(inputs); moved = k; inputs[k] = Number(e.target.value); render() })
+    }
+    document.getElementById('in-plan').addEventListener('pb:change', e => { before = model(inputs); moved = 'plan'; inputs.plan = e.detail; render() })
+    document.getElementById('inputs').addEventListener('submit', e => e.preventDefault())
+    const cards = document.getElementById('situation-cards')
+    for (const [key, values] of SITUATIONS) {
+      const m = model(values)
+      cards.append(el('article', { class: 'panel sit-card' },
+        el('h3', { text: t(`sit_${key}`) }),
+        el('div', { class: 'sit-figure' }, el('span', { class: 'sit-budget', text: m.isNight ? t(`decision_${m.decision}`) : `${m.budget.toFixed(2)}%/h` }), el('span', { class: 'muted', text: `5h ${values.five}% · 7d ${values.week}%` })),
+        el('p', { text: t(`sit_${key}_story`) }),
+        el('button', { type: 'button', class: 'chip', text: t('sit_apply'), onclick: () => { load(values); document.getElementById('simulator').scrollIntoView({ behavior: 'smooth' }) } }),
+      ))
+    }
+    render()
+  })
+})()
+</script>
+</body>
+</html>

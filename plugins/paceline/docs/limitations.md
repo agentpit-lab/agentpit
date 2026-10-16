@@ -360,7 +360,7 @@ about 10 seconds of waking.
 **What still works:** keep the computer awake, as [Run a night queue](how-to.md#run-a-night-queue)
 describes in its first step.
 
-### CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC blocks usage-watch
+### `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC` blocks usage-watch
 
 While `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC` is set, Claude Code refuses usage-watch's request.
 

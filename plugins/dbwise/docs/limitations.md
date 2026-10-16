@@ -31,7 +31,7 @@ the environment.
 tools. The build log is `bootstrap.log` in the dbWise home directory (see
 [Files](reference.md#files)).
 
-### The first session offers only dbwise_status until the build ends
+### The first session offers only `dbwise_status` until the build ends
 
 Claude Code waits a few tens of seconds for an MCP server to answer, and the first build takes
 longer. So the first session after the install, or after an update that changes `requirements.txt`,
@@ -42,8 +42,8 @@ start a new session.
 **What you see:** no tool of `list_databases`, `read_sql` and the others; `dbwise_status` says the
 dependencies are being installed, or that they are installed and the server must be reconnected.
 
-**What still works:** the SessionStart hook's own check. A `dbwise` command in a terminal waits for
-the build to end and then runs.
+**What still works:** the `SessionStart` hook's own check. A `dbwise` command in a terminal waits
+for the build to end and then runs.
 
 ### The server needs Python 3.12 to 3.14
 
@@ -56,14 +56,14 @@ outside the range as well.
 **What you see:** `plugin:dbwise:postgres` failed in `/mcp`. The same range applies to the `dbwise`
 command in a terminal.
 
-### The SessionStart hook needs Python on the PATH
+### The `SessionStart` hook needs Python on the `PATH`
 
-The hook runs `python3`, or `python` when `python3` does not run, from the PATH of the environment
+The hook runs `python3`, or `python` when `python3` does not run, from the `PATH` of the environment
 Claude Code starts in, in whatever version it is. Without either, the shell cannot find the program
 and the hook exits with status 127. The hook only adds the offline health check's lines to the
 session; the server does not depend on it.
 
-**What you see:** the SessionStart hook of dbWise fails with status 127, and the session has no
+**What you see:** the `SessionStart` hook of dbWise fails with status 127, and the session has no
 dbWise problem lines. A machine that has only a versioned interpreter such as `python3.12`, or only
 the `py` launcher, is in this case although the server itself starts.
 
@@ -71,7 +71,7 @@ the `py` launcher, is in this case although the server itself starts.
 
 ### Intel Macs get an older cryptography release with open advisories
 
-`cryptography` 49 and later publish no wheel for macOS on x86_64. The lock therefore pins
+`cryptography` 49 and later publish no wheel for macOS on `x86_64`. The lock therefore pins
 `cryptography` 48.0.1 for that platform and a newer release everywhere else. 48.0.1 has three open
 advisories (GHSA-g6cj-pr64-35w5, GHSA-jwv3-5hgf-82ww, GHSA-m2h6-j472-rp4c). dbWise reaches
 `cryptography` only through `pyjwt`, a dependency of the MCP library, and `secretstorage`, the Linux
@@ -92,7 +92,7 @@ cause was the network.
 **What you see:** an alias you just added is missing from `list_databases`, or an old password is
 still in use.
 
-### An invalid config.json stops the server
+### An invalid `config.json` stops the server
 
 Once the Python environment is built, the server reads `config.json` before it opens any alias. A
 file that cannot be read, is not valid JSON or does not follow the
@@ -100,9 +100,9 @@ file that cannot be read, is not valid JSON or does not follow the
 1, so none of the aliases is offered, including the valid ones. A config that does not exist yet is
 not an error: the server starts with no aliases.
 
-**What you see:** `plugin:dbwise:postgres` failed in `/mcp`. The SessionStart hook's check lists the
-config as unusable, and `dbwise doctor` prints `config unusable:` with the file, what is wrong and,
-for a format violation, the JSON path of the first problem.
+**What you see:** `plugin:dbwise:postgres` failed in `/mcp`. The `SessionStart` hook's check lists
+the config as unusable, and `dbwise doctor` prints `config unusable:` with the file, what is wrong
+and, for a format violation, the JSON path of the first problem.
 
 **What to do:** fix the file, or copy `config.json.bak` over it when one exists, then reconnect
 `plugin:dbwise:postgres` in `/mcp`.
@@ -135,7 +135,7 @@ changed.`
 
 ### Importing from Vault needs the vault CLI
 
-dbWise reads Vault through the HashiCorp `vault` CLI, found through an absolute entry of the PATH,
+dbWise reads Vault through the HashiCorp `vault` CLI, found through an absolute entry of the `PATH`,
 and logs in through it. There is no built-in HTTP client. A machine without the CLI cannot run
 `import --from-vault`; the command prints how to install it.
 
@@ -156,7 +156,7 @@ its text, and that one says nothing about the level.
 
 **What to do:** read the start of the query text, not a match anywhere in it.
 
-### A server with role_check set to warn loses the role layer
+### A server with `role_check` set to warn loses the role layer
 
 With `"role_check": "warn"` on a server, a refused role gate becomes a warning, so a superuser or an
 owner of tables can serve a `read` or `diagnose` alias. What remains is dbWise's SQL policy and the
@@ -166,7 +166,7 @@ with the privileges of the role. Use `warn` for local and test databases.
 **What you see:** the tool descriptions of those aliases say `role check relaxed (warn)`, and
 `list_databases` lists the reasons the gate found.
 
-### Statistics views that PostgreSQL grants to every role stay visible at read
+### Statistics views that PostgreSQL grants to every role stay visible at `read`
 
 What separates `read` from `diagnose` is the database role of each level's credential, enforced by
 the role gate, together with the tool split and the per-level statement and function sets.
@@ -174,10 +174,10 @@ PostgreSQL grants some statistics views, such as `pg_stat_user_tables`, to every
 alias can query them. Other sessions' query text in `pg_stat_activity` and `pg_stat_statements`
 needs `pg_read_all_stats`, which the gate refuses at `read`.
 
-### VACUUM fails through write_sql
+### `VACUUM` fails through `write_sql`
 
-`write_sql` runs inside a transaction that it commits, and PostgreSQL refuses VACUUM inside a
-transaction block. CREATE INDEX CONCURRENTLY and other statements that cannot run in a transaction
+`write_sql` runs inside a transaction that it commits, and PostgreSQL refuses `VACUUM` inside a
+transaction block. `CREATE INDEX CONCURRENTLY` and other statements that cannot run in a transaction
 block fail the same way. Run them with a tool outside dbWise.
 
 **What you see:** `VACUUM cannot run inside a transaction block`.
@@ -194,12 +194,12 @@ dbWise's allowlist, which refuses the statements that change them, is what keeps
 doing it. `write` has no statement timeout. The statements that set these defaults are in [Create
 the database roles for dbWise](how-to.md#create-the-database-roles-for-dbwise).
 
-### EXPLAIN ANALYZE runs the query and loads the server
+### `EXPLAIN ANALYZE` runs the query and loads the server
 
-`diagnose_sql` and `explain_query` with `analyze` execute the explained SELECT on the server, with
-its full load, inside a transaction that is rolled back. A long SELECT holds its ACCESS SHARE locks
-until it ends or times out, and other sessions that need a stronger lock on those tables wait for
-it. See the PostgreSQL documentation on [explicit
+`diagnose_sql` and `explain_query` with `analyze` execute the explained `SELECT` on the server, with
+its full load, inside a transaction that is rolled back. A long `SELECT` holds its `ACCESS SHARE`
+locks until it ends or times out, and other sessions that need a stronger lock on those tables wait
+for it. See the PostgreSQL documentation on [explicit
 locking](https://www.postgresql.org/docs/17/explicit-locking.html).
 
 ### A hostile view or function already in the database can use resources
@@ -208,24 +208,24 @@ A call can only run what the policy admits, but a view or a function that alread
 database can do a great deal of work inside a call. The statement timeout limits it to 30 seconds
 per call, and several calls can follow each other.
 
-### At read every transaction that gets a transaction id consumes one
+### At `read` every transaction that gets a transaction id consumes one
 
 PostgreSQL gives a transaction an id when it first needs one and takes it from the server's counter,
 also when the transaction is rolled back. dbWise refuses `pg_current_xact_id`, which assigns an id
 on every call. Other ways to get one assigned are not listed.
 
-### A database with dblink installed refuses read and diagnose aliases
+### A database with `dblink` installed refuses `read` and `diagnose` aliases
 
 `dblink_exec` can run a write on a remote database that stays after the local rollback, and
-PostgreSQL leaves EXECUTE on the `dblink` functions to PUBLIC by default. The role gate refuses a
-`read` or `diagnose` role that can execute them, so the alias is unreachable until you run `REVOKE
+PostgreSQL leaves `EXECUTE` on the `dblink` functions to `PUBLIC` by default. The role gate refuses
+a `read` or `diagnose` role that can execute them, so the alias is unreachable until you run `REVOKE
 EXECUTE ... FROM PUBLIC` on the `dblink` functions of that database and grant it back only to the
-roles that need it. The same holds for a role with USAGE on a foreign server.
+roles that need it. The same holds for a role with `USAGE` on a foreign server.
 
 **What you see:** the alias is unreachable and the reason reads `the role can execute functions of
 the dblink extension`.
 
-### pg_stat_statements covers the whole server
+### `pg_stat_statements` covers the whole server
 
 `get_top_queries` and `analyze_workload_indexes` read `pg_stat_statements`, which keeps one list for
 the whole PostgreSQL server. Their results include queries from every database on the server, not
@@ -240,22 +240,22 @@ values. The gaps below are the cases it does not see or measures against another
 
 ### A sequence the role cannot select is not checked
 
-The check needs SELECT or USAGE on each sequence. A role that has SELECT on tables does not have it
-on their sequences, and the role gate counts USAGE on a sequence as a write grant. Grant SELECT
-instead, with `GRANT SELECT ON ALL SEQUENCES IN SCHEMA <schema>` and `ALTER DEFAULT PRIVILEGES IN
-SCHEMA <schema> GRANT SELECT ON SEQUENCES`, or let the role be a member of `pg_read_all_data`. The
-statements, with the `FOR ROLE` clause that default privileges need, are in [Create the database
-roles for dbWise](how-to.md#create-the-database-roles-for-dbwise).
+The check needs `SELECT` or `USAGE` on each sequence. A role that has `SELECT` on tables does not
+have it on their sequences, and the role gate counts `USAGE` on a sequence as a write grant. Grant
+`SELECT` instead, with `GRANT SELECT ON ALL SEQUENCES IN SCHEMA <schema>` and `ALTER DEFAULT
+PRIVILEGES IN SCHEMA <schema> GRANT SELECT ON SEQUENCES`, or let the role be a member of
+`pg_read_all_data`. The statements, with the `FOR ROLE` clause that default privileges need, are in
+[Create the database roles for dbWise](how-to.md#create-the-database-roles-for-dbwise).
 
 **What you see:** the `Sequence health:` part of the report ends with `<n> sequence(s) could not be
 read with this role's privileges and were not checked:`, followed by the sequence names. The rest of
 the check, and the other health checks, still run.
 
-### A default that looks up the sequence by name follows the search path of the diagnose role
+### A default that looks up the sequence by name follows the search path of the `diagnose` role
 
 A column default such as `nextval('orders_seq'::text)` leaves no dependency on the sequence, so the
 check cuts the name out of the default and resolves it with `to_regclass`, in the session of the
-`diagnose` role. An unqualified name is found through the `search_path` of the diagnose role. If
+`diagnose` role. An unqualified name is found through the `search_path` of the `diagnose` role. If
 that path differs from the application's, the name resolves to another sequence or to none, and the
 column is then measured against that one or missed.
 
@@ -273,7 +273,7 @@ when the column takes the value unchanged: it owns the sequence, or its default 
 the sequence's own maximum, so a column narrower than the sequence can overflow before the check
 warns.
 
-### After setval with is_called false the sequence reads as 0% used
+### After `setval` with `is_called false` the sequence reads as 0% used
 
 PostgreSQL reports `last_value` as empty for a sequence that has not been read from yet, and for one
 set with `setval('seq', N, false)`. The check counts an empty value as 0, so such a sequence shows

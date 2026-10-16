@@ -55,9 +55,9 @@ session. The server reads `config.json` once, when it starts.
 with `reachable: true`. The role of a `read` login has to pass the role gate; to create one that
 does, see [Create the database roles for dbWise](#create-the-database-roles-for-dbwise).
 
-## Give an agent diagnose on a production database with its own role
+## Give an agent `diagnose` on a production database with its own role
 
-**When you need it:** the agent should find slow queries, read plans with EXPLAIN ANALYZE and get
+**When you need it:** the agent should find slow queries, read plans with `EXPLAIN ANALYZE` and get
 index advice on a production database, and you want to be able to revoke that access without
 touching the access to schemas and data.
 
@@ -90,13 +90,13 @@ The `diagnose` level has its own credential, so a separate database role serves 
    alias's level, which for `diagnose` admits the monitoring roles.
 4. Reconnect `plugin:dbwise:postgres` in `/mcp` and run `dbwise doctor --alias prod`.
 
-**How to tell it worked:** for each credential and database of the alias, the doctor prints `role
+**How to tell it worked:** for each credential and database of the alias, the `doctor` prints `role
 check (diagnose, enforce): passed in <n> ms`: a `diagnose` alias applies the `diagnose` checks to
 both of its logins. When the alias's list does not name the server's discovery database (`dbname`),
-the doctor prints the same line under `discovery database <name>:` too, for the login that serves
+the `doctor` prints the same line under `discovery database <name>:` too, for the login that serves
 `read` (the only one the server opens there). `get_top_queries` needs `pg_stat_statements` in the
-database, and the index tools need `hypopg`; the doctor notes a missing extension. Which tools need
-which extension is in [Requirements](reference.md#requirements).
+database, and the index tools need `hypopg`; the `doctor` notes a missing extension. Which tools
+need which extension is in [Requirements](reference.md#requirements).
 
 ## Import credentials from Vault
 
@@ -117,7 +117,7 @@ that maps them.
 3. Reconnect `plugin:dbwise:postgres` in `/mcp` and run `dbwise doctor`.
 
 **How to tell it worked:** `dbwise credential list` shows the imported credentials with their
-password sources, the keychain among them, and the doctor reports no `NO HOST`, `NO USER` or `AUTH
+password sources, the keychain among them, and the `doctor` reports no `NO HOST`, `NO USER` or `AUTH
 FAILED`. A password from Vault goes to the OS keychain only, never to `config.json`.
 
 Without `--from-vault`, `dbwise import team.json` merges the file and asks for the passwords it
@@ -166,19 +166,19 @@ installed in it. `app_owner` stands for the role that owns the application's tab
 
 At `read` and at `diagnose` the role has to:
 
-- be a login role without SUPERUSER, BYPASSRLS, CREATEROLE, CREATEDB and REPLICATION;
+- be a login role without `SUPERUSER`, `BYPASSRLS`, `CREATEROLE`, `CREATEDB` and `REPLICATION`;
 - own nothing in the database: no database, schema, table, view, sequence or function;
 - hold no write grant on any relation outside the system schemas, from any source. That counts
-  INSERT, UPDATE, DELETE and TRUNCATE on tables and views, INSERT and UPDATE on a single column,
-  MAINTAIN on PostgreSQL 17 and later, and USAGE or UPDATE on a sequence. A grant to `PUBLIC` counts
-  too, because `PUBLIC` is part of every role;
+  `INSERT`, `UPDATE`, `DELETE` and `TRUNCATE` on tables and views, `INSERT` and `UPDATE` on a single
+  column, `MAINTAIN` on PostgreSQL 17 and later, and `USAGE` or `UPDATE` on a sequence. A grant to
+  `PUBLIC` counts too, because `PUBLIC` is part of every role;
 - be a member of no role except the predefined `pg_*` roles, and of none of `pg_write_all_data`,
   `pg_signal_backend`, `pg_maintain`, `pg_read_server_files`, `pg_write_server_files`,
   `pg_execute_server_program`, `pg_checkpoint` and `pg_create_subscription`. Membership in an
   application's role lets the member cancel and terminate that role's sessions (verified on
   PostgreSQL 17.11) and passes on what that role owns and is granted;
-- be unable to execute the functions of the `dblink` extension and hold no USAGE on a foreign
-  server. On a database with `dblink` installed and its default grants, this takes the REVOKE in
+- be unable to execute the functions of the `dblink` extension and hold no `USAGE` on a foreign
+  server. On a database with `dblink` installed and its default grants, this takes the `REVOKE` in
   step 5.
 
 At `read` the role must not be a member of `pg_monitor`, `pg_read_all_stats` or
@@ -233,7 +233,7 @@ of them.
 
 ### 3. Grant the `diagnose` role
 
-The `diagnose` role gets the same reach as `read`, SELECT on sequences, and `pg_monitor`:
+The `diagnose` role gets the same reach as `read`, `SELECT` on sequences, and `pg_monitor`:
 
 ```sql
 GRANT CONNECT ON DATABASE app TO dbwise_diagnose;
@@ -251,13 +251,13 @@ GRANT pg_monitor TO dbwise_diagnose;
 `pg_stat_statements`. It does not let it cancel or terminate other roles' sessions (verified on
 PostgreSQL 17.11).
 
-Grant SELECT on sequences and never USAGE. `analyze_db_health` reads each sequence to see how much
-of its range is used, and without SELECT it lists those sequences as not checked. USAGE would let
-the role call `nextval`, and the gate counts USAGE on a sequence as a write grant, so the alias
-would be refused. `pg_read_all_data` instead of these grants gives the same SELECT on sequences
-without USAGE (verified on PostgreSQL 17.11).
+Grant `SELECT` on sequences and never `USAGE`. `analyze_db_health` reads each sequence to see how
+much of its range is used, and without `SELECT` it lists those sequences as not checked. `USAGE`
+would let the role call `nextval`, and the gate counts `USAGE` on a sequence as a write grant, so
+the alias would be refused. `pg_read_all_data` instead of these grants gives the same `SELECT` on
+sequences without `USAGE` (verified on PostgreSQL 17.11).
 
-hypopg 1.4.3 grants its views of hypothetical indexes to their owner only. The schema grants above
+`hypopg` 1.4.3 grants its views of hypothetical indexes to their owner only. The schema grants above
 cover them when the extension already exists in `public`. If `hypopg` is created later, grant them
 in the database with the extension:
 
@@ -265,7 +265,7 @@ in the database with the extension:
 GRANT SELECT ON hypopg_list_indexes, hypopg_hidden_indexes TO dbwise_diagnose;
 ```
 
-If `hypopg` lives in another schema, name the schema, and grant USAGE on it to every dbWise role:
+If `hypopg` lives in another schema, name the schema, and grant `USAGE` on it to every dbWise role:
 after each call the server resets hypothetical indexes through that schema's functions, on the pools
 of all levels.
 
@@ -298,13 +298,13 @@ because a session can change some of them. On PostgreSQL 17.11 a session of a pl
 statements that change them, which is what keeps the agent from doing it. The guarantee is the
 grants above and the role gate.
 
-### 5. Revoke the functions that PUBLIC may execute
+### 5. Revoke the functions that `PUBLIC` may execute
 
 PostgreSQL lets every role execute `pg_logical_emit_message`, the `pg_advisory_*` and
 `pg_try_advisory_*` functions and, once the extension is installed, the `dblink` functions. dbWise
-refuses to call them from `read` and `diagnose`, and the REVOKE closes them at the database as well.
-It is required for `dblink`: without it the gate refuses the `read` and `diagnose` aliases of a
-database where `dblink` is installed.
+refuses to call them from `read` and `diagnose`, and the `REVOKE` closes them at the database as
+well. It is required for `dblink`: without it the gate refuses the `read` and `diagnose` aliases of
+a database where `dblink` is installed.
 
 The signatures differ between PostgreSQL versions (17 added an argument to
 `pg_logical_emit_message`), so generate the statements from the catalog instead of typing them. In
@@ -327,7 +327,7 @@ WHERE e.extname = 'dblink' AND d.classid = 'pg_proc'::regclass AND d.deptype = '
 
 `\gexec` runs each row as a statement. The `dblink` part selects the extension's own functions, so
 it never touches yours. Running the statement again is harmless. `dbwise doctor` prints the same
-REVOKE for the PostgreSQL function it finds executable by `PUBLIC`, as an `advice:` line.
+`REVOKE` for the PostgreSQL function it finds executable by `PUBLIC`, as an `advice:` line.
 
 A database created later from `template1` copies its catalog, so running the statement in
 `template1` as well makes new databases start revoked (verified on PostgreSQL 17.11). On a managed
@@ -364,14 +364,14 @@ ALTER DEFAULT PRIVILEGES FOR ROLE app_owner IN SCHEMA public
   GRANT USAGE ON SEQUENCES TO dbwise_write;
 ```
 
-Give the password with `\password dbwise_write`. Add CREATE on the schema, or ownership, only for an
-alias whose agent is meant to run DDL. Do not reuse the `write` role for `read` or `diagnose`: the
-gate would refuse it.
+Give the password with `\password dbwise_write`. Add `CREATE` on the schema, or ownership, only for
+an alias whose agent is meant to run DDL. Do not reuse the `write` role for `read` or `diagnose`:
+the gate would refuse it.
 
 ### 7. Point dbWise at the roles and check
 
-Add the credentials and the alias as in [Add an alias](#add-an-alias) and [Give an agent diagnose on
-a production database](#give-an-agent-diagnose-on-a-production-database-with-its-own-role). Then
+Add the credentials and the alias as in [Add an alias](#add-an-alias) and [Give an agent `diagnose`
+on a production database](#give-an-agent-diagnose-on-a-production-database-with-its-own-role). Then
 run:
 
 ```
@@ -382,4 +382,4 @@ dbwise doctor --alias prod
 name it, shows `role check (<level>, enforce): passed in <n> ms`, with the alias's level, once for
 each login of the alias; the discovery database is checked for the `read` login only. A refused role
 shows `REFUSED:` with every reason, and the [troubleshooting
-page](troubleshooting.md#an-alias-is-unreachable) gives the grant or REVOKE that clears each one.
+page](troubleshooting.md#an-alias-is-unreachable) gives the grant or `REVOKE` that clears each one.

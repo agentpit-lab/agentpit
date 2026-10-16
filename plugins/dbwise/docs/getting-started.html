@@ -4,6 +4,88 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
+<meta name="pb-twin" content="uk/getting-started.html">
+<script>
+// Language choice: remembered per viewer, followed from the browser on the first visit.
+// Inlined as the first script in <head>, so it runs before the body exists: the counterpart
+// comes from <meta name="pb-twin">, which the build writes before this script and omits when the
+// other language is a placeholder.
+;(() => {
+  const KEY = 'pb:lang'
+  const meta = name => {
+    const m = document.querySelector(`meta[name="${name}"]`)
+    return m ? m.getAttribute('content') : null
+  }
+  const valid = v => (v === 'uk' || v === 'en' ? v : null)
+
+  // A read alone cannot tell blocked storage from empty storage, and a redirect without a working
+  // store would bounce the reader back on every page.
+  let works = false
+  try {
+    localStorage.setItem(KEY + '-probe', '1')
+    localStorage.removeItem(KEY + '-probe')
+    works = true
+  } catch { /* storage blocked */ }
+
+  function preferred() {
+    try {
+      const stored = valid(localStorage.getItem(KEY))
+      if (stored) return stored
+    } catch { /* storage blocked */ }
+    for (const tag of navigator.languages || []) {
+      const primary = valid(String(tag).toLowerCase().split('-')[0])
+      if (primary) return primary
+    }
+    return 'en'
+  }
+
+  // A redirect carries ?pb-lang=<language>. Where each file has its own storage (some browsers
+  // scope localStorage per file:// file) the two pages can disagree forever; a page that arrives
+  // through a hop trusts it, stores it and never redirects, so a hop happens at most once.
+  const hop = (/[?&]pb-lang=([^&#]*)/.exec(location.search || '') || [])[1]
+  const hopped = valid(hop)
+  const marked = (href, code) => href.split('#')[0].split('?')[0] + '?pb-lang=' + code + location.hash
+
+  const twin = meta('pb-twin')
+  if (hop !== undefined) {
+    if (hopped && works) {
+      try { localStorage.setItem(KEY, hopped) } catch { /* storage blocked */ }
+    }
+    try {
+      if (typeof history !== 'undefined' && history.replaceState) {
+        const rest = (location.search || '').slice(1).split('&').filter(p => p && !p.startsWith('pb-lang='))
+        history.replaceState(history.state, '', location.pathname + (rest.length ? '?' + rest.join('&') : '') + location.hash)
+      }
+    } catch { /* a refused rewrite must not stop the click listener below */ }
+  }
+
+  // Going Back to the page the reader just left reruns this script with the stored choice, which
+  // would send the reader forward again and make Back unusable.
+  let traversal = false
+  try {
+    const entry = performance.getEntriesByType && performance.getEntriesByType('navigation')[0]
+    traversal = !!entry && entry.type === 'back_forward'
+  } catch { /* no navigation timing */ }
+
+  if (!hopped && !traversal && works && twin && preferred() !== document.documentElement.getAttribute('lang')) {
+    location.replace(marked(twin, preferred()))
+  }
+
+  document.addEventListener('click', event => {
+    const link = event.target && event.target.closest && event.target.closest('nav[data-pb-lang] a')
+    if (!link) return
+    const code = valid(link.getAttribute('hreflang'))
+    const href = link.getAttribute('href')
+    // The English page of a placeholder is a way out of an empty page, not a choice of language.
+    if (code && !(code === 'en' && meta('pb-placeholder'))) {
+      try { localStorage.setItem(KEY, code) } catch { /* storage blocked */ }
+      if (href) link.setAttribute('href', marked(href, code))
+    } else if (href) {
+      link.setAttribute('href', href.split('#')[0].split('?')[0] + location.hash)
+    }
+  })
+})()
+</script>
 <title>Getting started with dbWise</title>
 <style>
 /* Layout: page sections on the left, the reading column in the middle, the glossary on the right;
@@ -326,6 +408,13 @@ footer.page-foot { margin-top: var(--space-7); padding-top: var(--space-4); bord
 @media (max-width: 600px) { .term-list { grid-template-columns: minmax(0, 1fr); gap: var(--space-1); } .term-list dd { margin-bottom: var(--space-3); } }
 .side .theme-switch { justify-self: start; }
 
+/* Language switch: two plain links that look like the theme segment, current one pressed. */
+[data-pb-lang] { display: inline-flex; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface-2); padding: 2px; gap: 2px; }
+.side [data-pb-lang] { justify-self: start; }
+.side [data-pb-lang] a { font-size: var(--step--1); color: var(--muted); text-decoration: none; padding: 0.3em 0.8em; border-radius: 4px; }
+.side [data-pb-lang] a:hover { color: var(--ink); }
+.side [data-pb-lang] a[aria-current="page"] { background: var(--surface); color: var(--ink); box-shadow: 0 0 0 1px var(--line); font-weight: 600; }
+
 /* List and detail: moments in order on the left, the chosen one in full on the right. */
 .md { display: grid; gap: var(--space-4); }
 @media (min-width: 640px) { .md { grid-template-columns: 172px minmax(0, 1fr); align-items: start; } }
@@ -452,52 +541,53 @@ ol.walker, ol.walker ol { padding-left: 1.4em; display: grid; gap: var(--space-2
 <body>
 <div class="doc">
   <aside class="side">
-    <div class="brand"><span class="mono">dbWise</span><nav class="series" aria-label="pages in this series"><a href="getting-started.html" aria-current="page">Getting started</a><a href="how-to.html">How-to guides</a><a href="explanation.html">Explanation</a><a href="reference.html">Reference</a><a href="troubleshooting.html">Troubleshooting</a><a href="limitations.html">Limitations</a></nav></div>
+    <div class="brand"><span class="mono" translate="no">dbWise</span><nav class="series" aria-label="pages in this series"><a href="getting-started.html" aria-current="page">Getting started</a><a href="how-to.html">How-to guides</a><a href="explanation.html">Explanation</a><a href="reference.html">Reference</a><a href="troubleshooting.html">Troubleshooting</a><a href="limitations.html">Limitations</a></nav></div>
     <nav data-pb-nav aria-label="Sections"><ol><li><a href="#install">Install</a></li><li><a href="#read">One alias at read</a></li><li><a href="#diagnose">Raise to diagnose</a></li><li><a href="#levels">What each level may run</a></li><li><a href="#terms">Terms</a></li><li><a href="#next">Next</a></li></ol></nav>
+    <nav data-pb-lang aria-label="Language"><a href="getting-started.html" hreflang="en" lang="en" aria-current="page">En</a><a href="uk/getting-started.html" hreflang="uk" lang="uk">Uk</a></nav>
     <div data-pb-theme></div>
   </aside>
 
   <main class="stack-lg">
     <header class="page-head">
       <h1>Getting started with dbWise</h1>
-      <p class="lede">dbWise gives an agent access to PostgreSQL databases at three levels: read, diagnose and write. Every alias has a level and its own logins, and at read and diagnose dbWise checks the database role behind each login.</p>
-      <p class="tldr"><strong>TL;DR</strong>Install the plugin, add one alias at read with its own database login, and run <code>dbwise doctor</code>. Raise the alias to diagnose only when the agent should read plans and index advice, and give that level a login of its own.</p>
+      <p class="lede">dbWise gives an agent access to PostgreSQL databases at three levels: <code>read</code>, <code>diagnose</code> and <code>write</code>. Every alias has a level and its own logins, and at <code>read</code> and <code>diagnose</code> dbWise checks the database role behind each login.</p>
+      <p class="tldr"><strong>TL;DR</strong>Install the plugin, add one alias at <code>read</code> with its own database login, and run <code>dbwise doctor</code>. Raise the alias to <code>diagnose</code> only when the agent should read plans and index advice, and give that level a login of its own.</p>
     </header>
 
     <section id="install" aria-labelledby="h-install" data-nav="Install">
       <div class="section-head"><h2 id="h-install">Install</h2></div>
       <ol class="steps">
-        <li><div><h3>Install the plugin</h3><div class="cmd">/plugin install dbwise@agentpit</div><p class="muted">The marketplace is agentpit. The install adds the MCP server <code>plugin:dbwise:postgres</code>, the <code>/dbwise:config</code> and <code>/dbwise:doctor</code> skills, and the <code>dbwise</code> command, which is on the PATH of the agent&#x27;s Bash tool.</p></div></li>
-        <li><div><h3>Start a session</h3><p class="muted">The first start builds the server&#x27;s Python environment and needs a route to PyPI. Until it finishes, the server offers a single dbwise_status tool that says what it is waiting for.</p></div></li>
+        <li><div><h3>Install the plugin</h3><div class="cmd">/plugin install dbwise@agentpit</div><p class="muted">The marketplace is agentpit. The install adds the MCP server <code>plugin:dbwise:postgres</code>, the <code>/dbwise:config</code> and <code>/dbwise:doctor</code> skills, and the <code>dbwise</code> command, which is on the <code>PATH</code> of the agent&#x27;s Bash tool.</p></div></li>
+        <li><div><h3>Start a session</h3><p class="muted">The first start builds the server&#x27;s Python environment and needs a route to PyPI. Until it finishes, the server offers a single <code>dbwise_status</code> tool that says what it is waiting for.</p></div></li>
         <li><div><h3>Check the server</h3><div class="cmd">/mcp</div><p class="muted">Open the list of servers. `plugin:dbwise:postgres` should be connected. The server reads its configuration once, when it starts, so reconnect it after every change to the configuration.</p></div></li>
       </ol>
     </section>
 
     <section id="read" aria-labelledby="h-read" data-nav="One alias at read">
       <div class="section-head">
-        <h2 id="h-read">One alias at read</h2>
-        <p class="muted">An alias is the name the agent uses in a tool call. It points at a server and has a level, read unless you say otherwise.</p>
+        <h2 id="h-read">One alias at <code>read</code></h2>
+        <p class="muted">An alias is the name the agent uses in a tool call. It points at a server and has a level, <code>read</code> unless you say otherwise.</p>
       </div>
       <ol class="steps">
         <li><div><h3>Describe the server</h3><div class="cmd">dbwise server add main --host db.example.com --databases app</div><p class="muted">The host and the databases the agent may use. The port defaults to 5432 and the SSL mode to require.</p></div></li>
         <li><div><h3>Describe the login</h3><div class="cmd">dbwise credential add main-read --user dbwise_read</div><p class="muted">A credential holds the database user and where its password lives. It never holds the password.</p></div></li>
-        <li><div><h3>Type the password</h3><div class="cmd">dbwise set-password main-read</div><p class="muted">Run this in a terminal. <code>dbwise</code> is on the PATH of the agent&#x27;s Bash tool only, so <code>dbwise credential add</code> prints the exact command line to run in a terminal on your system. On Windows use PowerShell or cmd, since Git Bash cannot hide typed input. The command asks with the input hidden and stores the password in the operating system keychain. A password never goes through the chat.</p></div></li>
+        <li><div><h3>Type the password</h3><div class="cmd">dbwise set-password main-read</div><p class="muted">Run this in a terminal. <code>dbwise</code> is on the <code>PATH</code> of the agent&#x27;s Bash tool only, so <code>dbwise credential add</code> prints the exact command line to run in a terminal on your system. On Windows use PowerShell or cmd, since Git Bash cannot hide typed input. The command asks with the input hidden and stores the password in the operating system keychain. A password never goes through the chat.</p></div></li>
         <li><div><h3>Create the alias</h3><div class="cmd">dbwise alias add main main --level read --credential main-read</div><p class="muted">Name the alias, the server, the level and the credential.</p></div></li>
-        <li><div><h3>Check the setup</h3><div class="cmd">dbwise doctor</div><p class="muted">Reconnect the server, then run the doctor. It checks the keychain, the Python environment and every alias, and ends with a verdict line that reads ready when all is well.</p></div></li>
+        <li><div><h3>Check the setup</h3><div class="cmd">dbwise doctor</div><p class="muted">Reconnect the server, then run the <code>doctor</code>. It checks the keychain, the Python environment and every alias, and ends with a verdict line that reads ready when all is well.</p></div></li>
       </ol>
       <div class="callout"><p>The login&#x27;s database role has to pass the role gate, so a superuser or an owner of tables is refused. The how-to guide has the SQL that creates a role that passes. <a href="how-to.html#create-the-database-roles-for-dbwise">Create the database roles for dbWise</a></p></div>
     </section>
 
     <section id="diagnose" aria-labelledby="h-diagnose" data-nav="Raise to diagnose">
       <div class="section-head">
-        <h2 id="h-diagnose">Raise to diagnose</h2>
-        <p class="muted">At diagnose the agent may also run EXPLAIN with ANALYZE, health checks, top queries and index advice. The diagnose level can use a database role of its own, so you can revoke it without touching read.</p>
+        <h2 id="h-diagnose">Raise to <code>diagnose</code></h2>
+        <p class="muted">At <code>diagnose</code> the agent may also run <code>EXPLAIN</code> with <code>ANALYZE</code>, health checks, top queries and index advice. The <code>diagnose</code> level can use a database role of its own, so you can revoke it without touching <code>read</code>.</p>
       </div>
       <ol class="steps">
-        <li><div><h3>Create the second role</h3><p class="muted">A diagnose role is a member of pg_monitor, and a read role should not be: the gate refuses a pg_monitor member on an alias at read. The how-to guide has both recipes.</p></div></li>
+        <li><div><h3>Create the second role</h3><p class="muted">A <code>diagnose</code> role is a member of <code>pg_monitor</code>, and a <code>read</code> role should not be: the gate refuses a <code>pg_monitor</code> member on an alias at <code>read</code>. The how-to guide has both recipes.</p></div></li>
         <li><div><h3>Add its credential</h3><div class="cmd">dbwise credential add main-monitor --user dbwise_diagnose</div><p class="muted">Then type its password with <code>dbwise set-password</code>, as for the first one.</p></div></li>
         <li><div><h3>Replace the alias</h3><div class="cmd">dbwise alias add main main --level diagnose --credential read=main-read --credential diagnose=main-monitor</div><p class="muted">The alias names one credential for each level up to its own. The same command replaces the alias of that name.</p></div></li>
-        <li><div><h3>Check it</h3><div class="cmd">dbwise doctor --alias main</div><p class="muted">Reconnect the server first. The doctor prints a role check line for each credential and database of the alias, and for the discovery database.</p></div></li>
+        <li><div><h3>Check it</h3><div class="cmd">dbwise doctor --alias main</div><p class="muted">Reconnect the server first. The <code>doctor</code> prints a role check line for each credential and database of the alias, and for the discovery database.</p></div></li>
       </ol>
     </section>
 
@@ -510,9 +600,9 @@ ol.walker, ol.walker ol { padding-left: 1.4em; display: grid; gap: var(--space-2
         <div class="control">
           <span class="label" id="l-level">Alias level</span>
           <div class="seg" id="level-switch" role="group" aria-labelledby="l-level">
-            <button type="button" data-value="read" aria-pressed="true">read</button>
-            <button type="button" data-value="diagnose" aria-pressed="false">diagnose</button>
-            <button type="button" data-value="write" aria-pressed="false">write</button>
+            <button type="button" data-value="read" aria-pressed="true" translate="no">read</button>
+            <button type="button" data-value="diagnose" aria-pressed="false" translate="no">diagnose</button>
+            <button type="button" data-value="write" aria-pressed="false" translate="no">write</button>
           </div>
         </div>
         <p id="level-about"></p>
@@ -538,7 +628,7 @@ ol.walker, ol.walker ol { padding-left: 1.4em; display: grid; gap: var(--space-2
     <section id="next" aria-labelledby="h-next" data-nav="Next">
       <div class="section-head"><h2 id="h-next">Next</h2></div>
       <div class="grid-auto">
-        <a class="panel next" href="how-to.html"><strong>How-to guides</strong><span class="muted">Add an alias, raise it to diagnose, import credentials from a team file, create the database roles.</span></a>
+        <a class="panel next" href="how-to.html"><strong>How-to guides</strong><span class="muted">Add an alias, raise it to <code>diagnose</code>, import credentials from a team file, create the database roles.</span></a>
         <a class="panel next" href="explanation.html"><strong>How the levels are enforced</strong><span class="muted">Which layer guarantees what, and what each level&#x27;s SQL policy admits.</span></a>
         <a class="panel next" href="troubleshooting.html"><strong>Troubleshooting</strong><span class="muted">Start from a symptom: the server does not start, an alias is refused, a tool is missing.</span></a>
         <a class="panel next" href="limitations.html"><strong>Limitations</strong><span class="muted">What dbWise cannot do, and what still works.</span></a>
@@ -548,8 +638,8 @@ ol.walker, ol.walker ol { padding-left: 1.4em; display: grid; gap: var(--space-2
     <footer class="page-foot"><span>dbWise is part of the agentpit marketplace.</span></footer>
   </main>
 </div>
-<script type="application/json" id="pb-strings">{"allowed":"allowed","diagnose_lede":"At diagnose the agent may also run EXPLAIN with ANALYZE, health checks, top queries and index advice. The diagnose level can use a database role of its own, so you can revoke it without touching read.","diagnose_step1_body":"A diagnose role is a member of pg_monitor, and a read role should not be: the gate refuses a pg_monitor member on an alias at read. The how-to guide has both recipes.","diagnose_step1_title":"Create the second role","diagnose_step2_body":"Then type its password with `dbwise set-password`, as for the first one.","diagnose_step2_title":"Add its credential","diagnose_step3_body":"The alias names one credential for each level up to its own. The same command replaces the alias of that name.","diagnose_step3_title":"Replace the alias","diagnose_step4_body":"Reconnect the server first. The doctor prints a role check line for each credential and database of the alias, and for the discovery database.","diagnose_step4_title":"Check it","diagnose_title":"Raise to diagnose","foot":"dbWise is part of the agentpit marketplace.","hero_lede":"dbWise gives an agent access to PostgreSQL databases at three levels: read, diagnose and write. Every alias has a level and its own logins, and at read and diagnose dbWise checks the database role behind each login.","install_step1_body":"The marketplace is agentpit. The install adds the MCP server `plugin:dbwise:postgres`, the `/dbwise:config` and `/dbwise:doctor` skills, and the `dbwise` command, which is on the PATH of the agent's Bash tool.","install_step1_title":"Install the plugin","install_step2_body":"The first start builds the server's Python environment and needs a route to PyPI. Until it finishes, the server offers a single dbwise_status tool that says what it is waiting for.","install_step2_title":"Start a session","install_step3_body":"Open the list of servers. `plugin:dbwise:postgres` should be connected. The server reads its configuration once, when it starts, so reconnect it after every change to the configuration.","install_step3_title":"Check the server","install_title":"Install","level_any":"any","levels_col_here":"At this alias level","levels_col_needs":"Level of the tool","levels_col_tool":"Tool","levels_lede":"Pick a level to see which tools an alias at that level can call. The table is read from the plugin's own tool list.","levels_note":"A tool is registered only when at least one alias admits it. A call that its alias's level does not allow sends nothing to the database.","levels_switch_label":"Alias level","levels_title":"What each level may run","login_diagnose":"Logs in with the diagnose credential for the diagnose tools. read_sql keeps using the read credential.","login_read":"Logs in with the alias's read credential.","login_write":"Logs in with the write credential for write_sql. The other tools use the credential of their own level.","nav_label":"Getting started","next_explanation":"How the levels are enforced","next_explanation_body":"Which layer guarantees what, and what each level's SQL policy admits.","next_howto":"How-to guides","next_howto_body":"Add an alias, raise it to diagnose, import credentials from a team file, create the database roles.","next_limitations":"Limitations","next_limitations_body":"What dbWise cannot do, and what still works.","next_reference":"Reference","next_reference_body":"Every command, tool, option and text.","next_title":"Next","next_trouble":"Troubleshooting","next_trouble_body":"Start from a symptom: the server does not start, an alias is refused, a tool is missing.","read_lede":"An alias is the name the agent uses in a tool call. It points at a server and has a level, read unless you say otherwise.","read_role_body":"The login's database role has to pass the role gate, so a superuser or an owner of tables is refused. The how-to guide has the SQL that creates a role that passes.","read_role_link":"Create the database roles for dbWise","read_step1_body":"The host and the databases the agent may use. The port defaults to 5432 and the SSL mode to require.","read_step1_title":"Describe the server","read_step2_body":"A credential holds the database user and where its password lives. It never holds the password.","read_step2_title":"Describe the login","read_step3_body":"Run this in a terminal. `dbwise` is on the PATH of the agent's Bash tool only, so `dbwise credential add` prints the exact command line to run in a terminal on your system. On Windows use PowerShell or cmd, since Git Bash cannot hide typed input. The command asks with the input hidden and stores the password in the operating system keychain. A password never goes through the chat.","read_step3_title":"Type the password","read_step4_body":"Name the alias, the server, the level and the credential.","read_step4_title":"Create the alias","read_step5_body":"Reconnect the server, then run the doctor. It checks the keychain, the Python environment and every alias, and ends with a verdict line that reads ready when all is well.","read_step5_title":"Check the setup","read_title":"One alias at read","refused":"refused","series_label":"pages in this series","terms_lede":"Four words the guides use all the time.","terms_title":"Terms","theme_dark":"Dark","theme_label":"Page theme","theme_light":"Light","theme_system":"System","title":"Getting started with dbWise","tldr_body":"Install the plugin, add one alias at read with its own database login, and run `dbwise doctor`. Raise the alias to diagnose only when the agent should read plans and index advice, and give that level a login of its own.","tldr_label":"TL;DR","toc_diagnose":"Raise to diagnose","toc_install":"Install","toc_label":"Sections","toc_levels":"What each level may run","toc_next":"Next","toc_read":"One alias at read","toc_terms":"Terms"}</script>
-<script type="application/json" id="pb-glossary">{"alias":{"name":"Alias","short":"The name the agent uses in a tool call. It points at a server and has a level, read unless you say otherwise, and a credential for each level up to that level."},"credential":{"name":"Credential","short":"A database user and the place its password lives: the OS keychain, an environment variable or a file. The configuration never holds the password."},"diagnose":{"name":"diagnose","short":"Everything at read, plus EXPLAIN with ANALYZE, health checks, top queries from pg_stat_statements and index advice. It can log in with a database role of its own, a member of pg_monitor."},"read":{"name":"read","short":"The default level. The agent looks at schemas and objects and runs SELECT and SHOW statements, in a read-only transaction with a 30-second timeout."},"role_check":{"name":"role_check","short":"A per-server setting, enforce by default. With warn, a refusal by the role gate becomes a warning and the alias still works, so the role layer of the guarantee is gone. Set it by hand in config.json."},"role_gate":{"name":"Role gate","short":"The check dbWise runs when a connection pool opens: one catalog query as the pool's role. A role that is a superuser, owns objects, holds a write grant, belongs to an application role or can run dblink is refused at read and diagnose."},"write":{"name":"write","short":"Everything at diagnose, plus any SQL, committed. Nothing but the database role limits it, so give that role only the grants the task needs."}}</script>
+<script type="application/json" id="pb-strings">{"allowed":"allowed","diagnose_lede":"At `diagnose` the agent may also run `EXPLAIN` with `ANALYZE`, health checks, top queries and index advice. The `diagnose` level can use a database role of its own, so you can revoke it without touching `read`.","diagnose_step1_body":"A `diagnose` role is a member of `pg_monitor`, and a `read` role should not be: the gate refuses a `pg_monitor` member on an alias at `read`. The how-to guide has both recipes.","diagnose_step1_title":"Create the second role","diagnose_step2_body":"Then type its password with `dbwise set-password`, as for the first one.","diagnose_step2_title":"Add its credential","diagnose_step3_body":"The alias names one credential for each level up to its own. The same command replaces the alias of that name.","diagnose_step3_title":"Replace the alias","diagnose_step4_body":"Reconnect the server first. The `doctor` prints a role check line for each credential and database of the alias, and for the discovery database.","diagnose_step4_title":"Check it","diagnose_title":"Raise to `diagnose`","foot":"dbWise is part of the agentpit marketplace.","hero_lede":"dbWise gives an agent access to PostgreSQL databases at three levels: `read`, `diagnose` and `write`. Every alias has a level and its own logins, and at `read` and `diagnose` dbWise checks the database role behind each login.","install_step1_body":"The marketplace is agentpit. The install adds the MCP server `plugin:dbwise:postgres`, the `/dbwise:config` and `/dbwise:doctor` skills, and the `dbwise` command, which is on the `PATH` of the agent's Bash tool.","install_step1_title":"Install the plugin","install_step2_body":"The first start builds the server's Python environment and needs a route to PyPI. Until it finishes, the server offers a single `dbwise_status` tool that says what it is waiting for.","install_step2_title":"Start a session","install_step3_body":"Open the list of servers. `plugin:dbwise:postgres` should be connected. The server reads its configuration once, when it starts, so reconnect it after every change to the configuration.","install_step3_title":"Check the server","install_title":"Install","lang_en":"En","lang_label":"Language","lang_uk":"Uk","level_any":"any","levels_col_here":"At this alias level","levels_col_needs":"Level of the tool","levels_col_tool":"Tool","levels_lede":"Pick a level to see which tools an alias at that level can call. The table is read from the plugin's own tool list.","levels_note":"A tool is registered only when at least one alias admits it. A call that its alias's level does not allow sends nothing to the database.","levels_switch_label":"Alias level","levels_title":"What each level may run","login_diagnose":"Logs in with the `diagnose` credential for the `diagnose` tools. `read_sql` keeps using the `read` credential.","login_read":"Logs in with the alias's `read` credential.","login_write":"Logs in with the `write` credential for `write_sql`. The other tools use the credential of their own level.","nav_label":"Getting started","next_explanation":"How the levels are enforced","next_explanation_body":"Which layer guarantees what, and what each level's SQL policy admits.","next_howto":"How-to guides","next_howto_body":"Add an alias, raise it to `diagnose`, import credentials from a team file, create the database roles.","next_limitations":"Limitations","next_limitations_body":"What dbWise cannot do, and what still works.","next_reference":"Reference","next_reference_body":"Every command, tool, option and text.","next_title":"Next","next_trouble":"Troubleshooting","next_trouble_body":"Start from a symptom: the server does not start, an alias is refused, a tool is missing.","read_lede":"An alias is the name the agent uses in a tool call. It points at a server and has a level, `read` unless you say otherwise.","read_role_body":"The login's database role has to pass the role gate, so a superuser or an owner of tables is refused. The how-to guide has the SQL that creates a role that passes.","read_role_link":"Create the database roles for dbWise","read_step1_body":"The host and the databases the agent may use. The port defaults to 5432 and the SSL mode to require.","read_step1_title":"Describe the server","read_step2_body":"A credential holds the database user and where its password lives. It never holds the password.","read_step2_title":"Describe the login","read_step3_body":"Run this in a terminal. `dbwise` is on the `PATH` of the agent's Bash tool only, so `dbwise credential add` prints the exact command line to run in a terminal on your system. On Windows use PowerShell or cmd, since Git Bash cannot hide typed input. The command asks with the input hidden and stores the password in the operating system keychain. A password never goes through the chat.","read_step3_title":"Type the password","read_step4_body":"Name the alias, the server, the level and the credential.","read_step4_title":"Create the alias","read_step5_body":"Reconnect the server, then run the `doctor`. It checks the keychain, the Python environment and every alias, and ends with a verdict line that reads ready when all is well.","read_step5_title":"Check the setup","read_title":"One alias at `read`","refused":"refused","series_label":"pages in this series","terms_lede":"Four words the guides use all the time.","terms_title":"Terms","theme_dark":"Dark","theme_label":"Page theme","theme_light":"Light","theme_system":"System","title":"Getting started with dbWise","tldr_body":"Install the plugin, add one alias at `read` with its own database login, and run `dbwise doctor`. Raise the alias to `diagnose` only when the agent should read plans and index advice, and give that level a login of its own.","tldr_label":"TL;DR","toc_diagnose":"Raise to diagnose","toc_install":"Install","toc_label":"Sections","toc_levels":"What each level may run","toc_next":"Next","toc_read":"One alias at read","toc_terms":"Terms"}</script>
+<script type="application/json" id="pb-glossary">{"alias":{"name":"Alias","short":"The name the agent uses in a tool call. It points at a server and has a level, `read` unless you say otherwise, and a credential for each level up to that level."},"credential":{"name":"Credential","short":"A database user and the place its password lives: the OS keychain, an environment variable or a file. The configuration never holds the password."},"diagnose":{"name":"diagnose","short":"Everything at `read`, plus `EXPLAIN` with `ANALYZE`, health checks, top queries from `pg_stat_statements` and index advice. It can log in with a database role of its own, a member of `pg_monitor`."},"read":{"name":"read","short":"The default level. The agent looks at schemas and objects and runs `SELECT` and `SHOW` statements, in a read-only transaction with a 30-second timeout."},"role_check":{"name":"role_check","short":"A per-server setting, enforce by default. With warn, a refusal by the role gate becomes a warning and the alias still works, so the role layer of the guarantee is gone. Set it by hand in `config.json`."},"role_gate":{"name":"Role gate","short":"The check dbWise runs when a connection pool opens: one catalog query as the pool's role. A role that is a superuser, owns objects, holds a write grant, belongs to an application role or can run `dblink` is refused at `read` and `diagnose`."},"write":{"name":"write","short":"Everything at `diagnose`, plus any SQL, committed. Nothing but the database role limits it, so give that role only the grants the task needs."}}</script>
 <script type="application/json" id="pb-facts">{"commands":[{"command":"dbwise alias","help":"the names a tool call uses to pick a server and a level"},{"command":"dbwise alias add","help":"add or replace an alias"},{"command":"dbwise alias rm","help":"remove an alias"},{"command":"dbwise alias list","help":"list aliases with their level and credential per level"},{"command":"dbwise server","help":"database endpoints"},{"command":"dbwise server add","help":"add or replace a server"},{"command":"dbwise server rm","help":"remove a server no alias uses"},{"command":"dbwise server list","help":"list servers"},{"command":"dbwise credential","help":"database logins"},{"command":"dbwise credential add","help":"add or replace a credential (keychain password by default)"},{"command":"dbwise credential rm","help":"remove a credential no alias uses"},{"command":"dbwise credential list","help":"list credentials and their password sources"},{"command":"dbwise import","help":"merge a team file into the local config, then ask missing passwords"},{"command":"dbwise export","help":"write the local config, or part of it, as a team file"},{"command":"dbwise set-password","help":"type a credential's password into the OS keychain, or point the credential to an env or file source"},{"command":"dbwise doctor","help":"check the keychain, the venv and every alias, and name the fix for each problem"}],"default_level":"read","env":["CLAUDE_PLUGIN_ROOT","DBWISE_ALIASES","DBWISE_BUILD_COMMAND","DBWISE_HOME","PATH","PATHEXT","VAULT_TOKEN"],"levels":["read","diagnose","write"],"tools":[{"aliases":["read","diagnose","write"],"level":"any","tool":"list_databases"},{"aliases":["read","diagnose","write"],"level":"any","tool":"reconnect"},{"aliases":["read","diagnose","write"],"level":"read","tool":"list_schemas"},{"aliases":["read","diagnose","write"],"level":"read","tool":"list_objects"},{"aliases":["read","diagnose","write"],"level":"read","tool":"get_object_details"},{"aliases":["read","diagnose","write"],"level":"read","tool":"read_sql"},{"aliases":["diagnose","write"],"level":"diagnose","tool":"explain_query"},{"aliases":["diagnose","write"],"level":"diagnose","tool":"get_top_queries"},{"aliases":["diagnose","write"],"level":"diagnose","tool":"analyze_db_health"},{"aliases":["diagnose","write"],"level":"diagnose","tool":"analyze_workload_indexes"},{"aliases":["diagnose","write"],"level":"diagnose","tool":"analyze_query_indexes"},{"aliases":["diagnose","write"],"level":"diagnose","tool":"diagnose_sql"},{"aliases":["write"],"level":"write","tool":"write_sql"}]}</script>
 <script type="application/json" id="pb-data">{}</script>
 <script>
@@ -944,7 +1034,7 @@ const PB = (() => {
 
     const show = level => {
       about.replaceChildren(...PB.rich(glossary[level]?.short ?? ''))
-      login.textContent = t(`login_${level}`)
+      login.replaceChildren(...PB.rich(t(`login_${level}`)))
       body.replaceChildren(...facts.tools.map(row => {
         const allowed = row.aliases.includes(level)
         return el('tr', { class: allowed ? 'on' : 'off' },
