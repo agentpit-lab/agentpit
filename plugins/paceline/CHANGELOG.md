@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.4 - 2026-10-18
+
+### Fixed
+
+- The reference lists `away` among the commands that do not take the common options; `paceline away`
+  accepts only `--session`.
+
 ## 0.4.3 - 2026-10-17
 
 ### Changed

@@ -63,7 +63,8 @@ dir>/bin/paceline.cmd` on Windows, or `python <plugin dir>/scripts/paceline.py`.
 
 ### Common options
 
-Every command except `cache-watch`, `context-watch`, and `usage-watch` accepts these options:
+Every command except `away`, `cache-watch`, `context-watch`, and `usage-watch` accepts these
+options:
 
 - `--json`: print the full result as JSON.
 - `--model ID`: the current model ID. It selects a model-scoped weekly bucket when the limits file

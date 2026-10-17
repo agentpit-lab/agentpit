@@ -60,8 +60,8 @@ Each plugin lives in `plugins/<name>/`: `README.md`, `CHANGELOG.md`, `docs/`, an
 
 Commands and skills:
 
-- `paceline` runs in the session's Bash tool. The skills `/paceline:pace`, `/paceline:cache-watch`,
-  `/paceline:context-watch`, and `/paceline:usage-watch` run its commands.
+- `paceline` runs in the session's Bash tool. The skills `/paceline:pace`, `/paceline:away`,
+  `/paceline:cache-watch`, `/paceline:context-watch`, and `/paceline:usage-watch` run its commands.
 - `/pitboard` opens a pane with every card of PitBoard's row.
 - `dbwise` runs in the session's Bash tool. The skills `/dbwise:config` and `/dbwise:doctor` set up aliases and
   find why one does not work. Until its Python environment is built, the server `plugin:dbwise:postgres`
