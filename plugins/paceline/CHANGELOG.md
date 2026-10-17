@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.3 - 2026-10-17
+
+### Changed
+
+- The hooks module passes the TypeScript check against Claude Code's engine types. The change is in
+  type annotations only; behaviour is the same.
+
 ## 0.4.2 - 2026-10-17
 
 ### Fixed
