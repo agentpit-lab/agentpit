@@ -19,7 +19,7 @@ through the inbox, `<state>/inbox/`:
 - **Exact readings.** While usage-watch is on, PaceLine asks Claude Code for the account's own
   usage, the figures `/usage` shows, with the model-scoped weekly limits. Claude Code adds the
   session's claude.ai login to the request; PaceLine never sees a token. The answer goes to
-  `<state>/inbox/usage-watch.json`.
+  `<state>/inbox/usage-watch-<key>.json`, one file per account (`unknown` when none is known).
 
 A merge takes the inbox into the limits file. It runs after every turn and at session start. While a
 session is open, the module also checks the inbox every 15 seconds and merges any change. A pace
@@ -64,11 +64,12 @@ figures at once, dated by their age.
 ### How usage-watch paces its requests
 
 Every open session with PaceLine checks at its start and then every 10 seconds whether a request is
-due: one is due when 125 seconds have passed since the last reading. The sessions of one Claude Code
-configuration directory share that schedule through `<state>/usage-watch.state.json`, so one reading
-serves them all. After an HTTP 429 answer, usage-watch waits one interval; after any other error, it
-waits 10 minutes. The switch is read on every check, so turning usage-watch on or off takes effect
-within 10 seconds, with no restart.
+due: one is due when 125 seconds have passed since the last reading. The sessions of one account
+share that schedule through `<state>/usage-watch.state-<key>.json`, so one reading serves them all;
+sessions of different accounts each have their own schedule and get their own reading every 125
+seconds. After an HTTP 429 answer, usage-watch waits one interval; after any other error, it waits
+10 minutes. The switch is read on every check, so turning usage-watch on or off takes effect within
+10 seconds, with no restart.
 
 usage-watch needs a claude.ai login and an open session. When Claude Code gives no login for the
 request, usage-watch sends nothing. While `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC` is set, Claude

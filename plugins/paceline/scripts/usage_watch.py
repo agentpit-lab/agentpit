@@ -4,7 +4,8 @@
 
 The reader itself is the plugin's function-hooks module (hooks/register.ts, hooks/usage.ts): it asks
 Claude Code for the figures /usage shows and writes them to the inbox. This script only writes the
-switch, <state>/usage-watch.json, and reads the module's <state>/usage-watch.state.json. It sends no
+switch, <state>/usage-watch.json, and reads the module's gate of the account it resolves,
+<state>/usage-watch.state-<key>.json (usage-watch.state-unknown.json with no account). It sends no
 request. Stdlib only, Python 3.9+.
 """
 import argparse
@@ -17,7 +18,6 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import limits_file  # noqa: E402
 
 SWITCH_FILE = "usage-watch.json"
-STATE_FILE = "usage-watch.state.json"
 
 
 def is_on(sd):
@@ -41,9 +41,11 @@ def cmd_switch(sd, on):
 
 
 def cmd_status(sd):
-    state = limits_file.read_json(sd / STATE_FILE) or {}
+    key = limits_file.resolve_account()[0] or limits_file.UNKNOWN_ACCOUNT
+    state = limits_file.read_json(sd / f"usage-watch.state-{key}.json") or {}
     error = state.get("last_error")
     print(f"usage-watch: {'on' if is_on(sd) else 'off'}")
+    print(f"account: {key}")
     print(f"last attempt: {when(state.get('last_attempt'))}")
     print(f"last success: {when(state.get('last_success'))}")
     print(f"last error: {error if isinstance(error, str) and error else 'none'}")

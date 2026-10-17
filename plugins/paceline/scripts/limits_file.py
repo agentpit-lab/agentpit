@@ -411,13 +411,25 @@ def write_json(path, data, compact=False):
             time.sleep(0.05)
 
 
+def remove_usage_watch_leftovers(sd):
+    """Delete the shared usage-watch.state.json, a leftover gate of every account; the gate is now one file per account."""
+    with contextlib.suppress(OSError):
+        (sd / "usage-watch.state.json").unlink()
+
+
 def read_inbox(sd):
     """The readings in <state>/inbox/; one older than INBOX_MAX_AGE is deleted.
 
-    A file caught half written reads as nothing and is taken at the next merge.
+    A file caught half written reads as nothing and is taken at the next merge. The shared
+    usage-watch.json of earlier releases is a leftover, since each account now has its own inbox
+    file, and is deleted unread.
     """
     out = []
     for path in sorted((sd / INBOX_DIR).glob("*.json")):
+        if path.name == "usage-watch.json":
+            with contextlib.suppress(OSError):
+                path.unlink()
+            continue
         with contextlib.suppress(OSError):
             if wall_clock().timestamp() - path.stat().st_mtime > INBOX_MAX_AGE.total_seconds():
                 path.unlink()
@@ -540,6 +552,7 @@ def merge_step(sd, now, lock_wait=0.0):
         previous = read_json(sd / "rate-limits.json")
         before = held_partitions(previous)
         partitions = dict(before)
+        remove_usage_watch_leftovers(sd)
         groups = {}
         for reading in read_inbox(sd):
             groups.setdefault(reading_account(reading), []).append(reading)

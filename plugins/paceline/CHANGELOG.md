@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.4.2 - 2026-10-17
+
+### Fixed
+
+- With two accounts in use at once, each account gets its own usage-watch reading every 125 seconds.
+  The gate and the inbox file are per account, `<state>/usage-watch.state-<key>.json` and
+  `<state>/inbox/usage-watch-<key>.json`, `<key>` being the account key (`unknown` for a session with
+  no account); before, a reading of one account closed the gate for the other, so one account's
+  partition could go without a reading. Two sessions of one account still share one request per
+  interval. The shared `usage-watch.state.json` and `inbox/usage-watch.json` of earlier releases are
+  removed by the next merge; the switch `usage-watch.json` stays one file for all accounts.
+- `paceline usage-watch status` reports the account it resolves, with a new line `account: <key>`
+  (or `account: unknown`) after the switch line, and reads that account's state file.
+
 ## 0.4.1 - 2026-10-17
 
 ### Added

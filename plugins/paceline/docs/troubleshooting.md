@@ -238,7 +238,9 @@ paceline usage-watch status
 ```
 
 - `last attempt: never` while the switch is on: no session is open, or Claude Code gives no login
-  for the request.
+  for the request. The status also reports the account on its `account:` line; when that names
+  another account than the session's (for example a plain terminal next to a Desktop session on
+  another account, or `unknown`), it shows that account's state, so run it from the session itself.
 - `last error: network error`: the request was refused or could not reach the server, for example
   because of `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC`.
 - `last error: HTTP <status>` or `unexpected response`: the endpoint answered with an error or a

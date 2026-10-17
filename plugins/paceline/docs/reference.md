@@ -255,8 +255,9 @@ Defaults: on, line on, warnings at 85% and 95%, snapshots kept 14 days.
 
 - `paceline usage-watch on` and `paceline usage-watch off` write the switch,
   `<state>/usage-watch.json`.
-- `paceline usage-watch status` prints the switch, the last attempt, the last success, and the last
-  error. Times are ISO 8601 in UTC, or `never`.
+- `paceline usage-watch status` prints the switch, the account whose state it reports (`account:
+  <key>`, or `account: unknown` when none is known), the last attempt, the last success, and the
+  last error of that account. Times are ISO 8601 in UTC, or `never`.
 
 ### away
 
@@ -451,7 +452,7 @@ first source of the time zone. A POSIX rule such as `CET-1CEST` is ignored.
 | `<state>/rate-limits.json` | The limits file, with one partition per account. |
 | `<state>/rate-limits.history.jsonl` (+ `.1`) | One limits record per line, appended when a value of an account's partition changes, rotated to `.1` past 1 MiB. |
 | `<state>/inbox/` | Limit readings, one file per writer and session. |
-| `<state>/inbox/usage-watch.json` | usage-watch's latest exact reading. |
+| `<state>/inbox/usage-watch-<key>.json` | usage-watch's latest exact reading of one account; `<key>` is the account key, or `unknown` when the session has no account. |
 | `<state>/inbox.seen` | The inbox state last handed to a merge, so open sessions do not merge it twice. |
 | `<state>/limits.lock` | The lock of the merge. |
 | `<state>/pace.json` | The pace switch, `{"on": true}` or `{"on": false}`. Missing means off. |
@@ -468,7 +469,7 @@ first source of the time zone. A POSIX rule such as `CET-1CEST` is ignored.
 | `<state>/night-power-state.json` | Power settings saved by `night-power.ps1 -Enable`. |
 | `<state>/context-watch.json` | context-watch settings: `on`, `line`, `levels`, `snapshot_days`. |
 | `<state>/usage-watch.json` | The usage-watch switch, `{"on": true}` or `{"on": false}`. Missing means off. |
-| `<state>/usage-watch.state.json` | usage-watch's `last_attempt`, `last_success` (milliseconds since 1970), and `last_error`. It holds no token. |
+| `<state>/usage-watch.state-<key>.json` | usage-watch's `last_attempt`, `last_success` (milliseconds since 1970), and `last_error` for one account; `<key>` is the account key, or `unknown` when the session has no account. It holds no token. |
 | `<CLAUDE_CONFIG_DIR>/.claude.json`, else `~/.claude.json` | Claude Code's own state file, read and never written, to name the signed-in account. When the process has both `CLAUDE_CODE_ACCOUNT_UUID` and `CLAUDE_CODE_ORGANIZATION_UUID` and the account variable is a UUID, as in a Claude Code Desktop session, PaceLine takes the account from them and reads this file only without them. PaceLine reads only `oauthAccount.accountUuid` and `oauthAccount.organizationUuid`, and stores only a 16-hex-digit SHA-256 key of the two. `~/.claude/.claude.json` is not it. |
 | `${CLAUDE_PLUGIN_DATA}/cache-watch/<session id>.json` | cache-watch state of one session. |
 | `${CLAUDE_PLUGIN_DATA}/cache-watch/defaults.json` | cache-watch defaults: `lead_minutes`, `max_wakes`. |

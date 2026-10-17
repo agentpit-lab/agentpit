@@ -24,8 +24,10 @@ export type ExactReading = {
 export type Outcome = { reading: ExactReading; at: number } | { error: string }
 
 export const usageSwitchPath = (stateDir: string) => `${stateDir}/usage-watch.json`
-export const usageGatePath = (stateDir: string) => `${stateDir}/usage-watch.state.json`
-export const usageInboxPath = (stateDir: string) => `${stateDir}/inbox/usage-watch.json`
+// One gate and one inbox file per account, so a reading of one account does not close the gate for
+// another. `key` is the 16-hex account key, or 'unknown' when none resolved.
+export const usageGatePath = (stateDir: string, key: string) => `${stateDir}/usage-watch.state-${key}.json`
+export const usageInboxPath = (stateDir: string, key: string) => `${stateDir}/inbox/usage-watch-${key}.json`
 
 const isObject = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v)
 const isNumber = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v)

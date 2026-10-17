@@ -226,14 +226,16 @@ async function usageTick($: EngineInterface) {
   try {
     const dir = await stateDir($)
     if (!switchOn(await textAt($, usageSwitchPath(dir)))) return
-    const gate = readGate(await textAt($, usageGatePath(dir)))
-    const now = await $.clock.now()
-    if (!gateOpen(gate, now, inboxObservedAt(await textAt($, usageInboxPath(dir))))) return
     const before = await accountOf($)
+    const key = before ?? 'unknown'
+    const gatePath = usageGatePath(dir, key)
+    const gate = readGate(await textAt($, gatePath))
+    const now = await $.clock.now()
+    if (!gateOpen(gate, now, inboxObservedAt(await textAt($, usageInboxPath(dir, key))))) return
     const auth = await $.session.authorize()
     if (!auth) return
-    // Recorded before the request, so other sessions see the gate closed while it runs.
-    await $.fs.write(usageGatePath(dir), JSON.stringify({ ...gate, last_attempt: now, last_error: null }))
+    // Recorded before the request, so other sessions of this account see the gate closed while it runs.
+    await $.fs.write(gatePath, JSON.stringify({ ...gate, last_attempt: now, last_error: null }))
     let outcome: Outcome
     try {
       const r = await $.http.fetch(USAGE_URL, { auth: auth.handle })
@@ -246,10 +248,10 @@ async function usageTick($: EngineInterface) {
       // A dropped reading leaves the gate as written before the request: the next try is one interval away.
       const tagged = tagOrDrop(outcome.reading, before, await accountOf($))
       if (!tagged) return
-      await $.fs.write(usageInboxPath(dir), JSON.stringify(tagged))
-      await $.fs.write(usageGatePath(dir), JSON.stringify({ last_attempt: now, last_success: outcome.at, last_error: null }))
+      await $.fs.write(usageInboxPath(dir, key), JSON.stringify(tagged))
+      await $.fs.write(gatePath, JSON.stringify({ last_attempt: now, last_success: outcome.at, last_error: null }))
     } else {
-      await $.fs.write(usageGatePath(dir), JSON.stringify({ ...gate, last_attempt: now, last_error: outcome.error }))
+      await $.fs.write(gatePath, JSON.stringify({ ...gate, last_attempt: now, last_error: outcome.error }))
     }
   } catch {
     // A failed file call: the next tick tries again.

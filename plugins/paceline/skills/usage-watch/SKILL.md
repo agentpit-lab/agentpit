@@ -25,7 +25,7 @@ If `paceline` is not found, run `python "${CLAUDE_PLUGIN_ROOT}/scripts/paceline.
 arguments.
 
 Then tell the operator, in one or two lines, what the command printed: the state, and for `status`
-the last success and the last error.
+the account it reports, the last success and the last error.
 
 Limits: usage-watch is off until you run `/paceline:usage-watch on`; it reads
 `https://api.anthropic.com/api/oauth/usage`, outside Anthropic's published API, so its answer can
