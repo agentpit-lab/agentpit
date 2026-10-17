@@ -162,6 +162,9 @@ new session.
 - The usage data is stale. If the agent only waits between calls, no session takes a turn, and
   without usage-watch the data does not refresh.
 - Five-hour usage is at the night threshold (95%) or the hard stop.
+- The five-hour burn rate would reach the night threshold (95%) before the window resets, and the
+  agent cap is 0. `reasons` then holds the burn reason, for example `5h burn 42.7%/h vs budget
+  13.9%/h: 95% at <time>, before reset <time>`.
 - An item is still `running`, or the next item's dependencies are not done. An item that was started
   and never marked done keeps the queue waiting.
 - No allowed model has weekly headroom for the item.
@@ -174,12 +177,13 @@ paceline auto --json
 paceline queue list
 ```
 
-`reasons` in the JSON names the cause, and `wait_until` is set while the five-hour window is full.
-`paceline queue list` shows items stuck in `running`.
+`reasons` in the JSON names the cause, and `wait_until` is set while the five-hour window is full or
+burning too fast. `paceline queue list` shows items stuck in `running`.
 
 **Fix:** for stale data, turn on usage-watch before the night. For an item stuck in `running`, run
 `paceline queue done <id>`, `paceline queue fail <id>`, or `paceline queue defer <id>`. For a full
-five-hour window, the queue resumes after `wait_until`. For no model with headroom, add a model to
+five-hour window, the queue resumes after `wait_until`. For a burn, run `paceline auto` again later:
+the queue starts as soon as the rate falls. For no model with headroom, add a model to
 `routine_models` or `models`, or lower the item's estimate when it was set too high.
 
 ## Status says account unknown

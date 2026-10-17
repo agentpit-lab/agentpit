@@ -33,6 +33,15 @@
             "command": "if python3 -c \"\" </dev/null >/dev/null 2>&1; then exec python3 \"${CLAUDE_PLUGIN_ROOT}/scripts/cache_watch.py\" hook prompt; fi; exec python \"${CLAUDE_PLUGIN_ROOT}/scripts/cache_watch.py\" hook prompt"
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "timeout": 5,
+            "command": "if python3 -c \"\" </dev/null >/dev/null 2>&1; then exec python3 \"${CLAUDE_PLUGIN_ROOT}/scripts/away.py\" hook prompt; fi; exec python \"${CLAUDE_PLUGIN_ROOT}/scripts/away.py\" hook prompt"
+          }
+        ]
       }
     ],
     "SessionEnd": [

@@ -44,6 +44,10 @@ them. PitBoard reads that file when it exists; it needs no setting for it.
 - With usage-watch on, each model-scoped limit appears in the limits group under its model's name,
   such as `Fable`, after the next usage-watch reading. If it does not, see [A model-scoped limit
   disappears](troubleshooting.md#a-model-scoped-limit-disappears).
+- When PaceLine's pace is on and the five-hour window would reach PaceLine's threshold before the
+  reset, the `5h limit` card shows a `Threshold` row with the threshold and the clock time, for
+  example `80% at 19:40`, instead of `Runs out`, and the limit turns red. Without a fresh burn file,
+  the card projects to 100% and shows `Runs out`.
 
 ## Move the state directory
 

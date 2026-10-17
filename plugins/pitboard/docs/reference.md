@@ -40,6 +40,7 @@ them.
 - Started in
 - State
 - TTL
+- Threshold
 - Turns
 - Turns left
 - Used
@@ -93,7 +94,7 @@ and picks the fullest style that fits the window:
 | Context | Auto-compact, Used, Left, Window, Turns left |
 | Cache | Countdown, TTL, If cold |
 | Cache hits | Last turn, Session |
-| 5h limit | Used, Resets in, Pace, Budget, At reset or Runs out, Account |
+| 5h limit | Used, Resets in, Pace, Budget, At reset, Runs out or Threshold, Account |
 | Week | Used, Resets, Pace, Budget, Week elapsed, Spare or Overspent, Account |
 | A model-scoped limit, titled by the model's name | Used, Resets, Account |
 | Advisor | Model, Main, State |
@@ -119,7 +120,11 @@ and picks the fullest style that fits the window:
   account could not be resolved, or the figures come from readings with no account. Figures from the
   session's own reply are never marked.
 - 5h limit: `At reset` gives the projected percentage at the reset. `Runs out` replaces it with the
-  clock time the limit reaches 100% when that comes before the reset.
+  clock time the limit reaches 100% when that comes before the reset. With PaceLine's projection,
+  `Threshold` takes the place of `Runs out`: it gives the threshold and the clock time the limit
+  reaches it, for example `80% at 19:40` (the threshold is 80% by day and 95% at night by default),
+  and `Budget` is the pace that reaches that threshold at the reset. See [Budget, At reset, Runs
+  out](explanation.md#budget-at-reset-runs-out).
 - Week: `Spare` or `Overspent` gives the distance from even pace in points and in hours of budget.
 - `ⓘ`: `Branch` shows only when the branch could be read; see [The Branch row is
   missing](troubleshooting.md#the-branch-row-is-missing). `API cost` is the session at API prices; a
@@ -158,7 +163,8 @@ one-hour and a five-minute TTL.
 
 - Context also turns act at three turns left or fewer, while auto-compact is on.
 - The five-hour limit also turns act when its Pace is above its Budget, because at that pace it runs
-  out before the reset. See [Colours](explanation.md#colours).
+  out before the reset. With PaceLine's projection, it turns act when PaceLine reports that the
+  window would reach its threshold before the reset. See [Colours](explanation.md#colours).
 - The weekly limit and each model-scoped limit use the same levels, from the percentage used only.
 - The cache levels follow from the TTL: watch below the lesser of 15 minutes and half the TTL, act
   below the lesser of 5 minutes and a fifth of the TTL. The countdown ends 5 seconds before the TTL.
@@ -172,6 +178,7 @@ Inside the cards, some rows have colours of their own:
 | 5h `Pace` above `Budget` | Red |
 | 5h `At reset` at 80% or more | Amber |
 | 5h `Runs out` | Red |
+| 5h `Threshold` | Red |
 | Week `Pace` above `Budget` | Amber |
 | Week `Overspent` | Amber; red past a day of budget (100/7, about 14.3 points) |
 | Advisor `State` `inactive`, `ⓘ` `Advisor` when inactive | Amber |
@@ -201,6 +208,7 @@ set and not empty, else `<config>/state/paceline`, the rule PaceLine uses.
 | `<state>/rate-limits.json` | Five-hour and weekly readings and model-scoped limits, from the partition of the signed-in account | At session start, after each turn, and every 20 seconds |
 | `<state>/rate-limits.history.jsonl` and its rotated `.1` | Earlier readings of the signed-in account, for Pace | At session start |
 | `<config>/.claude.json`, else `~/.claude.json` | The signed-in account, as a 16-hex-digit SHA-256 key of `oauthAccount.accountUuid` and `organizationUuid`; nothing else in the file | With the limits file |
+| `<state>/five-hour-burn.json` | PaceLine's projection of the five-hour limit to its threshold: the account, window and percentage it was computed for, the rate, the budget rate, the threshold and the time it is reached, and whether the burn is limited | With the limits file |
 | `<config>/projects/<start directory>/<session id>.jsonl` | Cache reads and writes since the last compaction; the TTL; the last request's time | At session start, after each turn, and after `/clear` or a resume |
 
 - The limits file and its history are PaceLine's; [PaceLine's
@@ -217,6 +225,11 @@ set and not empty, else `<config>/state/paceline`, the rule PaceLine uses.
   last 4 MB through `node`.
 - Until the first request reports an effort level, the effort comes from `modelSettings` or
   `effortLevel` in the settings Claude Code loaded.
+- The burn file is PaceLine's too; [its
+  format](../../paceline/docs/reference.md#the-five-hour-burn-file-for-readers) is the contract.
+  PitBoard uses it for the `5h limit` card only while it is at most 3 minutes old and matches the
+  signed-in account, the window and the percentage on the row. A missing or unreadable file draws
+  the row from PitBoard's own readings.
 
 PitBoard runs these processes, in the CLI and in Desktop:
 

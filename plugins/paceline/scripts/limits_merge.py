@@ -17,7 +17,13 @@ from limits_file import UTC, merge_step, paceline_dir, require_python, trace_fai
 
 def run(now):
     """One merge step without waiting for the lock. Returns its outcome line."""
-    return merge_step(paceline_dir(), now)[0]
+    sd = paceline_dir()
+    outcome, record = merge_step(sd, now)
+    if outcome == "ok: written":
+        # Imported here, under main()'s try: a snapshot module that fails to load is logged, never fatal.
+        import five_burn
+        five_burn.after_merge(sd, now, record)
+    return outcome
 
 
 def main():

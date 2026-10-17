@@ -103,15 +103,18 @@ cache while away](how-to.md#hold-the-cache-while-away).
 
 ### A hard limit refuses a launch in non-interactive runs
 
-At a hard limit, the hook before an Agent or Workflow launch asks you to confirm. In a `claude -p`
-run nobody can answer, and Claude Code denies such a request. This entry is from Claude Code's
-documentation, not tested here.
+At a hard limit, or over the agent cap while the five-hour window burns toward its threshold, the
+hook before an Agent or Workflow launch asks you to confirm. In a `claude -p` run nobody can answer,
+and Claude Code denies such a request. This entry is from Claude Code's documentation, not tested
+here.
 
-**What you see:** an Agent or Workflow launch at a hard limit fails in the run.
+**What you see:** an Agent or Workflow launch at a hard limit, or over the agent cap in the burn
+state, fails in the run. With a cap of 0, every launch fails.
 
-**What still works:** below the hard limits the `pace:` line is advice only, and the launch goes
-ahead. A night queue checks `paceline auto` before each item, and `auto` waits or stops at the same
-limits. See [The confirmation at a hard limit](explanation.md#the-confirmation-at-a-hard-limit).
+**What still works:** below the hard limits, and within the agent cap, the `pace:` line is advice
+only and the launch goes ahead. A night queue checks `paceline auto` before each item, and `auto`
+waits or stops at the same limits, and waits when the burn leaves no room for an agent. See [The
+confirmation at a hard limit](explanation.md#the-confirmation-at-a-hard-limit).
 
 ## context-watch
 
@@ -302,6 +305,66 @@ When pace cannot measure free memory, the memory checks do not apply.
 **What you see:** `/paceline:pace status` says `host memory unknown`.
 
 **What still works:** see [The recommendation](explanation.md#the-recommendation).
+
+### The five-hour burn rate needs 10 minutes of readings
+
+pace measures the five-hour burn rate from the readings of the current window, looking back 90
+minutes. The base reading must lie at least 10 minutes back; until then there is no rate. A window
+that has just reset, and a machine with no history yet, start without one.
+
+**What you see:** `paceline status --json` shows `"burn": null` under `five_hour`, no burn reason
+ends the status line, and the Agent and Workflow hook asks for no burn confirmation, however fast
+the percentage rises.
+
+**What still works:** the hard limits, the budget per hour, and the agent count work without the
+burn rule, and the burn rule starts once 10 minutes of readings exist. See [The five-hour burn
+rate](explanation.md#the-five-hour-burn-rate).
+
+### Launch reservations rest on the order of Claude Code's hooks
+
+The Agent and Workflow hook holds a `launch` reservation so that the launches of one assistant
+message count each other against the agent cap. Each `SubagentStart` of a session takes over the
+oldest `launch` reservation of that session, whichever launch it belongs to. The design assumes that
+Claude Code runs the `PreToolUse` hooks of one message before any `SubagentStart` of it. Claude Code
+does not document that order.
+
+**What you see:** an agent whose start carries no session ID gets no reservation of its own: its
+`launch` reservation counts it for 60 seconds, and then nothing counts it. When the starts of a
+Workflow, or any start while other launches of the same session are pending, take over the oldest
+reservation, a pending launch can lose its reservation before its own agent starts, and that agent
+stays out of the count until it starts. A launch that you decline in a prompt keeps its reservation
+for 60 seconds.
+
+**What still works:** the gate still asks or advises on the active reservations, and a launch
+reservation ends on its own after 60 seconds. See [Reservations](explanation.md#reservations).
+
+### A scheduled or injected prompt clears the away marker
+
+The hook that clears the away marker sees every prompt submitted to a session and cannot tell its
+source. It skips a cache-watch wake and the `/paceline:away` command, which it matches in the raw
+form (`/paceline:away` or `/away`) and in the form Claude Code expands into a `<command-name>` tag.
+Any other prompt counts as your message, including a prompt from a schedule or a loop, and one
+injected by another program. A form of the command that Claude Code passes differently clears the
+marker at once.
+
+**What you see:** `paceline away status` shows `away: off` soon after `paceline away on`, and a
+launch over the agent cap asks again.
+
+**What still works:** set the marker again after the prompt has run. A cache-watch wake keeps the
+marker. See [The away marker](explanation.md#the-away-marker).
+
+### The away marker has no expiry
+
+The away marker stays set until you send a message in any session or run `paceline away off`. It has
+no timeout, and one file serves every session. A marker set before you leave and never followed by a
+message stays on, and so do the denials it causes. Without the marker, a launch that would ask waits
+for your answer.
+
+**What you see:** `paceline away status` shows `away: on since <time>`, however long ago, and every
+launch that would ask is denied with a note that you are away.
+
+**What still works:** `paceline away off`, or any message of yours, clears it. See [The away
+marker](explanation.md#the-away-marker).
 
 ### Without the tzdata package, few time zones
 

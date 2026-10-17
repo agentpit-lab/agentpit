@@ -5,6 +5,7 @@
     paceline cache-watch ...         on, off, status, config
     paceline context-watch ...       config, status
     paceline usage-watch ...         on, off, status
+    paceline away ...                on, off, status
 
 bin/paceline and bin/paceline.cmd run this script. Stdlib only, Python 3.9+.
 """
@@ -30,6 +31,9 @@ def main(argv=None):
     if argv[:1] == ["usage-watch"]:
         import usage_watch
         return usage_watch.main(argv[1:])
+    if argv[:1] == ["away"]:
+        import away
+        return away.main(argv[1:])
     import pace
     return pace.main(argv)
 

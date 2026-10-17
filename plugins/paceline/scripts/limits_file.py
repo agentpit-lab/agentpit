@@ -547,6 +547,170 @@ def merge_step(sd, now, lock_wait=0.0):
 MIN_PYTHON = (3, 9)
 
 
+def history_account_filter(records, key):
+    """The history lines that belong to the account with this key.
+
+    Lines written before accounts existed, or with a null account, are untagged: they count only when
+    every tagged line is this account's, which is the case of a person who never switched. An unknown
+    own key keeps every line.
+    """
+    if key is None:
+        return records
+    # Only a 0.2.5 merge puts an accounts map on a history line, and its buckets may mix accounts.
+    tagged = [UNKNOWN_ACCOUNT if "accounts" in r else reading_account(r) for r in records]
+    mixed = any(a not in (key, UNKNOWN_ACCOUNT) for a in tagged)
+    return [r for r, a in zip(records, tagged) if a == key or (a == UNKNOWN_ACCOUNT and not mixed)]
+
+
+def read_history(sd, account=None):
+    """The history lines with a weekly reading, oldest first; account is the own key (None keeps every line)."""
+    records = []
+    for name in ("rate-limits.history.jsonl.1", "rate-limits.history.jsonl"):
+        try:
+            lines = (sd / name).read_text(encoding="utf-8").splitlines()
+        except OSError:
+            continue
+        for line in lines:
+            with contextlib.suppress(ValueError, TypeError, AttributeError):
+                record = json.loads(line)
+                record["_at"] = parse_iso(record["observed_at"])
+                if record.get("seven_day"):
+                    records.append(record)
+    records.sort(key=lambda r: r["_at"])
+    return history_account_filter(records, account)
+
+
+HISTORY_FILES = ("rate-limits.history.jsonl", "rate-limits.history.jsonl.1")
+
+
+def _lines_backward(path, block=64 * 1024):
+    """The lines of a file as text, last first, reading it from the end in blocks."""
+    with path.open("rb") as handle:
+        handle.seek(0, os.SEEK_END)
+        pos = handle.tell()
+        rest = b""
+        while pos > 0:
+            step = min(block, pos)
+            pos -= step
+            handle.seek(pos)
+            parts = (handle.read(step) + rest).split(b"\n")
+            rest = parts[0]
+            for raw in reversed(parts[1:]):
+                yield raw.decode("utf-8", "replace").rstrip("\r")
+        yield rest.decode("utf-8", "replace").rstrip("\r")
+
+
+def read_history_tail(sd, account, is_base, window=None):
+    """read_history(sd, account) cut to its newest lines, from the end back to a line that proves the base.
+
+    The base is the line with the latest bucket time that `is_base` accepts. Bucket times need not rise in
+    file order: an exact reading can win over a held bucket observed up to EXACT_HOLD after it, so a later
+    line may carry an older bucket. The scan therefore goes on past the first accepted line until one is
+    EXACT_HOLD older than the newest accepted time seen; no line before it can then beat that base. The
+    older generation is opened only when the current one does not reach that line. When the tail holds a
+    line of unknown account, whether it counts depends on the lines before it, so the whole history is
+    read instead.
+
+    `window` is the five-hour window (window_of) the caller reads. When given, the scan also stops at a line
+    of the account whose five-hour bucket belongs to an earlier window and is dated more than EXACT_HOLD
+    before that window began: bucket times run out of file order by at most EXACT_HOLD, so no earlier line
+    can hold a reading of `window`. This ends the scan early while the window has no base yet.
+    """
+    records = []
+    started = None if window is None else dt.datetime.fromtimestamp(window * 60, UTC) - WINDOW_LENGTH["five_hour"]
+    best = None
+    found = False
+    for name in HISTORY_FILES:
+        try:
+            for line in _lines_backward(sd / name):
+                with contextlib.suppress(ValueError, TypeError, AttributeError):
+                    record = json.loads(line)
+                    record["_at"] = parse_iso(record["observed_at"])
+                    if not record.get("seven_day"):
+                        continue
+                    records.append(record)
+                    if account is not None and ("accounts" in record or reading_account(record) == UNKNOWN_ACCOUNT):
+                        return read_history(sd, account)
+                    if started is not None and reading_account(record) == account:
+                        reading = record.get("five_hour")
+                        if is_bucket(reading) and window_of(reading) < window:
+                            at = bucket_at(reading, record)
+                            if at and at < started - EXACT_HOLD:
+                                found = True
+                                break
+                    if reading_account(record) == account and is_base(record):
+                        at = bucket_at(record["five_hour"], record)
+                        if best is not None and at <= best - EXACT_HOLD:
+                            found = True
+                            break
+                        best = at if best is None else max(best, at)
+        except OSError:
+            continue
+        if found:
+            break
+    records.sort(key=lambda r: r["_at"])
+    return history_account_filter(records, account)
+
+
+STALE_EPOCH = dt.datetime(1970, 1, 1, tzinfo=UTC)
+
+
+def bucket_times(record, now):
+    """Each live bucket's time; a window that has reset reads 0, so it has none."""
+    times = {}
+    for name, bucket in record.items():
+        if name in RECORD_META or not is_bucket(bucket):
+            continue
+        reset = safe_iso(bucket.get("resets_at"))
+        if reset and reset <= now:
+            continue
+        at = bucket_at(bucket, record)
+        if at and at > now + FUTURE_SLACK:
+            # A reading from the future can't be real; it must not look fresh.
+            at = STALE_EPOCH
+        if at:
+            times[name] = at
+    return times
+
+
+NO_PARTITION = "no-partition"
+
+
+def pick_partition(limits, key, reason):
+    """(partition, account) for the account with this key (None when unresolved, then reason says why).
+
+    The account is {"state": "known" | "unknown", "key": the own key, "reason": a code or None}. Unknown
+    means the figures cannot be told to be this account's: the own key is unresolved, or they come from
+    the partition of untagged readings. Another account's partition is never returned.
+    """
+    def account(state, why):
+        return {"state": state, "key": key, "reason": why}
+
+    if not limits:
+        return None, account("known" if key else "unknown", None if key else reason)
+    if key is None:
+        return limits, account("unknown", reason)
+    held = held_partitions(limits)
+    if key in held:
+        return held[key], account("known", None)
+    if UNKNOWN_ACCOUNT in held:
+        return held[UNKNOWN_ACCOUNT], account("unknown", "untagged")
+    if isinstance(limits.get("accounts"), dict):
+        return None, account("known", NO_PARTITION)
+    return limits, account("unknown", "untagged")
+
+
+def dated_record(partition, now):
+    """A partition dated by its oldest live bucket, never by mtime; None without a seven_day bucket."""
+    if not partition or not is_bucket(partition.get("seven_day")):
+        return None
+    times = bucket_times(partition, now)
+    at = min(times.values()) if times else safe_iso(partition.get("observed_at"))
+    if not at:
+        return None
+    return dict(partition, _at=at, _bucket_at={name: iso_ms(t) for name, t in times.items()})
+
+
 def require_python(minimum=MIN_PYTHON, version=None):
     """None when the interpreter is new enough, else the one line that says why it is not."""
     found = tuple(version or sys.version_info[:3])

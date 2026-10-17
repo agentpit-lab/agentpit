@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import type { StatusCache, StatusLimit, StatusMeasure, StatusSample, StatusScoped } from '../types'
+import type { StatusBurn, StatusCache, StatusLimit, StatusMeasure, StatusSample, StatusScoped } from '../types'
 import { accountFileOf, accountKeyOf } from './account'
 import { desktopKey } from './cards'
 import { drawDesktop, drawPane, drawTerminal } from './draw'
@@ -14,6 +14,7 @@ import {
   freshScoped,
   historyForAccount,
   mergeLimit,
+  parseBurn,
   pickPartition,
   settingsEffort,
   stateDirOf,
@@ -40,6 +41,7 @@ const nowMs = atom({ plugin: 'pitboard', key: 'nowMs' } as const, 0)
 // The desktop row's clock: it moves only when the row would show something else.
 const desktopNow = atom({ plugin: 'pitboard', key: 'desktopNow' } as const, 0)
 const fiveSamples = atom({ plugin: 'pitboard', key: 'fiveSamples' } as const, [] as StatusSample[])
+const fiveBurn = atom({ plugin: 'pitboard', key: 'fiveBurn' } as const, null as StatusBurn | null)
 const weekSamples = atom({ plugin: 'pitboard', key: 'weekSamples' } as const, [] as StatusSample[])
 const ctxSamples = atom({ plugin: 'pitboard', key: 'ctxSamples' } as const, [] as number[])
 const detail = atom({ plugin: 'pitboard', key: 'detail' } as const, null as string | null)
@@ -236,6 +238,12 @@ async function refreshShared($: EngineInterface) {
     // A read that met a writer's rename keeps what the last read gave; no file yet draws the payload alone.
     isUnreadable = await $.fs.exists(path)
   }
+  let burn: StatusBurn | null = null
+  try {
+    burn = parseBurn(await $.fs.read(`${await stateDir($)}/five-hour-burn.json`))
+  } catch {
+    // Absent or mid-rename: the row projects to 100% from its own samples.
+  }
   const now = await $.clock.now()
   // A newer refresh started while this one waited and may have seen another account: its result stands.
   if (round !== sharedRound) return
@@ -251,6 +259,7 @@ async function refreshShared($: EngineInterface) {
     await update($, weekSamples, () => [])
     await update($, fileLimits, () => [])
     await update($, scoped, () => [])
+    await update($, fiveBurn, () => null)
     await update($, measure, m => (m ? { ...m, limits: [] } : m))
     await restoreSamples($, key)
   }
@@ -262,6 +271,7 @@ async function refreshShared($: EngineInterface) {
   const { partition, isUnknown } = pickPartition(file, key)
   await update($, account, () => ({ key: held, isFileUnknown: isUnknown }))
   await update($, scoped, () => freshScoped(partition, now))
+  await update($, fiveBurn, () => burn)
   await update($, fileLimits, () => readFileLimits(partition, now))
   await recordLimits($)
 }
@@ -549,7 +559,7 @@ async function openPane($: EngineInterface) {
 
 // A given time keeps the caller off nowMs, so it is not redrawn every second.
 async function currentView($: EngineInterface, at?: number) {
-  const [m, c, mt, tick, sc, fl, fs, cs, ws, who] = await Promise.all([
+  const [m, c, mt, tick, sc, fl, fs, cs, ws, who, burn] = await Promise.all([
     read($, measure),
     read($, cache),
     read($, meta),
@@ -560,6 +570,7 @@ async function currentView($: EngineInterface, at?: number) {
     read($, ctxSamples),
     read($, weekSamples),
     read($, account),
+    read($, fiveBurn),
   ])
   const now = tick || (await $.clock.now())
   return buildView({
@@ -573,6 +584,8 @@ async function currentView($: EngineInterface, at?: number) {
     weekSamples: ws,
     ctxSamples: cs,
     isFileAccountUnknown: who?.isFileUnknown ?? false,
+    burn,
+    accountKey: who?.key ?? null,
   })
 }
 

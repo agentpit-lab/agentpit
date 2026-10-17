@@ -120,6 +120,19 @@ usage-watch, no model-scoped limits.
 
 **What still works:** see [Model-scoped limits](explanation.md#model-scoped-limits).
 
+### The Threshold row needs a fresh PaceLine projection
+
+The Threshold row, unless PaceLine's `five-hour-burn.json` is at most 3 minutes old and belongs to
+the signed-in account, the current window and the percentage on the row. PaceLine writes it only
+while pace is on.
+
+**What you see:** the `5h limit` card projects to 100% and shows `Runs out`, and the limit turns red
+later, when its own projection reaches 100% before the reset instead of PaceLine's threshold.
+
+**What still works:** turn on pace in PaceLine and keep a session working. See [Use PitBoard with
+PaceLine](how-to.md#use-pitboard-with-paceline) and [Budget, At reset, Runs
+out](explanation.md#budget-at-reset-runs-out).
+
 ### The advisor shown is the setting
 
 The advisor of the running conversation. PitBoard shows the setting, `advisorModel` in

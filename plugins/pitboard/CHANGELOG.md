@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.1.12 - 2026-10-17
+
+### Added
+
+- The 5h limit card follows PaceLine's five-hour projection when PaceLine publishes one for the signed-in
+  account and the window on screen: the card shows `Threshold` (for example `80% at 18:40`) beside Pace and
+  Budget, and the warning reads `5h window reaches 80% at 18:40`. Without a fresh matching projection the
+  card keeps projecting to 100% from its own samples, and it does so as well once the window's use reaches
+  the threshold, where PaceLine projects nothing.
+
 ## 0.1.11 - 2026-10-16
 
 ### Added

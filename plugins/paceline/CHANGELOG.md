@@ -1,5 +1,44 @@
 # Changelog
 
+## 0.4.0 - 2026-10-17
+
+### Added
+
+- The recommendation weighs the burn rate of the five-hour window. When the rate measured over the last
+  90 minutes would reach the day or night threshold before the window resets, `max_parallel_agents`
+  falls to the share of the rate that the budget covers, and the reason names the rate, the budget and
+  the time the threshold is reached. The status output gains `five_hour.burn` and
+  `recommendation.five_hour_burn_limited`.
+- The Agent and Workflow hook gates a launch while the five-hour burn rate would reach the threshold
+  before the window resets and the usage data is fresh, but only when the launch exceeds the agent cap
+  (active reservations at or above `max_parallel_agents`, a cap of 0 included); within the cap it adds
+  the advice line only. Over the cap it asks for confirmation, like at a hard limit, with the burn reason
+  behind `pace 5h burn:`. While the owner's away marker is on it denies the launch instead, since no one
+  can answer a prompt, and tells the model not to retry and to continue within the cap or wait. A hard
+  limit (low memory, the five-hour threshold, the weekly limit) asks the same way and is denied while the
+  marker is on, with a note to wait for the limit to clear. `paceline status --json` gains `away`.
+- The same hook takes a `launch` reservation for every launch it allows or asks about, keyed by the tool
+  call id and ending on its own after 60 seconds, in the same lock hold that reads the reservation count
+  (`paceline status --launch-key`). Agent and Workflow launches issued in one message therefore count each
+  other against the agent cap, where every gate used to see only the reservations of agents already
+  started. A denied launch holds none. The start of an agent closes the oldest launch of its session, so a
+  started agent counts once, as a subagent. The kind never reaches the history that calibration reads.
+- `paceline away on|off|status` and the skill `/paceline:away` set, clear and show the away marker, one
+  file (`<state>/away.json`) that all sessions share. The owner's next message in any session clears it;
+  a cache-watch wake and the `/paceline:away` command itself do not. A `UserPromptSubmit` hook does the
+  clearing.
+- `<state>/five-hour-burn.json`, a snapshot of the signed-in account's five-hour window for other readers
+  (PitBoard among them): `computed_at`, `account`, `used_pct`, `resets_at`, `threshold_pct`,
+  `budget_per_hour_pct`, `rate_per_hour_pct`, `threshold_at`, `threshold_at_local`, `base_at`, `span_min`
+  and `limited`, the rate fields `null` while no rate is measured. It is written while pace is on, by
+  every command that computes the status on the live clock and by the limits merge after it wrote the
+  limits file; PaceLine never reads it back.
+- `five_hour.burn` of the status output gains `budget_share`, the budget over the rate (`null` without a
+  rate), which `max_parallel_agents` is scaled by.
+- `auto` applies the night threshold to the burn rate. A burn that would reach it before the window
+  resets lowers `max_parallel_agents` and adds the burn reason; when the cap gives 0, `auto` waits
+  (exit 10) until the five-hour reset.
+
 ## 0.3.4 - 2026-10-16
 
 ### Changed

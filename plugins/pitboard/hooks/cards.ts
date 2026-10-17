@@ -183,7 +183,7 @@ export function alerts(v: View): { level: Level; head: string; advice: string }[
     if (f.fullAt !== null && f.resetInMs !== null && f.fullAt < v.now + f.resetInMs)
       out.push({
         level: 'act',
-        head: `5h limit hits 100% at ${clock(f.fullAt, v.meta)}`,
+        head: f.isPaceline ? `5h window reaches ${pct0(f.targetPct)} at ${clock(f.fullAt, v.meta)}` : `5h limit hits 100% at ${clock(f.fullAt, v.meta)}`,
         advice: `${reset} · pace ${rate(f.ratePerHour)} vs budget ${rate(f.evenPerHour)} · hold subagents`,
       })
     else if (f.pct >= 70) out.push({ level: f.level, head: `5h limit ${pct0(f.pct)}`, advice: reset })
@@ -365,7 +365,9 @@ function fiveCard(v: View): Card {
   const projected = f.ratePerHour !== null && f.resetInMs !== null ? f.pct + f.ratePerHour * (f.resetInMs / HOUR_MS) : null
   const forecast: Rows =
     isShort && f.fullAt !== null
-      ? [['Runs out', clock(f.fullAt, v.meta), 'act']]
+      ? f.isPaceline
+        ? [['Threshold', `${pct0(f.targetPct)} at ${clock(f.fullAt, v.meta)}`, 'act']]
+        : [['Runs out', clock(f.fullAt, v.meta), 'act']]
       : [['At reset', projected !== null ? `~${pct0(projected)}` : 'n/a', projected !== null && projected >= 80 ? 'watch' : undefined]]
   const rows: Rows = [
     ['Used', pct0(f.pct), f.level],
@@ -380,7 +382,9 @@ function fiveCard(v: View): Card {
     f.level === 'calm'
       ? null
       : isShort
-        ? 'Runs out before the reset at this pace: hold subagents.'
+        ? f.isPaceline
+          ? `Reaches ${pct0(f.targetPct)} before the reset at this pace: hold subagents.`
+          : 'Runs out before the reset at this pace: hold subagents.'
         : f.pct >= 70
           ? `${pct0(f.pct)} used: keep subagents for what needs them.`
           : 'Pace is above budget.'

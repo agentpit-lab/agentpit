@@ -22,7 +22,7 @@ PitBoard adds what PaceLine's limits file and the session's transcript hold.
 | Context | The token counts of each model request in the main conversation. After a compaction, the compaction's own size until `/context` can estimate the whole window, then that estimate until the next request. |
 | Auto-compact, the compaction point, the compaction window and who set it | `/context`'s breakdown, read at session start, after each turn, and after each compaction. |
 | Five-hour and weekly limits, API cost | Claude Code, once per turn, merged with the limits file when it exists. |
-| Readings other sessions saw, the history behind Pace, model-scoped limits | PaceLine's limits file and its history, for the signed-in account only. |
+| Readings other sessions saw, the history behind Pace, model-scoped limits | PaceLine's limits file and its history, for the signed-in account only. The five-hour burn file adds PaceLine's threshold projection for the five-hour limit. |
 | Cache countdown, `Hit` for the last turn | The session's own requests. The countdown runs from the start of the last one. |
 | `Session` hits, the TTL | The session transcript since the last compaction. |
 | Model, effort, Claude Code version, turns, session time | Claude Code. Until a request reports the effort, it comes from `modelSettings` or `effortLevel` in the settings. `/effort` in this session shows at once. |
@@ -126,6 +126,17 @@ Runs out = now + (100 - used %) / Pace hours
 - Budget is the pace that spends exactly what is left by the reset.
 - At reset is where the current Pace leaves the five-hour window at its reset.
 - Runs out replaces At reset when the limit reaches 100% before the reset.
+- Threshold replaces Runs out when PaceLine supplies its projection: it is the clock time the
+  five-hour limit reaches PaceLine's threshold, 80% by day and 95% at night by default, at the
+  current Pace.
+
+PitBoard takes the projection from PaceLine's five-hour burn file, `five-hour-burn.json` (see [the
+file's format](../../paceline/docs/reference.md#the-five-hour-burn-file-for-readers)), only while
+all of these hold: the five-hour limit is below the file's threshold; the file is at most 3 minutes
+old; its account is the signed-in account; its reset is the window's reset; and its percentage used
+is the percentage on the row. Pace is then the file's rate, and Budget is the pace that reaches the
+threshold exactly at the reset. In every other case, including PaceLine off or pace off, PitBoard
+projects from its own readings to 100% and shows Runs out.
 
 ### The even-pace tick, Week elapsed, Spare and Overspent
 
@@ -270,7 +281,10 @@ except on the light theme Sonnet and effort high (`suggestion`, 4.4:1) and Fable
 
 The five-hour limit turns red when its Pace is above its Budget. Budget is the pace that lasts
 exactly to the reset, so a higher Pace reaches 100% before the reset: the same condition as Runs
-out. The row also turns red from 90% used and amber from 70%.
+out. The row also turns red from 90% used and amber from 70%. With PaceLine's projection (see
+[Budget, At reset, Runs out](#budget-at-reset-runs-out)), the five-hour limit turns red when
+PaceLine reports that the window would reach its threshold before the reset, and Pace above Budget
+alone does not colour it.
 
 The weekly limit and the model-scoped limits take their colour on the row from the percentage used
 only: amber from 80%, red from 95%. Inside the Week card, Pace above Budget is amber, and Overspent

@@ -53,6 +53,7 @@ In this page, `<state>` is the state directory: `$PACELINE_STATE_DIR`, else
 | `paceline queue fail` |  |
 | `paceline queue retry` |  |
 | `paceline queue remove` |  |
+| `paceline away` | tell the launch gate that you are away, so it denies a launch it would ask about: on\|off\|status |
 | `paceline cache-watch` | keep an idle session's one-hour prompt cache alive: on\|off\|status\|config |
 | `paceline context-watch` | context against the auto-compaction point: config\|status |
 | `paceline usage-watch` | read the account's exact usage through Claude Code: on\|off\|status |
@@ -89,7 +90,8 @@ Every command except `cache-watch`, `context-watch`, and `usage-watch` accepts t
   only when they apply: `account unknown (<reason>)`, when the figures cannot be told to be the
   signed-in account's (the reasons are `untagged`, `no-file`, `unreadable`, and `no-account`), `host
   memory unknown`, `pace hooks off (paceline on)`, a `WARNING` that the rest of the week is near the
-  day hours' capacity, the reasons for a block, pause, or throttle, unconfirmed plans that start
+  day hours' capacity, the reasons for a block, pause, throttle, or five-hour burn (for example `5h
+  burn 42.7%/h vs budget 13.9%/h: 80% at <time>, before reset <time>`), unconfirmed plans that start
   tomorrow, and the leftover-pool suggestion. The [explanation](explanation.md) says how each number
   is computed. With `--json`, `data.account` is `{"state": "known" | "unknown", "key": <the
   signed-in account's key or null>, "reason": <code or null>}`; `key` is the one-way key of [the
@@ -99,10 +101,12 @@ Every command except `cache-watch`, `context-watch`, and `usage-watch` accepts t
   (`wait`), or 11 (`stop`). `--start-run` begins tonight's run: it fixes the night allowance and the
   weekly usage it counts from. Running it again in the same night keeps that run. With `--json`, the
   result has `action`, `next_item`, `budget_for_next_item_pct`, `max_parallel_agents`,
-  `max_heavy_runs`, `allowed_models`, `wait_until`, and `reasons`. A run remembers the account it
-  started under. When another account is signed in, `auto` stops with the reason `account changed
-  during the run`, checked before every other stop; when the account cannot be resolved, it waits
-  with `account unknown`.
+  `max_heavy_runs`, `allowed_models`, `wait_until`, and `reasons`. At any hour, `auto` projects the
+  five-hour burn rate to the night threshold and lowers `max_parallel_agents`; when the cap reaches
+  0, `auto` waits and `wait_until` is the five-hour reset. A run remembers the account it started
+  under. When another account is signed in, `auto` stops with the reason `account changed during the
+  run`, checked before every other stop; when the account cannot be resolved, it waits with `account
+  unknown`.
 - `paceline on` and `paceline off` write the pace switch, `<state>/pace.json`.
 - `paceline calibrate` reads the limits history and the completed reservations and proposes new
   values for `five_hour_to_week_pct`, `reserve_pct`, `weekend_cap_pct`, `night_base_pct`, and
@@ -122,6 +126,12 @@ Every command except `cache-watch`, `context-watch`, and `usage-watch` accepts t
   report, the debug log, the profile, the pace switch, the limits file, the last 50 history lines,
   and the last 20 reservations. The report and the bundle write your home directory as `~`. The
   bundle holds the plan phrases you typed, reservation labels, and session IDs.
+- `paceline status --json` shows the burn rule under `five_hour.burn` (`rate_per_hour_pct`,
+  `budget_per_hour_pct`, `budget_share`, `threshold_pct`, `threshold_at`, `threshold_at_local`,
+  `base_at`, `span_min`, and `limited`; `null` while no rate is measured), the cap under
+  `recommendation.five_hour_burn_limited`, and the away marker under `away` (`on`, `set_at`,
+  `session`). `paceline status --launch-key KEY` also holds a short-lived `launch` reservation under
+  that key; the Agent and Workflow hook passes the tool call ID.
 
 ### Plans
 
@@ -164,6 +174,12 @@ ended are removed by the next command.
 - `paceline reserve list` lists the active reservations.
 - `paceline reserve reconcile` summarizes completed reservations by kind: count, estimated and
   actual sums, and the median ratio of actual to estimate.
+- A reservation of kind `launch` is not acquired with `reserve acquire`. `paceline status
+  --launch-key KEY` holds it, in the same lock hold that counts the active reservations. It carries
+  no estimate, never reaches the completed reservations, and ends after 60 seconds. `reserve acquire
+  --kind subagent` closes the oldest `launch` reservation of the same session, and `reserve release
+  --key KEY --session ID` drops one by hand; both the key and the session must be those of the
+  launch. `reserve list` shows it.
 
 A reservation is dropped when its lease expires (`lease_ttl_min` without a key,
 `agent_lease_ttl_min` with one) or when its process is gone. A completed reservation records
@@ -235,12 +251,28 @@ Defaults: on, line on, warnings at 85% and 95%, snapshots kept 14 days.
 - `paceline usage-watch status` prints the switch, the last attempt, the last success, and the last
   error. Times are ISO 8601 in UTC, or `never`.
 
+### away
+
+- `paceline away on [--session ID]` sets the away marker, `<state>/away.json`, for every session. It
+  prints `away: on since <time>` and a note that a launch that would ask for confirmation is now
+  denied. The skill passes the session ID.
+- `paceline away off` clears the marker and prints `away: off`.
+- `paceline away status` prints `away: off`, or `away: on since <time>` and the session that set it.
+- The `UserPromptSubmit` hook `away.py hook prompt` clears the marker on your next message in any
+  session. It skips a cache-watch wake and the `/paceline:away` command, in its raw form
+  (`/paceline:away` or `/away`) and expanded into a `<command-name>` tag.
+
+`away` takes no common option. While the marker is set, the Agent and Workflow hook denies a launch
+that would ask. `paceline status --json` shows the marker under `away`. See [The away
+marker](explanation.md#the-away-marker).
+
 ### Skills
 
 Each skill runs the matching command for you:
 
 - `/paceline:pace on|off|status|doctor|profile|profile set KEY VALUE`
 - `/paceline:cache-watch on|off|status|config`
+- `/paceline:away on|off|status`
 - `/paceline:context-watch status|config`
 - `/paceline:usage-watch on|off|status`
 
@@ -333,7 +365,8 @@ What each key does:
 - `reserve_decay_start`: when the reserve starts to fall, as `{"weekday": W, "hour": H}` in local
   time; Monday is 0. The default is Friday 18:00.
 - `five_hour_threshold_day`, `five_hour_threshold_night`: five-hour usage, in percent, at which
-  background work pauses and an Agent or Workflow launch asks you first.
+  background work pauses and an Agent or Workflow launch asks you first. The five-hour burn rate is
+  projected to the same threshold.
 - `five_hour_hard_stop`: five-hour usage at which the recommendation starts nothing new.
 - `five_hour_to_week_pct`: the share of the week that one full five-hour window costs. It sets the
   most any hour can get: this value divided by 5, in percent of the week per hour. `paceline
@@ -418,6 +451,8 @@ first source of the time zone. A POSIX rule such as `CET-1CEST` is ignored.
 | `<state>/ended-sessions/` | One marker per ended session whose reservations wait for release; the next pace call releases them and deletes the marker. |
 | `<state>/night-queue.json` | The night queue: the current run, the last 14 runs, and the items. |
 | `<state>/leftover-pool.json` | The leftover pool: when and for which weekly window it was approved, and the items. |
+| `<state>/five-hour-burn.json` | The five-hour burn snapshot of the signed-in account, for other readers. PaceLine writes it and never reads it back. See [The five-hour burn file (for readers)](#the-five-hour-burn-file-for-readers). |
+| `<state>/away.json` | The away marker: `on`, `set_at`, and the `session` that set it. Missing means off. |
 | `<state>/pace.lock` | The lock of the pace files. |
 | `<state>/debug.on` | The debug flag file. |
 | `<state>/debug.log` (+ `.1`) | The debug log, rotated to `.1` past 1 MiB. |
@@ -485,6 +520,54 @@ nothing of accounts reads them as before.
   line only while every tagged line is the signed-in account's.
 
 pace dates the file by its oldest live bucket, and judges freshness from that time.
+
+## The five-hour burn file (for readers)
+
+`<state>/five-hour-burn.json` holds the burn figures of the signed-in account's current five-hour
+window, computed once for every reader. PitBoard reads it; any other program may. Its format:
+
+```json
+{
+  "computed_at": "2026-10-16T16:10:00.000Z",
+  "account": "069e3589b134b882",
+  "used_pct": 40,
+  "resets_at": "2026-10-16T20:45:00.000Z",
+  "threshold_pct": 80,
+  "budget_per_hour_pct": 8.727,
+  "rate_per_hour_pct": 42.7,
+  "threshold_at": "2026-10-16T17:06:12.365Z",
+  "threshold_at_local": "2026-10-16 20:06+03:00",
+  "base_at": "2026-10-16T15:50:00.000Z",
+  "span_min": 20.0,
+  "limited": true
+}
+```
+
+The fields:
+
+- `computed_at` is when PaceLine computed the figures. Times are ISO 8601 in UTC with milliseconds,
+  except `threshold_at_local`, which uses the profile's time zone.
+- `account` is the key of the account the window belongs to, the same key as in the limits file.
+- `used_pct` and `resets_at` are the five-hour percentage and reset time the figures were computed
+  for.
+- `threshold_pct` is the threshold of the hour of `computed_at`: 80% by day and 95% at night by
+  default. `budget_per_hour_pct` is the even pace that reaches it at the reset.
+- `rate_per_hour_pct`, `threshold_at`, `threshold_at_local`, `base_at`, and `span_min` are `null`
+  while no rate is measured; `threshold_at` and `threshold_at_local` are also `null` at a rate of 0
+  and at or above the threshold.
+- `limited` is true in the burn state: the rate would reach the threshold before the reset, and the
+  data is fresh.
+
+Use the file only when all of these hold: `account` is the account you serve; `resets_at` and
+`used_pct` equal the five-hour figures you show; `computed_at` is at most 3 minutes old. Otherwise
+compute your own projection. At or above the threshold the file projects nothing.
+
+PaceLine writes the file only while pace is on, only for a known account and a known reset, after
+every merge that the plugin's hooks run and that wrote the limits file, and from every command that
+computes the status on the real clock. `paceline merge` on its own does not write it. A run dated
+with `--now` or `PACELINE_NOW` more than 5 minutes from the real time writes nothing. The file is
+replaced through a temporary file and a rename. PaceLine never reads it back: its own history is the
+only input of its computation.
 
 ## The inbox (for writers)
 
@@ -570,10 +653,11 @@ holds `<state>/limits.lock`, so writers take turns. PaceLine needs no status lin
 | `SessionEnd`: `cache_watch.py hook session-end` | Session end | Removes the session's cache-watch state. |
 | `SessionStart`: `context_watch.py hook session-start` | Session start | Removes old snapshots while context-watch is on. |
 | `Stop`, `SessionStart` (`startup`, `resume`, `clear`): `limits_merge.py` | After every turn, at session start | Merges the inbox in the background. Always on. |
-| `PreToolUse` (`Agent`, `Workflow`): `pace_pre_agent.py` | Before each launch | Adds the `pace:` line; asks you at a hard limit. |
-| `SubagentStart`, `SubagentStop`: `pace_subagent.py` | Subagent start and stop | Acquires and releases the subagent's reservation. |
+| `PreToolUse` (`Agent`, `Workflow`): `pace_pre_agent.py` | Before each launch | Adds the `pace:` line and holds a `launch` reservation. Asks you at a hard limit, or over the agent cap in the five-hour burn state, and denies the launch instead while the away marker is set. |
+| `SubagentStart`, `SubagentStop`: `pace_subagent.py` | Subagent start and stop | Acquires and releases the subagent's reservation. The acquire closes the oldest `launch` reservation of the session. |
 | `SessionStart` (`startup`, `resume`): `pace_session_start.py` | Session start | Adds unconfirmed plans, the leftover-pool suggestion, and the time zone hint. |
 | `SessionEnd`: `pace_session_end.py` | Session end | Records the session's end in `<state>/ended-sessions/` and releases its reservations; the next pace call finishes a release that was cut off. |
+| `UserPromptSubmit`: `away.py hook prompt` | Every prompt | Clears the away marker when the prompt is your message: not a cache-watch wake and not the `/paceline:away` command. Runs whether or not pace is on. |
 
 The four pace hooks exit at once, with no output, while pace is off. While a function is off, its
 command hooks still start one Python process per matching event. The command hooks run `python3`

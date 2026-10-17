@@ -97,7 +97,7 @@ queues run, or when you want to use the whole week's limit. Find your profile by
 |---|---|---|
 | A. The weekly limit always lasts, and you do not want to use more | At the reset, the `Week` card shows `Spare` of more than a day (about 14 points); `7d` stays grey; `/usage` shows the weekly limit well below 100% at the reset | pace adds little. Keep context-watch; turn on usage-watch only for exact figures in PitBoard |
 | B. The weekly limit runs out before the reset | `Overspent` in amber or red mid-week; `7d` amber from 80%, red from 95% before the reset day; `/usage` shows the weekly limit reached early | pace: a budget per hour, the throttle to routine models from 85% weekly, the reserve held to the week's end, the confirmation when the week is used up |
-| C. Bursts of many agents fill the five-hour window | The `5h limit` card shows `Runs out` or turns red; Pace above Budget | pace: the advised number of agents in the `pace:` line, the confirmation from 80% (day) or 95% (night) of the five-hour window, reservations; usage-watch for fresh data |
+| C. Bursts of many agents fill the five-hour window | The `5h limit` card shows `Runs out` or turns red; Pace above Budget | pace: the advised number of agents in the `pace:` line, the confirmation from 80% (day) or 95% (night) of the five-hour window or over the agent cap while it burns toward that threshold, reservations; usage-watch for fresh data |
 | D. You want to use the whole week's limit | `Spare` near the reset, while work waits; `/paceline:pace status` shows `forecast unused` | pace with a night queue and a leftover pool for the last night before the reset; usage-watch so night data stays fresh |
 | E. Agents should work while you are away | Any of the above, plus unattended work | A night queue with usage-watch on and the machine kept awake ([Run a night queue](how-to.md#run-a-night-queue)) |
 
@@ -188,6 +188,10 @@ pace compares the budget with the norm: `ratio = budget / norm`.
   during the night hours and `five_hour_threshold_day` (80%) at every other hour.
 - **Agents.** Otherwise, `round(2 × ratio)`, at least 1 and at most `max_agents` (6). At the norm,
   that is 2 agents.
+- **Five-hour burn.** When the five-hour window, at its recent burn rate, would reach the current
+  threshold before it resets, the agent count falls to the share of the rate that the window's
+  budget covers, down to 0. [The five-hour burn rate](#the-five-hour-burn-rate) describes the
+  measurement.
 - **Throttle.** When the ratio is below 0.7, or when weekly usage has reached `throttle_weekly_pct`
   (85%) with more than 24 hours left to the reset, the allowed models are `routine_models`
   (`sonnet`, `haiku`) instead of `models`.
@@ -209,6 +213,40 @@ Free memory is free commit on Windows, `kern.memorystatus_level` times physical 
 `MemAvailable` on Linux. When it cannot be measured, `paceline status` says `host memory unknown`,
 and the memory checks do not apply.
 
+### The five-hour burn rate
+
+The budget per hour spreads the weekly limit, and the five-hour window can still fill faster than
+the time left allows. pace therefore projects the recent burn rate of the window to the current
+threshold: `five_hour_threshold_day` (80%) by day and `five_hour_threshold_night` (95%) during the
+night hours.
+
+- **Rate.** The rise of the five-hour percentage over the last 90 minutes, in percentage points per
+  hour. The base is the reading held 90 minutes ago, or the first reading of the window when the
+  window is younger. Only readings of the current window count. There is no rate until the base lies
+  at least 10 minutes back, so a fresh window, or a machine with no history yet, shows no burn
+  state.
+- **Budget rate.** `(threshold - used) / hours to the reset`: the even pace that reaches the
+  threshold exactly at the reset.
+- **Burn state.** The data is fresh, the reset is known, usage is below the threshold, a rate is
+  measured, and the rate is above the budget rate, so the window would reach the threshold before
+  the reset. `limited` in `five_hour.burn` is then true.
+- **Agent cap.** In the burn state the agent count becomes `floor(agents × budget_share)`, where
+  `budget_share` is the budget rate over the rate, not rounded. A mild overshoot keeps some agents,
+  and a steep one gives 0. With 1 agent, any burn state gives 0. A recommendation that is already
+  blocked or paused stays as it is.
+- **Reason.** `paceline status` and the `pace:` line before a launch add the reason, for example `5h
+  burn 42.7%/h vs budget 13.9%/h: 80% at 2026-10-16 19:40+03:00, before reset 2026-10-16
+  21:15+03:00`.
+
+Outside the burn state the agent count, the model, and the status line are as without the rule: with
+a safe projection, too few readings, stale data, or usage at or above the threshold. `paceline
+status --json` shows the figures as `five_hour.burn`, which is `null` while no rate is measured, and
+the cap as `recommendation.five_hour_burn_limited`. The budget simulator has no history, so it never
+shows the burn state.
+
+PaceLine publishes the same figures for other readers; see [The five-hour burn file (for
+readers)](reference.md#the-five-hour-burn-file-for-readers).
+
 ### The confirmation at a hard limit
 
 While pace is on, the hook before every Agent and Workflow launch adds the `pace:` line. It also
@@ -217,10 +255,39 @@ asks you to confirm the launch when one of these holds:
 - Free memory is below `min_free_commit_mb`. This is measured at every launch.
 - With fresh data only: five-hour usage is at or above the current threshold, 80% by day and 95% at
   night, or the weekly limit is used up.
+- With fresh data only: the five-hour burn state holds (see [The five-hour burn
+  rate](#the-five-hour-burn-rate)) and the launch goes over the agent cap, that is, the active
+  reservations of all sessions are at or above `max_parallel_agents`. A cap of 0 asks for every
+  launch. Within the cap the burn is advice only. A reservation of an agent that never reported its
+  stop counts until its lease ends (`agent_lease_ttl_min`, 240 minutes), so a crashed agent can keep
+  the count up for that long.
 
-The reason goes in front of the tool's description, so it shows in every permission prompt.
-Everything else stays advice. When pace has no usage data or fails, the hook adds nothing and the
-launch goes ahead.
+The reason goes in front of the tool's description, so it shows in every permission prompt. A hard
+limit's reason starts with `pace hard limit:` and a burn's with `pace 5h burn:`; when both hold, the
+burn reason follows the hard limit's. Everything else stays advice. When pace has no usage data or
+fails, the hook adds nothing and the launch goes ahead.
+
+While the away marker is set, the hook denies the launch instead of asking. See [The away
+marker](#the-away-marker).
+
+### The away marker
+
+A permission prompt that nobody answers holds the session, and the prompt cache can expire while it
+waits. When you leave, `/paceline:away` (or `paceline away on`) sets the away marker. While it is
+set, a launch that would ask, at a hard limit or over the agent cap in the burn state, is denied
+instead. The denial names the reason and tells the agent that you are away and that it must not
+retry: after a burn it continues within the cap or waits, and after a hard limit it waits for the
+limit to clear.
+
+- One file, `<state>/away.json`, serves every session on the machine.
+- Your next message in any session clears the marker, so you do not need to turn it off. A
+  cache-watch wake does not clear it, and neither does the `/paceline:away` command that sets it.
+- `paceline away off` clears it by hand, and `paceline away status` shows whether it is set, since
+  when, and by which session.
+- The marker has no expiry, and it changes nothing while no hard limit holds and the burn stays
+  within the cap. See [The away marker has no expiry](limitations.md#the-away-marker-has-no-expiry)
+  and [A scheduled or injected prompt clears the away
+  marker](limitations.md#a-scheduled-or-injected-prompt-clears-the-away-marker).
 
 ## The forecast
 
@@ -259,6 +326,17 @@ the next pace call releases them (see
 [limitations](limitations.md#reservations-of-a-cut-off-session-wait-for-the-next-pace-call)). The
 released reservation records its actual cost: the change in weekly usage since it was acquired.
 
+The Agent and Workflow hook also records a `launch` reservation for every launch it allows or asks
+about. It is recorded in the same lock hold that counts the active reservations, so the launches of
+one assistant message see each other, and the nth gate counts the n-1 launches before it, those of
+other sessions too. A `launch` reservation carries no estimate, never reaches the history that
+calibration reads, and ends after 60 seconds. The start of an agent takes over the oldest `launch`
+reservation of its session, so a started agent counts once; a Workflow holds one launch for all its
+agents, and the first start takes it over. A launch denied because you are away releases its
+reservation at once; a launch that you decline in a prompt keeps it until it ends. `paceline reserve
+list` shows it. See [Launch reservations rest on the order of Claude Code's
+hooks](limitations.md#launch-reservations-rest-on-the-order-of-claude-codes-hooks).
+
 ## The night queue's decisions
 
 A night run starts with `paceline auto --start-run`, which fixes the night allowance and the weekly
@@ -273,7 +351,9 @@ item is the allowance minus what the run has spent minus the outstanding reserva
 4. It then looks at the next item: it stops when the queue is empty, every item is blocked or the
    budget is spent, and it waits (exit 10) while items are running or dependencies are pending.
 5. For an item that fits, it waits when the data is not fresh, the five-hour window is not below its
-   threshold or no model has headroom; otherwise it starts the item (exit 0).
+   threshold, no model has headroom, or the five-hour burn would reach the night threshold before
+   the reset and caps the agents at 0; otherwise it starts the item (exit 0), with fewer agents when
+   the burn caps them.
 
 To walk through the same decisions one step at a time, answer the questions below.
 
@@ -299,16 +379,23 @@ To walk through the same decisions one step at a time, answer the questions belo
                   model have weekly headroom?
                   1. No: **Wait** (exit 10): the data is stale, five-hour usage is at or above its threshold (80% by
                      day by default; `wait_until` says when the window resets), or no allowed model has headroom.
-                  2. Yes: **Start** (exit 0): run `paceline queue start <id>` for the item in the output.
+                  2. Yes: Does the five-hour burn rate leave room for at least one agent?
+                     1. No: **Wait** (exit 10): at the recent rate the five-hour window would reach the night threshold
+                        (95% by default) before it resets, and the agent cap is 0. `wait_until` is the five-hour reset.
+                        Run `paceline auto` again later: a slower burn lets the queue start.
+                     2. Yes: **Start** (exit 0): run `paceline queue start <id>` for the item in the output.
+                        `max_parallel_agents` is lower than without the burn when the five-hour window would still reach
+                        the night threshold before the reset.
 
 - **Start** (exit 0): the first pending item, in queue order, whose dependencies are done, that fits
   the budget, and that may run beside the running items. Only independent items run side by side.
   `auto` advises `min(max_agents, heavy runs)` agents, or `min(max_agents, 3)` when memory is
-  unknown, and at least 1.
+  unknown, and at least 1; the five-hour burn can lower it, down to 0 (see **Wait**).
 - **Wait** (exit 10): running items or unfinished dependencies; stale data; five-hour usage at the
-  threshold or the hard stop, whichever is lower, with `wait_until` set to the five-hour reset; no
-  allowed model with weekly headroom for the item; no usage data at all; or the account cannot be
-  resolved (`account unknown`).
+  threshold or the hard stop, whichever is lower, with `wait_until` set to the five-hour reset; a
+  five-hour burn that would reach the night threshold before the window resets and leaves a cap of 0
+  agents, with `wait_until` set to the five-hour reset too; no allowed model with weekly headroom
+  for the item; no usage data at all; or the account cannot be resolved (`account unknown`).
 - **Stop** (exit 11): no run was started; free memory below the floor; the night is over; the queue
   is empty; every remaining item is deferred or depends on a deferred item; the next item does not
   fit the budget and nothing is running; or the signed-in account is not the one the run started
@@ -320,6 +407,11 @@ In `auto`, the throttle depends only on weekly usage: at `throttle_weekly_pct` w
 hours to the reset, the allowed models are `routine_models`. When five-hour usage is at or above
 `auto_refresh_five_hour_pct` (85%) and the data is older than `auto_refresh_cache_sec` (125
 seconds), `auto` merges the inbox first, so a window that has already filled is not missed.
+
+In `auto`, the burn rate is projected to `five_hour_threshold_night` at any hour, because a night
+run answers to the night threshold. The agent count is capped as in [The five-hour burn
+rate](#the-five-hour-burn-rate), and the burn reason joins `reasons`. The queue calls `auto` before
+each item, so a burn that slows lets it start again before the reset.
 
 The leftover pool runs only on the last night before the weekly reset, only when it was approved for
 the current weekly window, and only when the queue has no item to start. Its items share the night

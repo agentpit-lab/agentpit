@@ -50,6 +50,23 @@ export type StatusMeta = {
 // One reading of a limit window (five-hour or weekly), for its burn rate.
 export type StatusSample = { t: number; pct: number; resetsAt: string | null }
 
+// paceline's five-hour-burn.json: the threshold projection of one account's window. The rate fields
+// are null while the window has no 10 minutes of readings.
+export type StatusBurn = {
+  computed_at: string
+  account: string
+  used_pct: number
+  resets_at: string
+  threshold_pct: number
+  budget_per_hour_pct: number
+  rate_per_hour_pct: number | null
+  threshold_at: string | null
+  threshold_at_local?: string | null
+  base_at?: string | null
+  span_min?: number | null
+  limited: boolean
+}
+
 declare module 'claude-code' {
   interface PluginState {
     pitboard: {
@@ -61,6 +78,8 @@ declare module 'claude-code' {
       // The account signed in at the last refresh (key null when it has never been told; a refresh that
       // cannot read it keeps the last key), and whether the limits drawn from the file come from
       // readings of unknown account.
+      // paceline's five-hour burn snapshot, null when absent or unreadable.
+      fiveBurn: StatusBurn | null
       account: { key: string | null; isFileUnknown: boolean } | null
       nowMs: number
       desktopNow: number

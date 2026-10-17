@@ -24,10 +24,14 @@ from pathlib import Path
 # limits_file.py sits beside this script: the state directory, the lock and the merge of
 # rate-limits.json, shared with the hooks.
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import away  # noqa: E402
+import five_burn  # noqa: E402
 import limits_file  # noqa: E402
 import localzone  # noqa: E402
-from limits_file import (  # noqa: E402
-    FUTURE_SLACK, RECORD_META, bucket_at, is_bucket, parse_iso, safe_iso,
+from five_burn import CET_ZONES, EET_ZONES, EuropeanZone, _last_sunday, classify, fmt_local  # noqa: E402,F401
+from limits_file import (  # noqa: E402,F401
+    FUTURE_SLACK, NO_PARTITION, RECORD_META, STALE_EPOCH, bucket_at, bucket_times, dated_record, history_account_filter,
+    is_bucket, parse_iso, pick_partition, read_history, safe_iso,
 )
 
 UTC = dt.timezone.utc
@@ -102,73 +106,11 @@ def migrate_profile(raw):
 
 # ---------------------------------------------------------------- time zone
 
-def _last_sunday(year, month):
-    last = dt.date(year + (month == 12), month % 12 + 1, 1) - DAY
-    return last - dt.timedelta(days=(last.weekday() - 6) % 7)
-
-
-class EuropeanZone(dt.tzinfo):
-    """Fixed-offset zone with EU summer time; stands in for zoneinfo when tzdata is absent."""
-
-    def __init__(self, key, std_hours):
-        self.key = key
-        self.std = dt.timedelta(hours=std_hours)
-
-    def __repr__(self):
-        return f"EuropeanZone({self.key!r})"
-
-    def _bounds(self, year):
-        return (dt.datetime.combine(_last_sunday(year, 3), dt.time(1)),
-                dt.datetime.combine(_last_sunday(year, 10), dt.time(1)))
-
-    def _summer(self, d):
-        wall = d.replace(tzinfo=None, fold=0)
-        start, end = self._bounds(wall.year)
-        gap = start + self.std
-        overlap = end + self.std
-        if gap <= wall < gap + HOUR:
-            return d.fold == 1
-        if overlap <= wall < overlap + HOUR:
-            return d.fold == 0
-        return gap + HOUR <= wall < overlap
-
-    def utcoffset(self, d):
-        return self.std + self.dst(d)
-
-    def dst(self, d):
-        return HOUR if d is not None and self._summer(d) else dt.timedelta(0)
-
-    def tzname(self, d):
-        return "summer" if self.dst(d) else "standard"
-
-    def fromutc(self, d):
-        naive = d.replace(tzinfo=None)
-        start, end = self._bounds(naive.year)
-        if start <= naive < end:
-            return (naive + self.std + HOUR).replace(tzinfo=self)
-        fold = 1 if end <= naive < end + HOUR else 0
-        return (naive + self.std).replace(tzinfo=self, fold=fold)
-
-
-CET_ZONES = {"Europe/Madrid", "Europe/Paris", "Europe/Berlin", "Europe/Rome", "Europe/Amsterdam",
-             "Europe/Brussels", "Europe/Vienna", "Europe/Warsaw", "Europe/Prague", "Europe/Stockholm"}
-EET_ZONES = {"Europe/Kyiv", "Europe/Kiev", "Europe/Helsinki", "Europe/Athens", "Europe/Riga"}
-
-
 def load_zone(key, force_builtin=False):
-    if not force_builtin:
-        try:
-            from zoneinfo import ZoneInfo
-            return ZoneInfo(key)
-        except Exception:
-            pass
-    if key in CET_ZONES:
-        return EuropeanZone(key, 1)
-    if key in EET_ZONES:
-        return EuropeanZone(key, 2)
-    if key in ("UTC", "Etc/UTC"):
-        return UTC
-    raise PaceError(f"time zone {key} unavailable: install tzdata or use a CET/EET zone")
+    try:
+        return five_burn.load_zone(key, force_builtin)
+    except five_burn.ZoneUnavailable as error:
+        raise PaceError(str(error)) from None
 
 
 def detect_zone():
@@ -215,10 +157,6 @@ def parse_local(value, tz, now, end=False):
     if d.tzinfo is None:
         d = d.replace(tzinfo=tz)
     return d.astimezone(UTC)
-
-
-def fmt_local(d, tz):
-    return d.astimezone(tz).isoformat(sep=" ", timespec="minutes")
 
 
 # ---------------------------------------------------------------- files and locking
@@ -583,42 +521,8 @@ def own_account():
     return limits_file.resolve_account()
 
 
-def history_account_filter(records, key):
-    """The history lines that belong to the account with this key.
-
-    Lines written before accounts existed, or with a null account, are untagged: they count only when
-    every tagged line is this account's, which is the case of a person who never switched. An unknown
-    own key keeps every line.
-    """
-    if key is None:
-        return records
-    # Only a 0.2.5 merge puts an accounts map on a history line, and its buckets may mix accounts.
-    tagged = [limits_file.UNKNOWN_ACCOUNT if "accounts" in r else limits_file.reading_account(r) for r in records]
-    mixed = any(a not in (key, limits_file.UNKNOWN_ACCOUNT) for a in tagged)
-    return [r for r, a in zip(records, tagged) if a == key or (a == limits_file.UNKNOWN_ACCOUNT and not mixed)]
-
-
-def read_history(sd, account=None):
-    """The history lines with a weekly reading, oldest first; account is the own key (None keeps every line)."""
-    records = []
-    for name in ("rate-limits.history.jsonl.1", "rate-limits.history.jsonl"):
-        try:
-            lines = (sd / name).read_text(encoding="utf-8").splitlines()
-        except OSError:
-            continue
-        for line in lines:
-            with contextlib.suppress(ValueError, TypeError, AttributeError):
-                record = json.loads(line)
-                record["_at"] = parse_iso(record["observed_at"])
-                if record.get("seven_day"):
-                    records.append(record)
-    records.sort(key=lambda r: r["_at"])
-    return history_account_filter(records, account)
-
-
 MERGE_LOCK_WAIT_SEC = 3
 LOAD_LOCK_WAIT_SEC = 20
-STALE_EPOCH = dt.datetime(1970, 1, 1, tzinfo=UTC)
 
 
 def read_limits(sd):
@@ -627,62 +531,6 @@ def read_limits(sd):
         parsed = json.loads((sd / "rate-limits.json").read_text(encoding="utf-8"))
         return parsed if isinstance(parsed, dict) else None
     return None
-
-
-def bucket_times(record, now):
-    """Each live bucket's time; a window that has reset reads 0, so it has none."""
-    times = {}
-    for name, bucket in record.items():
-        if name in RECORD_META or not is_bucket(bucket):
-            continue
-        reset = safe_iso(bucket.get("resets_at"))
-        if reset and reset <= now:
-            continue
-        at = bucket_at(bucket, record)
-        if at and at > now + FUTURE_SLACK:
-            # A reading from the future can't be real; it must not look fresh.
-            at = STALE_EPOCH
-        if at:
-            times[name] = at
-    return times
-
-
-NO_PARTITION = "no-partition"
-
-
-def pick_partition(limits, key, reason):
-    """(partition, account) for the account with this key (None when unresolved, then reason says why).
-
-    The account is {"state": "known" | "unknown", "key": the own key, "reason": a code or None}. Unknown
-    means the figures cannot be told to be this account's: the own key is unresolved, or they come from
-    the partition of untagged readings. Another account's partition is never returned.
-    """
-    def account(state, why):
-        return {"state": state, "key": key, "reason": why}
-
-    if not limits:
-        return None, account("known" if key else "unknown", None if key else reason)
-    if key is None:
-        return limits, account("unknown", reason)
-    held = limits_file.held_partitions(limits)
-    if key in held:
-        return held[key], account("known", None)
-    if limits_file.UNKNOWN_ACCOUNT in held:
-        return held[limits_file.UNKNOWN_ACCOUNT], account("unknown", "untagged")
-    if isinstance(limits.get("accounts"), dict):
-        return None, account("known", NO_PARTITION)
-    return limits, account("unknown", "untagged")
-
-
-def dated_record(partition, now):
-    """A partition dated by its oldest live bucket, never by mtime; None without a seven_day bucket."""
-    if not partition or not is_bucket(partition.get("seven_day")):
-        return None
-    times = bucket_times(partition, now)
-    at = min(times.values()) if times else safe_iso(partition.get("observed_at"))
-    if not at:
-        return None
-    return dict(partition, _at=at, _bucket_at={name: iso_ms(t) for name, t in times.items()})
 
 
 def current_record(sd, now, key=None, reason="no-file"):
@@ -799,17 +647,6 @@ class Slot:
     @property
     def eff(self):
         return self.weight * self.hours
-
-
-def classify(local, profile):
-    h = local.hour
-    n0, n1 = profile["night_hours"]
-    d0, d1 = profile["day_hours"]
-    if n0 <= h < n1:
-        return "night"
-    if d0 <= h < d1:
-        return "weekend" if local.weekday() >= 5 else "work"
-    return "off"
 
 
 def build_slots(start, end, tz, profile, plans):
@@ -1039,6 +876,13 @@ def compute(now, profile, usage, model=None, commit_mb=None, outstanding=0.0, ru
     in_night = classify(local_now, profile) == "night"
     five_threshold = float(profile["five_hour_threshold_night" if in_night else "five_hour_threshold_day"])
 
+    burn = None
+    if five_reset is not None:
+        measured = five_burn.measure(five_burn.samples(history, record["five_hour"]), five_used, now)
+        if measured is not None:
+            projected = five_burn.project(measured["rate"], five_used, five_threshold, now, five_reset)
+            burn = five_burn.burn_view(measured, projected, stale, tz)
+
     night = night_info(now, reset, tz, profile, slots, alloc, spendable, surplus, commit_mb)
 
     heavy_runs = None
@@ -1078,7 +922,8 @@ def compute(now, profile, usage, model=None, commit_mb=None, outstanding=0.0, ru
         "current_plan": current_plan,
         "five_hour": {"used_pct": five_used, "reset": iso_ms(five_reset) if five_reset else None,
                       "reset_local": fmt_local(five_reset, tz) if five_reset else None,
-                      "threshold_pct": five_threshold, "hard_stop_pct": profile["five_hour_hard_stop"]},
+                      "threshold_pct": five_threshold, "hard_stop_pct": profile["five_hour_hard_stop"],
+                      "burn": burn},
         "night": night,
         "host": {"free_commit_mb": None if commit_mb is None else round(commit_mb),
                  "min_free_commit_mb": profile["min_free_commit_mb"], "max_heavy_runs": heavy_runs},
@@ -1158,13 +1003,19 @@ def recommend(calc, profile):
         agents = 0
     else:
         agents = max(1, min(int(profile["max_agents"]), round(ratio * 2)))
+    burn = five.get("burn") or {}
+    burn_limited = bool(burn.get("limited")) and not blocked and not background_paused
+    if burn_limited:
+        agents = five_burn.cap(agents, burn)
     models = allowed_models(calc, profile, throttle)
     model = "none" if blocked else models[0] if models else "none"
     if throttle and not blocked:
         reasons.append("throttle: routine subagent work on " + "/".join(profile["routine_models"]))
+    if burn_limited:
+        reasons.append(five_burn.reason(burn, five["reset_local"]))
     return {"blocked": blocked, "background_paused": background_paused, "pace_ratio": round(ratio, 2),
-            "throttle": throttle, "max_parallel_agents": agents, "max_heavy_runs": calc["host"]["max_heavy_runs"],
-            "model": model, "allowed_models": models, "reasons": reasons}
+            "throttle": throttle, "five_hour_burn_limited": burn_limited, "max_parallel_agents": agents,
+            "max_heavy_runs": calc["host"]["max_heavy_runs"], "model": model, "allowed_models": models, "reasons": reasons}
 
 
 def allowed_models(calc, profile, throttle, need_pct=0.0):
@@ -1221,8 +1072,14 @@ def status_line(calc, rec, extras):
 
 # ---------------------------------------------------------------- reservations
 
+# A launch reservation covers the gap between an Agent or Workflow gate and the SubagentStart that
+# replaces it. It carries no estimate, never reaches the history and ends on its own after this long.
+LAUNCH_KIND = "launch"
+LAUNCH_TTL = dt.timedelta(seconds=60)
+
+
 def outstanding_pct(registry, effective):
-    active = registry["reservations"]
+    active = [r for r in registry["reservations"] if r["kind"] != LAUNCH_KIND]
     if not active:
         return 0.0
     consumed = max(0.0, effective - min(r["used_at_acquire"] for r in active))
@@ -1235,7 +1092,11 @@ def prune_reservations(registry, profile, now, alive=pid_alive):
     agent_ttl = dt.timedelta(minutes=profile["agent_lease_ttl_min"])
     kept, dropped = [], []
     for r in registry["reservations"]:
-        if now - parse_iso(r["renewed_at"]) > (agent_ttl if r.get("key") else ttl):
+        if r["kind"] == LAUNCH_KIND:
+            span = LAUNCH_TTL
+        else:
+            span = agent_ttl if r.get("key") else ttl
+        if now - parse_iso(r["renewed_at"]) > span:
             dropped.append((r, "lease expired"))
         elif r.get("pid") is not None and not alive(r["pid"], r.get("image")):
             dropped.append((r, "process gone"))
@@ -1248,10 +1109,12 @@ def prune_reservations(registry, profile, now, alive=pid_alive):
 
 
 def close_reservation(registry, r, now, effective, actual, why):
+    entry = {k: r.get(k) for k in ("id", "kind", "label", "key", "session_id", "estimate_pct", "acquired_at", "item_id")}
+    if r["kind"] == LAUNCH_KIND:
+        return dict(entry, released_at=iso_ms(now), actual_pct=None, overlapped=False, reason=why)
     if actual is None and effective is not None:
         actual = max(0.0, effective - r["used_at_acquire"])
-    others = [o for o in registry["reservations"] if o["id"] != r["id"]]
-    entry = {k: r.get(k) for k in ("id", "kind", "label", "key", "session_id", "estimate_pct", "acquired_at", "item_id")}
+    others = [o for o in registry["reservations"] if o["id"] != r["id"] and o["kind"] != LAUNCH_KIND]
     entry.update(released_at=iso_ms(now), actual_pct=None if actual is None else round(actual, 3),
                  overlapped=bool(others) or bool(r.get("overlapped")), reason=why)
     registry["completed"].append(entry)
@@ -1313,8 +1176,9 @@ def end_session(sd, session, now, lock_timeout=0.5):
 
 
 def mark_overlap(registry):
-    if len(registry["reservations"]) > 1:
-        for r in registry["reservations"]:
+    held = [r for r in registry["reservations"] if r["kind"] != LAUNCH_KIND]
+    if len(held) > 1:
+        for r in held:
             r["overlapped"] = True
 
 
@@ -1501,8 +1365,25 @@ class Context:
         eff = window_effective(record, self.now, self.model)[0] if record and record.get("seven_day") else 0.0
         queue = store["queue"]
         runs = [r for r in [queue.get("run")] + queue.get("past_runs", []) if r]
-        return compute(self.now, store["profile"], usage, self.model, free_memory_mb(),
-                       outstanding_pct(store["registry"], eff), runs)
+        result = compute(self.now, store["profile"], usage, self.model, free_memory_mb(),
+                         outstanding_pct(store["registry"], eff), runs)
+        self.publish_burn(result)
+        return result
+
+    def publish_burn(self, result):
+        """Write the five-hour burn snapshot of a run that reads the live clock.
+
+        compute() stays pure; Context.calc() calls this for every command that computes (status, auto and
+        the mutating commands). A run dated by --now or PACELINE_NOW outside the future slack of the wall
+        clock is a what-if and must not replace the live file with an old or future computed_at."""
+        account = result["data"].get("account") or {}
+        if not (account.get("state") == "known" and account.get("key") and result["five_hour"]["reset"]
+                and abs(self.now - limits_file.wall_clock()) <= FUTURE_SLACK and limits_file.pace_enabled(self.sd)):
+            return
+        try:
+            five_burn.publish(self.sd, five_burn.snapshot(self.now, account["key"], result["five_hour"]))
+        except OSError as error:
+            limits_file.trace_failure("five_burn.snapshot", self.sd, error=error)
 
 
 def emit(args, line, payload):
@@ -1525,13 +1406,36 @@ def housekeeping(store, now):
 
 
 def cmd_status(ctx):
+    launch_key = getattr(ctx.args, "launch_key", None)
     with locked(ctx.sd):
         store = Store(ctx.sd)
         housekeeping(store, ctx.now)
+        if launch_key:
+            # The report counts the reservations held before this launch, and the launch is recorded in
+            # the same lock hold, so concurrent gates take turns: each sees the launches of those before it.
+            line, calc = status_report(ctx, store)
+            calc["launch_reservation"] = hold_launch(store, ctx, launch_key)
         store.save()
-    line, calc = status_report(ctx, store)
+    if not launch_key:
+        line, calc = status_report(ctx, store)
     emit(ctx.args, line, calc)
     return EXIT_OK
+
+
+def hold_launch(store, ctx, key):
+    """Record a launch reservation for the key, or renew the one already held by this session."""
+    reg = store["registry"]
+    held = next((r for r in reg["reservations"] if r["kind"] == LAUNCH_KIND and r.get("key") == key
+                 and r.get("session_id") == ctx.session), None)
+    if held:
+        held["renewed_at"] = iso_ms(ctx.now)
+    else:
+        held = {"id": f"R-{uuid.uuid4().hex[:8]}", "kind": LAUNCH_KIND, "label": "", "key": key,
+                "session_id": ctx.session, "pid": None, "image": None, "estimate_pct": 0.0,
+                "acquired_at": iso_ms(ctx.now), "renewed_at": iso_ms(ctx.now), "used_at_acquire": 0.0, "item_id": None}
+        reg["reservations"].append(held)
+    store.touch("registry")
+    return held
 
 
 def status_report(ctx, store):
@@ -1549,7 +1453,8 @@ def status_report(ctx, store):
     if suggest:
         extras.append(f"forecast leaves >{pct:g}% unused: propose leftover tasks")
     calc.update(recommendation=rec, unconfirmed_tomorrow=[p["id"] for p in tomorrow], suggest_leftover_tasks=suggest,
-                active_reservations=len(store["registry"]["reservations"]), pace_on=limits_file.pace_enabled(ctx.sd))
+                active_reservations=len(store["registry"]["reservations"]), pace_on=limits_file.pace_enabled(ctx.sd),
+                away=away.read(ctx.sd))
     return status_line(calc, rec, extras), calc
 
 
@@ -1701,8 +1606,23 @@ def autonomous(now, calc, store, profile, tz, start_run=False):
             action = "wait"
             wait_until = five["reset"]
             reasons.append(f"5h {five['used_pct']:.0f}% >= {five['threshold_pct']:.0f}%, wait for window reset")
+    night_burn = None
+    if action == "start" and five.get("burn") and five["reset"]:
+        # compute() projected to the threshold of the current hour; a night run always answers to the night one.
+        rate = five["burn"]["rate_per_hour_pct"]
+        measured = {"rate": rate, "base_at": parse_iso(five["burn"]["base_at"]), "span_min": five["burn"]["span_min"]}
+        projected = five_burn.project(rate, five["used_pct"], float(profile["five_hour_threshold_night"]), now,
+                                      parse_iso(five["reset"]))
+        if projected["limited"]:
+            night_burn = five_burn.burn_view(measured, projected, False, tz)
     heavy = calc["host"]["max_heavy_runs"]
     agents = 0 if action == "stop" else max(1, min(int(profile["max_agents"]), heavy if heavy is not None else 3))
+    if night_burn:
+        agents = five_burn.cap(agents, night_burn)
+        reasons.append(five_burn.reason(night_burn, five["reset_local"]))
+        if agents == 0:
+            action = "wait"
+            wait_until = five["reset"]
     throttle = effective >= profile["throttle_weekly_pct"] and calc["weekly"]["hours_to_reset"] > 24
     models = allowed_models(calc, profile, throttle, item["estimate_pct"] if item else 0.0)
     may = action == "start" and item is not None and bool(models)
@@ -1859,6 +1779,22 @@ def current_effective(ctx, allow_merge=True):
     return window_effective(record, ctx.now, ctx.model)[0]
 
 
+def take_over_launch(reg, session):
+    """Drop the oldest launch reservation of the session: the agent that just started replaces it.
+
+    Without this the agent counts twice until the launch ends on its own. A Workflow gate holds one
+    launch for many starts, so its first start consumes it. No history entry is written.
+    """
+    if not session:
+        return None
+    mine = [r for r in reg["reservations"] if r["kind"] == LAUNCH_KIND and r.get("session_id") == session]
+    if not mine:
+        return None
+    oldest = min(mine, key=lambda r: parse_iso(r["acquired_at"]))
+    reg["reservations"].remove(oldest)
+    return oldest
+
+
 def cmd_reserve(ctx):
     a = ctx.args
     if a.res_cmd == "acquire":
@@ -1882,6 +1818,8 @@ def cmd_reserve(ctx):
                  "session_id": ctx.session, "pid": pid, "image": image, "estimate_pct": estimate,
                  "acquired_at": iso_ms(ctx.now), "renewed_at": iso_ms(ctx.now),
                  "used_at_acquire": effective if effective is not None else 0.0, "item_id": a.item}
+            if a.kind == "subagent":
+                take_over_launch(reg, ctx.session)
             reg["reservations"].append(r)
             mark_overlap(reg)
             store.touch("registry")
@@ -2576,7 +2514,8 @@ def build_parser():
     sub = parser.add_subparsers(dest="cmd", required=True)
     sub.add_parser("on", parents=[common], help="turn the pace hooks on")
     sub.add_parser("off", parents=[common], help="turn the pace hooks off (every command still runs)")
-    sub.add_parser("status", parents=[common], help="interactive one-line recommendation")
+    sub.add_parser("status", parents=[common], help="interactive one-line recommendation").add_argument(
+        "--launch-key", help="also hold a short-lived launch reservation under this key, counted after the report")
     sub.add_parser("auto", parents=[common], help="autonomous parameters for the next queue item").add_argument(
         "--start-run", action="store_true", help="begin a new night run: fix tonight's allowance and baseline")
     sub.add_parser("calibrate", parents=[common], help="propose parameter corrections from history")
@@ -2663,19 +2602,23 @@ def build_parser():
     for name in ("retry", "remove"):
         qsub.add_parser(name, parents=[qp]).add_argument("id")
 
-    # paceline.py hands these two groups to their own modules before this parser runs; they are listed
+    # paceline.py hands these groups to their own modules before this parser runs; they are listed
     # here so that --help shows them.
     for name, about in GROUPS.items():
         sub.add_parser(name, help=about, add_help=False).add_argument("rest", nargs=argparse.REMAINDER)
     return parser
 
 
-GROUPS = {"cache-watch": "keep an idle session's one-hour prompt cache alive: on|off|status|config",
+GROUPS = {"away": "tell the launch gate that you are away, so it denies a launch it would ask about: on|off|status",
+          "cache-watch": "keep an idle session's one-hour prompt cache alive: on|off|status|config",
           "context-watch": "context against the auto-compaction point: config|status",
           "usage-watch": "read the account's exact usage through Claude Code: on|off|status"}
 
 
 def cmd_group(ctx):
+    if ctx.args.cmd == "away":
+        import away
+        return away.main(ctx.args.rest)
     if ctx.args.cmd == "cache-watch":
         import cache_watch
         return cache_watch.main(ctx.args.rest)

@@ -1,4 +1,4 @@
-import type { StatusCache, StatusLimit, StatusMeasure, StatusMeta, StatusSample, StatusScoped } from '../types'
+import type { StatusBurn, StatusCache, StatusLimit, StatusMeasure, StatusMeta, StatusSample, StatusScoped } from '../types'
 
 // calm: nothing to do; watch: worth a glance; act: changes what to do next.
 export type Level = 'calm' | 'watch' | 'act'
@@ -44,6 +44,10 @@ export type FiveView = {
   fullAt: number | null
   isExact: boolean
   level: Level
+  // The percentage the projection aims at: 100, or the threshold of paceline's snapshot.
+  targetPct: number
+  // True when the rate, budget and time come from paceline's five-hour burn snapshot.
+  isPaceline: boolean
 }
 
 export type WeekView = {
@@ -88,9 +92,42 @@ export type ViewInput = {
   ctxSamples: number[]
   // The limits in fileLimits come from a partition marked unknown (pickPartition).
   isFileAccountUnknown?: boolean
+  // paceline's five-hour burn snapshot and the key of the signed-in account it must belong to.
+  burn?: StatusBurn | null
+  accountKey?: string | null
 }
 
 const TTL_MARGIN_MS = 5000
+
+// The snapshot is rewritten at every merge, at least once a minute while a session is active.
+export const BURN_MAX_AGE_MS = 3 * 60_000
+
+const isNumber = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value)
+const isTextOrNull = (value: unknown): value is string | null => value === null || typeof value === 'string'
+const isNumberOrNull = (value: unknown): value is number | null => value === null || isNumber(value)
+
+// paceline's five-hour-burn.json, or null when the text is not a snapshot with every field in its place.
+export function parseBurn(text: string): StatusBurn | null {
+  let raw: unknown
+  try {
+    raw = JSON.parse(text)
+  } catch {
+    return null
+  }
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null
+  const r = raw as Record<string, unknown>
+  const ok =
+    typeof r.computed_at === 'string' &&
+    typeof r.account === 'string' &&
+    isNumber(r.used_pct) &&
+    typeof r.resets_at === 'string' &&
+    isNumber(r.threshold_pct) &&
+    isNumber(r.budget_per_hour_pct) &&
+    isNumberOrNull(r.rate_per_hour_pct) &&
+    isTextOrNull(r.threshold_at) &&
+    typeof r.limited === 'boolean'
+  return ok ? (raw as StatusBurn) : null
+}
 
 const windowKey = (resetsAt: string | null | undefined) => (resetsAt ? Math.round(Date.parse(resetsAt) / 60000) : null)
 
@@ -299,10 +336,40 @@ function burnRate(pct: number, resetsAt: string | undefined, samples: StatusSamp
   return Math.max(0, ((pct - base.pct) / (now - base.t)) * HOUR)
 }
 
-function fiveView(limit: StatusLimit | undefined, isExact: boolean, samples: StatusSample[], now: number): FiveView | null {
+function fiveView(limit: StatusLimit | undefined, isExact: boolean, samples: StatusSample[], now: number, burn: StatusBurn | null, accountKey: string | null): FiveView | null {
   if (!limit) return null
   const resetAt = limit.resetsAt ? Date.parse(limit.resetsAt) : null
   const resetInMs = resetAt === null ? null : Math.max(0, resetAt - now)
+  const key = windowKey(limit.resetsAt)
+  const age = burn ? now - Date.parse(burn.computed_at) : NaN
+  // The snapshot stands in only for the figure it was computed from: this account, this window, this
+  // percentage, and not older than the merge cadence allows. At or past its threshold it projects
+  // nothing, so the 100% projection from the samples takes over.
+  if (
+    burn &&
+    limit.percentUsed < burn.threshold_pct &&
+    accountKey !== null &&
+    burn.account === accountKey &&
+    key !== null &&
+    windowKey(burn.resets_at) === key &&
+    burn.used_pct === limit.percentUsed &&
+    age >= 0 &&
+    age <= BURN_MAX_AGE_MS
+  ) {
+    const thresholdAt = burn.threshold_at ? Date.parse(burn.threshold_at) : NaN
+    const level: Level = limit.percentUsed >= 90 || burn.limited ? 'act' : limit.percentUsed >= 70 ? 'watch' : 'calm'
+    return {
+      pct: limit.percentUsed,
+      resetInMs,
+      ratePerHour: burn.rate_per_hour_pct,
+      evenPerHour: burn.budget_per_hour_pct,
+      fullAt: Number.isFinite(thresholdAt) ? thresholdAt : null,
+      isExact,
+      level,
+      targetPct: burn.threshold_pct,
+      isPaceline: true,
+    }
+  }
   const ratePerHour = burnRate(limit.percentUsed, limit.resetsAt, samples, now, 90 * 60_000, 10 * 60_000)
   const evenPerHour = resetInMs && resetInMs > 0 ? (100 - limit.percentUsed) / (resetInMs / HOUR) : null
   const fullAt = ratePerHour && ratePerHour > 0 ? now + ((100 - limit.percentUsed) / ratePerHour) * HOUR : null
@@ -313,7 +380,7 @@ function fiveView(limit: StatusLimit | undefined, isExact: boolean, samples: Sta
       : limit.percentUsed >= 70 || (ratePerHour !== null && evenPerHour !== null && ratePerHour > evenPerHour)
         ? 'watch'
         : 'calm'
-  return { pct: limit.percentUsed, resetInMs, ratePerHour, evenPerHour, fullAt, isExact, level }
+  return { pct: limit.percentUsed, resetInMs, ratePerHour, evenPerHour, fullAt, isExact, level, targetPct: 100, isPaceline: false }
 }
 
 // The weekly percentage moves in whole points, so its burn needs a longer look-back than the
@@ -361,7 +428,7 @@ export function buildView(i: ViewInput): View {
     now: i.now,
     context: contextView(i.measure, i.ctxSamples, i.cache.regime),
     cache: cacheView(i.cache, i.now, i.measure?.tokens ?? null, i.meta?.model ?? null),
-    five: fiveView(five.merged, five.isExact, five.isFromFile && isUnknown ? [] : i.fiveSamples, i.now),
+    five: fiveView(five.merged, five.isExact, five.isFromFile && isUnknown ? [] : i.fiveSamples, i.now, i.burn ?? null, i.accountKey ?? null),
     week:
       weekPct === undefined
         ? null
