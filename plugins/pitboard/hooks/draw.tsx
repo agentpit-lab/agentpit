@@ -245,7 +245,7 @@ export function drawDesktop(els: Els, v: View, open: string | null, toggle: (key
           : pieSvg(g.pct, g.level)
     return [
       name(g.key, g.label),
-      ring && Svg ? <Svg key={`pie-${g.key}`} source={ring.source} alt={`${g.label} ${g.icon || (g.mark && Svg) ? ring.alt : (g.value ?? 'n/a')}`} width={ring.width} height={ring.height} /> : null,
+      ring && Svg ? <Svg key={`pie-${g.key}`} source={ring.source} alt={`${g.label} ${g.icon || g.mark ? ring.alt : (g.value ?? 'n/a')}`} width={ring.width} height={ring.height} /> : null,
       ...glyphMarks(g),
       g.level !== 'calm' && g.value && !g.icon ? (
         <Text key={`v-${g.key}`} bold color={g.tone === 'cold' ? DESKTOP_COLD : DESKTOP_LEVEL[g.level]}>
@@ -380,7 +380,8 @@ const gaugeCells = (pct: number) => (EIGHTHS[Math.round(Math.max(0, Math.min(100
 const ICON_CELLS = { hot: '🔥', cold: '❄ ' }
 const shownValue = (g: Gauge) => g.level !== 'calm' && g.value !== null && !g.icon
 
-// The pane button beside ⓘ, drawn as plainly as the row's other names.
+// The pane button beside ⓘ, drawn bracketed as the row's one action, apart from the plain names that
+// open a card's line.
 const PANE_BUTTON = 'pitboard'
 
 // The state glyphs drawn between a reading's gauge and its value: ↻, and ᶻ (one cell) while idle compaction is expected.
@@ -388,8 +389,8 @@ const markText = (g: Gauge) => `${g.mark ?? ''}${g.idle ? IDLE_MARK : ''}`
 
 // The terminal row's width in cells, from the same pieces drawTerminal draws, so the rule above spans
 // the row alone. Gaps: 1 inside a reading, 1 + · + 1 between readings, 1 + │ + 1 between groups; the
-// last part is ⓘ (2), 1 + · + 1 and the pane button, and the rule runs 1 past it so the button sits as far
-// from its end as ⓘ from the │ before it.
+// last part is ⓘ (2), 1 + · + 1 and the pane button `[ pitboard ]`, and the rule runs 1 past it so the
+// button sits as far from its end as ⓘ from the │ before it.
 export function terminalCells(v: View): number {
   const { gauges, advisorOn } = readings(v)
   const readingWidth = (g: Gauge) =>
@@ -403,10 +404,10 @@ export function terminalCells(v: View): number {
     const adv = advisorView(advisorOn)
     groupWidths.push(['Advisor', adv.name ?? 'off', ...(adv.isInactive ? ['(inactive)'] : [])].reduce((sum, w, i) => sum + w.length + (i > 0 ? 1 : 0), 0))
   }
-  return [...groupWidths, 2 + 3 + PANE_BUTTON.length].reduce((sum, w, i) => sum + w + (i > 0 ? 3 : 0), 0) + 1
+  return [...groupWidths, 2 + 3 + PANE_BUTTON.length + 4].reduce((sum, w, i) => sum + w + (i > 0 ? 3 : 0), 0) + 1
 }
 
-export function drawTerminal(els: Els, v: View, open: string | null, toggle: (key: string) => void, openPane: () => void = () => {}) {
+export function drawTerminal(els: Els, v: View, open: string | null, toggle: (key: string) => void, togglePane: () => void = () => {}) {
   const { Box, Button, Text } = els
   const { gauges, info, advisor, advisorOn } = readings(v)
   const m = v.meta
@@ -547,7 +548,7 @@ export function drawTerminal(els: Els, v: View, open: string | null, toggle: (ke
             <Box flexDirection="row" columnGap={1}>
               {name('info', 'ⓘ ')}
               <Text key="pane-sep" color={RULE}>·</Text>
-              {Button ? <Button key="pane" label={PANE_BUTTON} plain dimColor onPress={() => openPane()} /> : <Text dimColor>{PANE_BUTTON}</Text>}
+              {Button ? <Button key="pane" label={PANE_BUTTON} dimColor onPress={() => togglePane()} /> : <Text dimColor>{PANE_BUTTON}</Text>}
             </Box>
             {pointer('info', 0)}
           </Box>,

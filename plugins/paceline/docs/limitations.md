@@ -30,8 +30,15 @@ readings of each account in a partition of its own in `rate-limits.json`. Pace, 
 PitBoard read only the partition of the account signed in now. After a `/login` to another account
 in the same configuration directory, the old account's figures stay in the file and come back when
 you sign in to it again. A partition whose readings are all older than 7 days is dropped, except the
-newest one, which stays however old and shows as stale. The key comes from `oauthAccount` in Claude
-Code's own `.claude.json`; see [Files](reference.md#files).
+newest one, which stays however old and shows as stale. A Claude Code Desktop session passes its
+account to its process in the variables `CLAUDE_CODE_ACCOUNT_UUID` and
+`CLAUDE_CODE_ORGANIZATION_UUID`. When both are set and the account variable is a UUID, the key comes
+from them and holds for the life of the process. After a `/login` or `/logout` in that session, the
+PaceLine hooks and PitBoard in it treat the account as `account unknown` until it restarts;
+`paceline status` and the gates run from that session still read the variables and report the
+account the session started with. Otherwise the key comes from `oauthAccount` in Claude Code's own
+`.claude.json`, which names the account of the last `/login` in a terminal; see
+[Files](reference.md#files).
 
 Some gaps remain:
 
@@ -49,17 +56,23 @@ Some gaps remain:
 - A reading with no `account` field, from an older PaceLine or another writer, goes to the partition
   `unknown`. Pace and PitBoard use it when the signed-in account has no partition of its own, and
   mark the figures as `account unknown`.
-- Claude Code Desktop, macOS, and Linux are not verified live. The behaviour of `oauthAccount` there
-  is read from Claude Code's files, not from a sign-in on those systems. Where the file names no
-  account, the state is `account unknown`.
+- A Desktop session that its host starts with its own credential, rather than with the two variables
+  alone, and macOS and Linux are not verified live. The variables are not part of Claude Code's
+  documented interface, so a later version may drop them; PaceLine then reads `.claude.json`. The
+  behaviour of `oauthAccount` there is read from Claude Code's files, not from a sign-in on those
+  systems. Where the file names no account, the state is `account unknown`.
 
 **What you see:** after a `/login`, `/paceline:pace status` shows the new account's figures, or `no
 usage data yet for the signed-in account` until its first reading arrives. When PaceLine cannot tell
 the account, `status` ends with `account unknown (<reason>)` and the `pace:` line adds `account
 unknown`. See [Status says account unknown](troubleshooting.md#status-says-account-unknown).
 
-**What still works:** a second configuration directory per account, as the next entry describes,
-keeps the files of two accounts apart altogether. See [Use two accounts on one
+**What still works:** a Desktop session on one account and a terminal session on the other need no
+second directory: each tags and reads its own account. In a plain terminal, `paceline status` shows
+the terminal login's figures and ends with `other account <8 digits> active; --account <8 digits>`
+when another account has a reading under 30 minutes old; `paceline status --account <key>` shows
+that account's. A second configuration directory per account, as the next entry describes, keeps the
+files of two accounts apart altogether. See [Use two accounts on one
 machine](how-to.md#use-two-accounts-on-one-machine).
 
 ### Each configuration directory keeps its own state

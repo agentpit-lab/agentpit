@@ -138,12 +138,34 @@ def account_key_of(text):
         return None, "unreadable"
     oauth = parsed.get("oauthAccount") if isinstance(parsed, dict) else None
     oauth = oauth if isinstance(oauth, dict) else {}
-    account = _uuid_or_none(oauth.get("accountUuid"))
-    organization = _uuid_or_none(oauth.get("organizationUuid")) or ""
+    return account_key_of_ids(oauth.get("accountUuid"), oauth.get("organizationUuid"))
+
+
+def account_key_of_ids(account_uuid, organization_uuid):
+    """(key, None) for an account named by its identifiers, else (None, "no-account").
+
+    The identifiers come from the state file or from the process environment. An organization that is
+    not a UUID counts as empty.
+    """
+    account = _uuid_or_none(account_uuid)
+    organization = _uuid_or_none(organization_uuid) or ""
     if account is None:
         return None, "no-account"
     digest = hashlib.sha256(f"{ACCOUNT_PREFIX}:{account}:{organization}".encode("utf-8")).hexdigest()
     return digest[:16], None
+
+
+def environment_account():
+    """The key of the account a Desktop host started this process with, else None.
+
+    The host passes the two identifier variables; they belong to the process, while the state file
+    names the account of the last terminal login. Both must be set.
+    """
+    account = os.environ.get("CLAUDE_CODE_ACCOUNT_UUID")
+    organization = os.environ.get("CLAUDE_CODE_ORGANIZATION_UUID")
+    if not account or not organization:
+        return None
+    return account_key_of_ids(account, organization)[0]
 
 
 def read_account_text(path):
@@ -153,11 +175,16 @@ def read_account_text(path):
 def resolve_account(path=None):
     """(key, None) for the account signed in now, else (None, reason): "no-file", "unreadable" or "no-account".
 
+    Without a path the process's own account variables come first, then the state file.
     Claude Code rewrites the file often, so a read or parse failure is tried once more after
     ACCOUNT_RETRY_SEC. Never raises, and passes nothing from the file or an error on: an error message
     may quote the file.
     """
-    path = path or account_file()
+    if path is None:
+        own = environment_account()
+        if own is not None:
+            return own, None
+        path = account_file()
     result = (None, "unreadable")
     for attempt in range(2):
         try:

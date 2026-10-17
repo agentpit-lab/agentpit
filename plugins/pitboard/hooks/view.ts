@@ -106,7 +106,7 @@ const isNumber = (value: unknown): value is number => typeof value === 'number' 
 const isTextOrNull = (value: unknown): value is string | null => value === null || typeof value === 'string'
 const isNumberOrNull = (value: unknown): value is number | null => value === null || isNumber(value)
 
-// paceline's five-hour-burn.json, or null when the text is not a snapshot with every field in its place.
+// paceline's five-hour-burn-<key>.json, or null when the text is not a snapshot with every field in its place.
 export function parseBurn(text: string): StatusBurn | null {
   let raw: unknown
   try {

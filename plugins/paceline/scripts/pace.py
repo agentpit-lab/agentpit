@@ -11,6 +11,7 @@ import json
 import math
 import os
 import platform
+import re
 import shutil
 import statistics
 import subprocess
@@ -521,6 +522,47 @@ def own_account():
     return limits_file.resolve_account()
 
 
+class AccountChoiceError(PaceError):
+    """--account names no single partition; the message lists the candidates."""
+
+
+ACCOUNT_PREFIX_MIN = 4
+# A reading older than this is stale; the doctor and the other-account notice apply the same bound.
+FRESH_READING_MIN = 30
+
+
+def partition_keys(limits):
+    """The account keys of the partitions of a limits file, in file order; untagged readings have none."""
+    return [k for k in limits_file.held_partitions(limits) if k != limits_file.UNKNOWN_ACCOUNT]
+
+
+def select_account(prefix, limits):
+    """The one partition key that starts with the prefix; AccountChoiceError when none or several do."""
+    keys = partition_keys(limits)
+    listed = ", ".join(keys) if keys else "none yet"
+    wanted = prefix.lower()
+    if not re.fullmatch(f"[0-9a-f]{{{ACCOUNT_PREFIX_MIN},16}}", wanted):
+        raise AccountChoiceError(f"--account takes {ACCOUNT_PREFIX_MIN} to 16 hex digits of an account key; "
+                                 f"candidates: {listed}")
+    found = [k for k in keys if k.startswith(wanted)]
+    if len(found) == 1:
+        return found[0]
+    why = "matches no account" if not found else "matches several accounts"
+    raise AccountChoiceError(f"--account {prefix} {why}; candidates: {', '.join(found) if found else listed}")
+
+
+def other_active_accounts(limits, key, now):
+    """The keys of the other partitions that hold a reading under FRESH_READING_MIN minutes old."""
+    limit = dt.timedelta(minutes=FRESH_READING_MIN)
+    held = limits_file.held_partitions(limits)
+    others = []
+    for other in partition_keys(limits):
+        record = dated_record(held[other], now) if other != key else None
+        if record is not None and dt.timedelta(0) <= now - record["_at"] < limit:
+            others.append(other)
+    return others
+
+
 MERGE_LOCK_WAIT_SEC = 3
 LOAD_LOCK_WAIT_SEC = 20
 
@@ -558,9 +600,35 @@ def update_usage(sd, now, merge=True, lock_wait=0.0):
     return record, True, None
 
 
-def load_usage(sd, profile, now, allow_merge=True, max_age=None):
-    """Latest usage record plus where it came from. Never raises on a busy lock or missing data."""
-    key, reason = own_account()
+def usage_limits(sd):
+    """The limits file the readings come from: PACELINE_USAGE_FILE when set, else rate-limits.json."""
+    fake = os.environ.get("PACELINE_USAGE_FILE")
+    if fake:
+        return json.loads(Path(fake).read_text(encoding="utf-8"))
+    return read_limits(sd)
+
+
+def load_usage(sd, profile, now, allow_merge=True, max_age=None, account_prefix=None):
+    """Latest usage record plus where it came from. Never raises on a busy lock or missing data.
+
+    account_prefix picks another account's partition by the start of its key. Without it, a key that
+    came from the shared state file (no account variables) also names the other partitions that hold a
+    fresh reading, under "other_accounts".
+    """
+    if account_prefix is not None:
+        key, reason = select_account(account_prefix, usage_limits(sd)), None
+    else:
+        key, reason = own_account()
+    result = read_usage(sd, profile, now, key, reason, allow_merge, max_age)
+    if key and account_prefix is None and limits_file.environment_account() is None:
+        others = other_active_accounts(usage_limits(sd), key, now)
+        if others:
+            result["other_accounts"] = others
+    return result
+
+
+def read_usage(sd, profile, now, key, reason, allow_merge, max_age):
+    """load_usage for a resolved key: the partition's newest record, merging the inbox when it is old."""
     history = read_history(sd, key)
     fake = os.environ.get("PACELINE_USAGE_FILE")
     if fake:
@@ -900,7 +968,8 @@ def compute(now, profile, usage, model=None, commit_mb=None, outstanding=0.0, ru
         "data": {"source": usage.get("source"), "error": usage.get("error"),
                  "observed_at": iso_ms(record["_at"]) if record.get("_at") else record.get("observed_at"),
                  "bucket_observed_at": record.get("_bucket_at"), "age_min": round(age_min, 1) if age_min != math.inf else None,
-                 "stale": stale, **({"account": account} if account else {})},
+                 "stale": stale, **({"account": account} if account else {}),
+                 **({"other_accounts": usage["other_accounts"]} if usage.get("other_accounts") else {})},
         "weekly": {"seven_day_pct": seven_used, "scoped": scoped, "model": model,
                    "matched_scoped": [s["name"] for s in matched], "effective_pct": effective,
                    "remaining_pct": remaining, "reset": iso_ms(reset), "reset_local": fmt_local(reset, tz),
@@ -1067,6 +1136,8 @@ def status_line(calc, rec, extras):
         parts.append(f"WARNING remainder {w['remaining_pct']:.0f}% near day capacity {calc['day_capacity_pct']:.0f}%")
     parts += rec["reasons"]
     parts += extras
+    for other in calc["data"].get("other_accounts") or []:
+        parts.append(f"other account {other[:8]} active; --account {other[:8]}")
     return " | ".join(parts)
 
 
@@ -1356,7 +1427,8 @@ class Context:
 
     def get_usage(self, profile, allow_merge=True, max_age=None):
         if self.usage is None or max_age is not None:
-            self.usage = load_usage(self.sd, profile, self.now, allow_merge and not self.args.no_merge, max_age)
+            self.usage = load_usage(self.sd, profile, self.now, allow_merge and not self.args.no_merge, max_age,
+                                    getattr(self.args, "account", None))
         return self.usage
 
     def calc(self, store, allow_merge=True, max_age=None):
@@ -1367,7 +1439,8 @@ class Context:
         runs = [r for r in [queue.get("run")] + queue.get("past_runs", []) if r]
         result = compute(self.now, store["profile"], usage, self.model, free_memory_mb(),
                          outstanding_pct(store["registry"], eff), runs)
-        self.publish_burn(result)
+        if getattr(self.args, "account", None) is None:
+            self.publish_burn(result)
         return result
 
     def publish_burn(self, result):
@@ -2359,7 +2432,7 @@ def probe_limits(sd, now):
     with contextlib.suppress(OSError):
         history = len((sd / "rate-limits.history.jsonl").read_text(encoding="utf-8").splitlines())
     evidence = {"buckets": buckets, "scoped": record.get("scoped"), "history_lines": history}
-    stale = oldest is None or oldest > 30 or any(b["implausible"] for b in buckets.values())
+    stale = oldest is None or oldest > FRESH_READING_MIN or any(b["implausible"] for b in buckets.values())
     return ("warn" if stale else "ok"), evidence
 
 
@@ -2514,8 +2587,10 @@ def build_parser():
     sub = parser.add_subparsers(dest="cmd", required=True)
     sub.add_parser("on", parents=[common], help="turn the pace hooks on")
     sub.add_parser("off", parents=[common], help="turn the pace hooks off (every command still runs)")
-    sub.add_parser("status", parents=[common], help="interactive one-line recommendation").add_argument(
-        "--launch-key", help="also hold a short-lived launch reservation under this key, counted after the report")
+    status = sub.add_parser("status", parents=[common], help="interactive one-line recommendation")
+    status.add_argument("--launch-key", help="also hold a short-lived launch reservation under this key, counted after the report")
+    status.add_argument("--account", metavar="KEY", help="report this account's partition instead of the signed-in one: "
+                        "the first 4 or more hex digits of a key in rate-limits.json")
     sub.add_parser("auto", parents=[common], help="autonomous parameters for the next queue item").add_argument(
         "--start-run", action="store_true", help="begin a new night run: fix tonight's allowance and baseline")
     sub.add_parser("calibrate", parents=[common], help="propose parameter corrections from history")
@@ -2656,6 +2731,10 @@ def main(argv=None):
     started, code = time.monotonic(), EXIT_ERROR
     try:
         code = handlers[args.cmd](ctx)
+        return code
+    except AccountChoiceError as error:
+        print(f"paceline: {error}", file=sys.stderr)
+        code = EXIT_USAGE
         return code
     except PaceError as error:
         print(f"paceline: {error}", file=sys.stderr)

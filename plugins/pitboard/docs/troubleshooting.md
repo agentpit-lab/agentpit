@@ -90,8 +90,8 @@ none; the shading under the pointer stays.
 
 **Check:** look for the `pitboard` side pane at the right of the conversation.
 
-**Fix:** read the card in the pane, or close the pane with its close mark or Escape; the cards come
-back at once.
+**Fix:** read the card in the pane, or close the pane: click `pitboard` again, or use its close mark
+or Escape; the cards come back at once.
 
 ## Weekday names are in the wrong language
 
@@ -126,3 +126,15 @@ last error.
 
 **Fix:** turn usage-watch on with `/paceline:usage-watch on`. After an error, the limits return with
 the next successful reading.
+
+## The pitboard button is missing from the Desktop footer
+
+**Cause:** in Desktop the `pitboard` button sits in the footer under the prompt, on one line with
+other plugins' footer buttons. When they do not fit, Desktop cuts the line off behind `...`, which
+cannot be opened, so a button past the cut cannot be clicked.
+
+**Check:** look at the end of the footer. A `...` there with no `pitboard` before it means the
+button was cut off.
+
+**Fix:** switch off in `/plugin` the other plugins that add footer buttons, then run
+`/reload-plugins`. Until then, `/pitboard` opens the pane.

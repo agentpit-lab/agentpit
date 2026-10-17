@@ -2,7 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
 import type { StatusBurn, StatusCache, StatusLimit, StatusMeasure, StatusSample, StatusScoped } from '../types'
-import { accountFileOf, accountKeyOf } from './account'
+import { accountFileOf, accountKeyOf, accountKeyOfIds } from './account'
 import { desktopKey } from './cards'
 import { drawDesktop, drawPane, drawTerminal } from './draw'
 import type { Els } from './draw'
@@ -50,6 +50,15 @@ const advisorPick = atom({ plugin: 'pitboard', key: 'advisorPick' } as const, nu
 // the file come from readings of unknown account.
 const account = atom({ plugin: 'pitboard', key: 'account' } as const, null)
 const paneOpen = atom({ plugin: 'pitboard', key: 'paneOpen' } as const, false)
+// paneOpen as of the last write, for a press to read without an await. A drawing's onPress holds what
+// that drawing read, and live on 2.1.302 a press soon after the first open still took the closed branch.
+// The module lives in one session's process, and its session start seeds this again after a reload.
+let paneOpenNow = false
+
+async function setPaneOpen($: EngineInterface, value: boolean) {
+  paneOpenNow = value
+  await update($, paneOpen, () => value)
+}
 
 const toLimit = (l: StatusLimit): StatusLimit => ({ kind: l.kind, percentUsed: l.percentUsed, resetsAt: l.resetsAt })
 
@@ -58,9 +67,31 @@ async function configDir($: EngineInterface) {
   return (await $.env.get('CLAUDE_CONFIG_DIR')) || `${home}/.claude`
 }
 
-// The key of the account signed in now, null when it cannot be told. Claude Code rewrites its state
-// file often, so a read that fails is tried once more after 50 ms. Nothing from the file is kept.
+// The key of the account a Desktop host started this session with, from the two identifier variables
+// it passes, or null when they are not both set. They belong to the process, not to the shared state
+// file, which names the account of the last terminal login.
+async function envAccountOf($: EngineInterface): Promise<string | null> {
+  try {
+    const account = await $.env.get('CLAUDE_CODE_ACCOUNT_UUID')
+    const organization = await $.env.get('CLAUDE_CODE_ORGANIZATION_UUID')
+    if (!account || !organization) return null
+    return accountKeyOfIds(account, organization).key
+  } catch {
+    return null
+  }
+}
+
+// Set by /login and /logout in a session that has the variables: they still name the old account, and
+// the file may now name another one, so the session's account is unknown until the process restarts.
+let accountLost = false
+
+// The key of the account signed in now, null when it cannot be told: the session's own variables
+// first, else Claude Code's state file. The file is read at every use, and Claude Code rewrites it
+// often, so a read that fails is tried once more after 50 ms. Nothing from the file is kept.
 async function accountOf($: EngineInterface): Promise<string | null> {
+  if (accountLost) return null
+  const own = await envAccountOf($)
+  if (own !== null) return own
   try {
     const file = accountFileOf({
       configDir: await $.env.get('CLAUDE_CONFIG_DIR'),
@@ -238,30 +269,35 @@ async function refreshShared($: EngineInterface) {
     // A read that met a writer's rename keeps what the last read gave; no file yet draws the payload alone.
     isUnreadable = await $.fs.exists(path)
   }
+  const known = await read($, account)
+  // A key that cannot be read for a moment is no change of account: the last key stands, and the
+  // figures are marked through pickPartition below.
+  // After a /login or /logout the key stays unknown, and the last one belongs to the old account.
+  const held = accountLost ? null : (key ?? known?.key ?? null)
+  // The burn file is that of the key the row uses; with none, none is read.
   let burn: StatusBurn | null = null
-  try {
-    burn = parseBurn(await $.fs.read(`${await stateDir($)}/five-hour-burn.json`))
-  } catch {
-    // Absent or mid-rename: the row projects to 100% from its own samples.
+  if (held !== null) {
+    try {
+      burn = parseBurn(await $.fs.read(`${await stateDir($)}/five-hour-burn-${held}.json`))
+    } catch {
+      // Absent or mid-rename: the row projects to 100% from its own samples.
+    }
   }
   const now = await $.clock.now()
   // A newer refresh started while this one waited and may have seen another account: its result stands.
   if (round !== sharedRound) return
-  const known = await read($, account)
-  // A key that cannot be read for a moment is no change of account: the last key stands, and the
-  // figures are marked through pickPartition below.
-  const held = key ?? known?.key ?? null
-  if (key !== null && known?.key != null && known.key !== key) {
+  const changed = key !== null && known?.key != null && known.key !== key
+  if (changed || (accountLost && known?.key != null)) {
     // Samples of two accounts would make one burn rate: start over with the new account's own. The
     // payload left in the measure is the old account's until the next response.
-    await update($, account, () => ({ key, isFileUnknown: false }))
+    await update($, account, () => ({ key: held, isFileUnknown: accountLost }))
     await update($, fiveSamples, () => [])
     await update($, weekSamples, () => [])
     await update($, fileLimits, () => [])
     await update($, scoped, () => [])
     await update($, fiveBurn, () => null)
     await update($, measure, m => (m ? { ...m, limits: [] } : m))
-    await restoreSamples($, key)
+    if (changed) await restoreSamples($, key)
   }
   if (isUnreadable) {
     await update($, account, prev => ({ key: held, isFileUnknown: prev?.key === held && prev.isFileUnknown }))
@@ -553,8 +589,29 @@ const PANE = 'pitboard'
 // call, so in a press this must run first, before any await; the atom follows the result.
 async function openPane($: EngineInterface) {
   const opened = await $.ui.open({ id: PANE, title: 'pitboard', closeOnEscape: true })
-  if (opened.isPlaced) await update($, paneOpen, () => true)
+  if (opened.isPlaced) await setPaneOpen($, true)
   return opened
+}
+
+// A button press: a closed pane opens, a shown one closes, and a hidden one (a tab behind another pane)
+// is closed and reopened, since an open of an open id leaves it behind. The state is read without an
+// await, so a closed pane still opens as the press's first call; the reopen comes after awaits, which the
+// engine places from 110 columns for a pane the person asked for. A host that cannot list panes, or a
+// hook that denies the close, leaves the pane and the state as they were, and the line says why the
+// press did nothing.
+async function togglePane($: EngineInterface) {
+  if (!paneOpenNow) return openPane($)
+  try {
+    const pane = (await $.ui.panes()).find(p => p.id === PANE)
+    if (pane) {
+      await $.ui.close({ id: PANE })
+      await setPaneOpen($, false)
+      if (pane.isShown) return
+    }
+    return await openPane($)
+  } catch (err) {
+    $.ui.log(`pitboard: the pane button could not close or raise the pane: ${err instanceof Error ? err.message : String(err)}`)
+  }
 }
 
 // A given time keeps the caller off nowMs, so it is not redrawn every second.
@@ -597,7 +654,7 @@ export const register: Register = on => {
     // panes must not stop the row from starting.
     try {
       const panes = await $.ui.panes()
-      await update($, paneOpen, () => panes.some(p => p.id === PANE && p.isPlaced))
+      await setPaneOpen($, panes.some(p => p.id === PANE && p.isPlaced))
     } catch {
       // The atom keeps its value: closed, unless this module placed the pane.
     }
@@ -667,6 +724,17 @@ export const register: Register = on => {
     on('command.run', { command }, async ($, e, next) => {
       const result = await next(e)
       await refreshThreshold($)
+      return result
+    })
+  }
+
+  for (const command of ['login', 'logout']) {
+    on('command.run', { command }, async ($, e, next) => {
+      const result = await next(e)
+      if ((await envAccountOf($)) !== null) {
+        accountLost = true
+        await refreshShared($)
+      }
       return result
     })
   }
@@ -815,7 +883,7 @@ export const register: Register = on => {
             void update($, detail, current => (current === key ? null : key))
           },
           () => {
-            void openPane($)
+            void togglePane($)
           },
         )}
         {engine}
@@ -838,7 +906,7 @@ export const register: Register = on => {
           label="pitboard"
           dimColor
           onPress={() => {
-            void openPane($)
+            void togglePane($)
           }}
         />
       </Box>
@@ -849,7 +917,7 @@ export const register: Register = on => {
   // the reloaded module reads the panes at its session start.
   on('ui.close', async ($, e, next) => {
     const result = await next(e)
-    if (e.id === PANE) await update($, paneOpen, () => false)
+    if (e.id === PANE) await setPaneOpen($, false)
     return result
   })
 

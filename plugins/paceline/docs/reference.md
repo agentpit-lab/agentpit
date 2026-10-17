@@ -88,14 +88,21 @@ Every command except `cache-watch`, `context-watch`, and `usage-watch` accepts t
   agents and model; five-hour usage against the current threshold; the night allowance; the age of
   the data, with `STALE` in front when it is older than `stale_threshold_min`. Further fields appear
   only when they apply: `account unknown (<reason>)`, when the figures cannot be told to be the
-  signed-in account's (the reasons are `untagged`, `no-file`, `unreadable`, and `no-account`), `host
-  memory unknown`, `pace hooks off (paceline on)`, a `WARNING` that the rest of the week is near the
-  day hours' capacity, the reasons for a block, pause, throttle, or five-hour burn (for example `5h
-  burn 42.7%/h vs budget 13.9%/h: 80% at <time>, before reset <time>`), unconfirmed plans that start
-  tomorrow, and the leftover-pool suggestion. The [explanation](explanation.md) says how each number
-  is computed. With `--json`, `data.account` is `{"state": "known" | "unknown", "key": <the
-  signed-in account's key or null>, "reason": <code or null>}`; `key` is the one-way key of [the
-  inbox](#the-inbox-for-writers), never an identifier of the account.
+  signed-in account's (the reasons are `untagged`, `no-file`, `unreadable`, and `no-account`),
+  `other account <8 digits> active; --account <8 digits>`, one entry for each other account with a
+  reading under 30 minutes old, shown only when the key came from `.claude.json` (neither the
+  account variables nor `--account` named it), `host memory unknown`, `pace hooks off (paceline
+  on)`, a `WARNING` that the rest of the week is near the day hours' capacity, the reasons for a
+  block, pause, throttle, or five-hour burn (for example `5h burn 42.7%/h vs budget 13.9%/h: 80% at
+  <time>, before reset <time>`), unconfirmed plans that start tomorrow, and the leftover-pool
+  suggestion. The [explanation](explanation.md) says how each number is computed. With `--json`,
+  `data.account` is `{"state": "known" | "unknown", "key": <the signed-in account's key or null>,
+  "reason": <code or null>}`; `key` is the one-way key of [the inbox](#the-inbox-for-writers), never
+  an identifier of the account. `data.other_accounts`, a list of the full keys behind the `other
+  account` field, is present only when that field is shown. `paceline status --account KEY` reports
+  the partition whose key starts with `KEY`, 4 to 16 hex digits of a key in `rate-limits.json`; no
+  match or several matches exit with code 2 and list the candidate keys. `--account` belongs to
+  `status` alone; the gates and the night queue always use the account of the session.
 - `paceline auto [--start-run]` prints the parameters for the next night-queue item, for example
   `auto: START Q3 | budget 4.20% | agents <=3 models opus,sonnet,haiku`, and exits 0 (`start`), 10
   (`wait`), or 11 (`stop`). `--start-run` begins tonight's run: it fixes the night allowance and the
@@ -403,6 +410,8 @@ What each key does:
 | Variable |
 |---|
 | `ANTHROPIC_MODEL` |
+| `CLAUDE_CODE_ACCOUNT_UUID` |
+| `CLAUDE_CODE_ORGANIZATION_UUID` |
 | `CLAUDE_CONFIG_DIR` |
 | `CLAUDE_PLUGIN_DATA` |
 | `CLAUDE_PROJECT_DIR` |
@@ -451,7 +460,7 @@ first source of the time zone. A POSIX rule such as `CET-1CEST` is ignored.
 | `<state>/ended-sessions/` | One marker per ended session whose reservations wait for release; the next pace call releases them and deletes the marker. |
 | `<state>/night-queue.json` | The night queue: the current run, the last 14 runs, and the items. |
 | `<state>/leftover-pool.json` | The leftover pool: when and for which weekly window it was approved, and the items. |
-| `<state>/five-hour-burn.json` | The five-hour burn snapshot of the signed-in account, for other readers. PaceLine writes it and never reads it back. See [The five-hour burn file (for readers)](#the-five-hour-burn-file-for-readers). |
+| `<state>/five-hour-burn-<key>.json` | The five-hour burn snapshot of an account, for other readers: the file with the account's key holds that account's. PaceLine writes it and never reads it back. See [The five-hour burn file (for readers)](#the-five-hour-burn-file-for-readers). |
 | `<state>/away.json` | The away marker: `on`, `set_at`, and the `session` that set it. Missing means off. |
 | `<state>/pace.lock` | The lock of the pace files. |
 | `<state>/debug.on` | The debug flag file. |
@@ -460,7 +469,7 @@ first source of the time zone. A POSIX rule such as `CET-1CEST` is ignored.
 | `<state>/context-watch.json` | context-watch settings: `on`, `line`, `levels`, `snapshot_days`. |
 | `<state>/usage-watch.json` | The usage-watch switch, `{"on": true}` or `{"on": false}`. Missing means off. |
 | `<state>/usage-watch.state.json` | usage-watch's `last_attempt`, `last_success` (milliseconds since 1970), and `last_error`. It holds no token. |
-| `<CLAUDE_CONFIG_DIR>/.claude.json`, else `~/.claude.json` | Claude Code's own state file, read and never written, to name the signed-in account. PaceLine reads only `oauthAccount.accountUuid` and `oauthAccount.organizationUuid`, and stores only a 16-hex-digit SHA-256 key of the two. `~/.claude/.claude.json` is not it. |
+| `<CLAUDE_CONFIG_DIR>/.claude.json`, else `~/.claude.json` | Claude Code's own state file, read and never written, to name the signed-in account. When the process has both `CLAUDE_CODE_ACCOUNT_UUID` and `CLAUDE_CODE_ORGANIZATION_UUID` and the account variable is a UUID, as in a Claude Code Desktop session, PaceLine takes the account from them and reads this file only without them. PaceLine reads only `oauthAccount.accountUuid` and `oauthAccount.organizationUuid`, and stores only a 16-hex-digit SHA-256 key of the two. `~/.claude/.claude.json` is not it. |
 | `${CLAUDE_PLUGIN_DATA}/cache-watch/<session id>.json` | cache-watch state of one session. |
 | `${CLAUDE_PLUGIN_DATA}/cache-watch/defaults.json` | cache-watch defaults: `lead_minutes`, `max_wakes`. |
 | `<project>/.claude/paceline/<session id>.md` | context-watch snapshots. The folder has its own `.gitignore` (`*`), so git ignores it. |
@@ -523,8 +532,10 @@ pace dates the file by its oldest live bucket, and judges freshness from that ti
 
 ## The five-hour burn file (for readers)
 
-`<state>/five-hour-burn.json` holds the burn figures of the signed-in account's current five-hour
-window, computed once for every reader. PitBoard reads it; any other program may. Its format:
+`<state>/five-hour-burn-<key>.json` holds the burn figures of the current five-hour window of the
+account with that key (16 lower-case hex digits, the key of the limits file), computed once for
+every reader. With two accounts in use at once each has its own file. A reader that serves one
+account reads its own file. PitBoard reads it; any other program may. The format is:
 
 ```json
 {
@@ -558,16 +569,17 @@ The fields:
 - `limited` is true in the burn state: the rate would reach the threshold before the reset, and the
   data is fresh.
 
-Use the file only when all of these hold: `account` is the account you serve; `resets_at` and
+Use a file only when all of these hold: `account` is the account you serve; `resets_at` and
 `used_pct` equal the five-hour figures you show; `computed_at` is at most 3 minutes old. Otherwise
 compute your own projection. At or above the threshold the file projects nothing.
 
 PaceLine writes the file only while pace is on, only for a known account and a known reset, after
 every merge that the plugin's hooks run and that wrote the limits file, and from every command that
 computes the status on the real clock. `paceline merge` on its own does not write it. A run dated
-with `--now` or `PACELINE_NOW` more than 5 minutes from the real time writes nothing. The file is
-replaced through a temporary file and a rename. PaceLine never reads it back: its own history is the
-only input of its computation.
+with `--now` or `PACELINE_NOW` more than 5 minutes from the real time writes nothing, and neither
+does `paceline status --account`. The file is replaced through a temporary file and a rename. The
+file of an account that is no longer used stays, under 1 KB, until the account's next use replaces
+it. PaceLine never reads the file back: its own history is the only input of its computation.
 
 ## The inbox (for writers)
 

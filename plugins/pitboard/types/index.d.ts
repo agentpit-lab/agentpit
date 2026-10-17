@@ -50,7 +50,7 @@ export type StatusMeta = {
 // One reading of a limit window (five-hour or weekly), for its burn rate.
 export type StatusSample = { t: number; pct: number; resetsAt: string | null }
 
-// paceline's five-hour-burn.json: the threshold projection of one account's window. The rate fields
+// paceline's five-hour-burn-<key>.json: the threshold projection of one account's window. The rate fields
 // are null while the window has no 10 minutes of readings.
 export type StatusBurn = {
   computed_at: string

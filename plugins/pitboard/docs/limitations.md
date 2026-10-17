@@ -24,9 +24,13 @@ empty](troubleshooting.md#limits-stay-empty).
 ### Two accounts in one configuration directory show their own limits, with gaps
 
 PaceLine keeps the readings of each account in a partition of its own in the limits file, and
-PitBoard draws the partition of the account that is signed in, found from Claude Code's
-`.claude.json`. After a `/login` the row follows the new account within about 20 seconds, and the
-samples behind `Pace` of the old account are dropped. Some gaps remain:
+PitBoard draws the partition of the account that is signed in, found from the variables
+`CLAUDE_CODE_ACCOUNT_UUID` and `CLAUDE_CODE_ORGANIZATION_UUID` that a Claude Code Desktop host
+passes to its session, else from Claude Code's `.claude.json`. A Desktop session and a terminal
+session on different accounts at once each draw their own. After a `/login` in a session without the
+variables, the row follows the new account within about 20 seconds, and the samples behind `Pace` of
+the old account are dropped. In a session with the variables, a `/login` or `/logout` marks the
+account unknown until the session restarts. Some gaps remain:
 
 - A reading with no account, from an older PaceLine or another writer, sits in a partition that
   belongs to no account. PitBoard draws it when the signed-in account has no partition yet, and
@@ -46,8 +50,9 @@ samples behind `Pace` of the old account are dropped. Some gaps remain:
 `unknown` whenever a figure of the limit comes from a file whose account is not known. The row shows
 no mark while the figures are the account's own.
 
-**What still works:** give each account its own configuration directory, as the next entry
-describes. PaceLine's
+**What still works:** a Desktop session and a terminal session on different accounts need no second
+directory. To run two terminal sessions on different accounts, give each account its own
+configuration directory, as the next entry describes. PaceLine's
 [limitations](../../paceline/docs/limitations.md#two-accounts-in-one-configuration-directory-keep-their-limits-apart-with-gaps)
 give the detail. See also [Use two accounts on one
 machine](how-to.md#use-two-accounts-on-one-machine).
@@ -122,9 +127,9 @@ usage-watch, no model-scoped limits.
 
 ### The Threshold row needs a fresh PaceLine projection
 
-The Threshold row, unless PaceLine's `five-hour-burn.json` is at most 3 minutes old and belongs to
-the signed-in account, the current window and the percentage on the row. PaceLine writes it only
-while pace is on.
+The Threshold row, unless PaceLine's burn file of the signed-in account
+(`five-hour-burn-<key>.json`) is at most 3 minutes old and belongs to the signed-in account, the
+current window and the percentage on the row. PaceLine writes it only while pace is on.
 
 **What you see:** the `5h limit` card projects to 100% and shows `Runs out`, and the limit turns red
 later, when its own projection reaches 100% before the reset instead of PaceLine's threshold.

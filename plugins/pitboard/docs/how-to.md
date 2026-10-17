@@ -155,8 +155,9 @@ narrow terminal, or the readings in the Claude mobile app, which has no row.
    /pitboard
    ```
 
-   Or click `pitboard`: in the CLI at the end of the row, beside `ⓘ`; in Desktop in the footer under
-   the prompt, between the mode and the model name. The mobile app has the command only.
+   Or click `pitboard`: in the CLI the bracketed `[ pitboard ]` at the end of the row, beside `ⓘ`;
+   in Desktop in the footer under the prompt, between the mode and the model name. The mobile app
+   has the command only.
 2. Read the pane, titled `pitboard`, from the top:
    - **Needs attention**, only while something needs a decision: each warning with its advice, the most
      urgent first.
@@ -164,7 +165,9 @@ narrow terminal, or the readings in the Claude mobile app, which has no row.
      the context's while an advisor is set; the session card comes last.
    - Under `5h limit` and `Week`, a bar with the used share and the even-pace tick. The `5h limit` bar
      also shows, paler, where the current pace leads by the reset.
-3. Close the pane with its close mark or Escape. Another click on `pitboard` leaves it open.
+3. Click `pitboard` again to close the pane, or use its close mark or Escape. If another pane is in
+   front of it, the click brings it to the front first; in a terminal narrower than 110 columns that
+   can take a second click.
 
 **How to tell it worked:** the pane shows the cards; after `/pitboard`, Claude Code also answers
 `pitboard pane opened.`

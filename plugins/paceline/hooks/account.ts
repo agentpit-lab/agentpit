@@ -1,5 +1,5 @@
 // Pure part of the account resolver: no engine calls, so tests reach it directly. The same rule is in
-// scripts/limits_file.py (account_file, account_key_of) and in pitboard's hooks/account.ts; one test
+// scripts/limits_file.py (account_file, account_key_of, account_key_of_ids) and in pitboard's hooks/account.ts; one test
 // vector holds the three together.
 
 export const ACCOUNT_PREFIX = 'paceline-account-v1'
@@ -34,8 +34,14 @@ export function accountKeyOf(text: string | null): Account {
   }
   const raw = parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? (parsed as Record<string, unknown>).oauthAccount : null
   const oauth = raw && typeof raw === 'object' && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {}
-  const account = uuidOrNull(oauth.accountUuid)
-  const organization = uuidOrNull(oauth.organizationUuid) ?? ''
+  return accountKeyOfIds(oauth.accountUuid, oauth.organizationUuid)
+}
+
+// The key of an account named by its identifiers, wherever they came from: the state file or the
+// process environment. An organization that is not a UUID counts as empty.
+export function accountKeyOfIds(accountUuid: unknown, organizationUuid: unknown): Account {
+  const account = uuidOrNull(accountUuid)
+  const organization = uuidOrNull(organizationUuid) ?? ''
   if (account === null) return { key: null, reason: 'no-account' }
   return { key: sha256Hex(`${ACCOUNT_PREFIX}:${account}:${organization}`).slice(0, 16), reason: null }
 }

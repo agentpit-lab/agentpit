@@ -18,7 +18,7 @@ import {
   writtenPaths,
 } from './context'
 import type { Fill, Settings } from './context'
-import { accountFileOf, accountKeyOf } from './account'
+import { accountFileOf, accountKeyOf, accountKeyOfIds } from './account'
 import { inboxKey, inboxPath, inboxReading, isDue, limitsKey, stateDirOf } from './inbox'
 import type { RateLimit, Sent } from './inbox'
 import { inboxFingerprint, PYTHONS, seenPath, WATCH_PERIOD_MS } from './watch'
@@ -87,10 +87,32 @@ async function snapshotPath($: EngineInterface) {
   return snapshotPaths(await $.session.root(), await $.session.id())
 }
 
-// The key of the account signed in now, from Claude Code's own state file, or null when it cannot be
-// told. Read at every use: a login in another session changes the file under this process. Claude Code
-// rewrites the file often, so a read that fails or does not parse is tried once more.
+// The key of the account a Desktop host started this session with, from the two identifier variables
+// it passes, or null when they are not both set. They belong to the process, not to the shared state
+// file, which names the account of the last terminal login.
+async function envAccountOf($: EngineInterface): Promise<string | null> {
+  try {
+    const account = await $.env.get('CLAUDE_CODE_ACCOUNT_UUID')
+    const organization = await $.env.get('CLAUDE_CODE_ORGANIZATION_UUID')
+    if (!account || !organization) return null
+    return accountKeyOfIds(account, organization).key
+  } catch {
+    return null
+  }
+}
+
+// Set by /login and /logout in a session that has the variables: they still name the old account, and
+// the file may now name another one, so the session's account is unknown until the process restarts.
+let accountLost = false
+
+// The key of the account signed in now: the session's own variables first, else Claude Code's state
+// file, or null when it cannot be told. The file is read at every use: a login in another session
+// changes it under this process. Claude Code rewrites the file often, so a read that fails or does not
+// parse is tried once more.
 async function accountOf($: EngineInterface): Promise<string | null> {
+  if (accountLost) return null
+  const own = await envAccountOf($)
+  if (own !== null) return own
   try {
     const file = accountFileOf({
       configDir: await $.env.get('CLAUDE_CONFIG_DIR'),
@@ -316,6 +338,7 @@ export const register: Register = on => {
     on('command.run', { command }, async ($, e, next) => {
       try {
         hold = { limits: seenLimits, account: await accountOf($) }
+        if ((await envAccountOf($)) !== null) accountLost = true
       } catch {
         hold = null
       }

@@ -67,7 +67,7 @@ thin rule in Desktop. Readings of one group are parted by a dot. `ⓘ` closes th
 | Advisor | Its own group between `Ctx` and `Cache`, only while an advisor is set; a click opens its line; also in the `ⓘ` line | Its own group between `Ctx` and `Cache`, only while an advisor is set |
 | Branch | In the `ⓘ` line | In the session card |
 | `ⓘ` | Opens the session line | Shows the session card |
-| `pitboard` | A button beside `ⓘ`; opens the `/pitboard` pane | A button in the footer under the prompt, between the mode and the model name, outside the row; opens the `/pitboard` pane |
+| `pitboard` | A button, `[ pitboard ]`, beside `ⓘ`; opens the `/pitboard` pane and closes it on the next click | A button in the footer under the prompt, between the mode and the model name, outside the row; opens the `/pitboard` pane and closes it on the next click |
 
 A CLI gauge is two cells of a block that rises in eighths over a grey track, in the level's colour
 once the reading leaves calm. A Desktop pie or bar fills in the same colours.
@@ -191,6 +191,7 @@ Inside the cards, some rows have colours of their own:
 | `CLAUDE_CONFIG_DIR` | The Claude Code configuration directory; `~/.claude` when unset. |
 | `USERPROFILE`, `HOME` | The home directory for `~/.claude`, `USERPROFILE` first. |
 | `PACELINE_STATE_DIR` | PaceLine's state directory, where the limits file lies. |
+| `CLAUDE_CODE_ACCOUNT_UUID`, `CLAUDE_CODE_ORGANIZATION_UUID` | The signed-in account, which the Claude Code Desktop host passes to its session. When both are set and the account variable is a UUID, the row shows that account's partition of the limits file; otherwise the account comes from `.claude.json`. |
 | `LC_ALL`, `LC_TIME`, `LANG` | The locale for weekday names, read in this order on every OS; `C` and `POSIX` are skipped. When none gives a locale, PitBoard asks `pwsh`. |
 | `CLAUDE_CODE_IDLE_COMPACT_MIN_TOKENS` | The context size from which idle compaction applies, for the Idle compact row. Claude Code's minimum is 100,000 and its default 200,000; a positive whole number below 100,000 counts as 100,000, and any other value gives the default. |
 | `DISABLE_AUTO_COMPACT` | When set to `1`, `true`, `yes` or `on`, auto-compact and idle compaction are off, and the Idle compact row reads off. |
@@ -208,7 +209,7 @@ set and not empty, else `<config>/state/paceline`, the rule PaceLine uses.
 | `<state>/rate-limits.json` | Five-hour and weekly readings and model-scoped limits, from the partition of the signed-in account | At session start, after each turn, and every 20 seconds |
 | `<state>/rate-limits.history.jsonl` and its rotated `.1` | Earlier readings of the signed-in account, for Pace | At session start |
 | `<config>/.claude.json`, else `~/.claude.json` | The signed-in account, as a 16-hex-digit SHA-256 key of `oauthAccount.accountUuid` and `organizationUuid`; nothing else in the file | With the limits file |
-| `<state>/five-hour-burn.json` | PaceLine's projection of the five-hour limit to its threshold: the account, window and percentage it was computed for, the rate, the budget rate, the threshold and the time it is reached, and whether the burn is limited | With the limits file |
+| `<state>/five-hour-burn-<key>.json` | PaceLine's projection of the five-hour limit to its threshold: the account, window and percentage it was computed for, the rate, the budget rate, the threshold and the time it is reached, and whether the burn is limited | With the limits file |
 | `<config>/projects/<start directory>/<session id>.jsonl` | Cache reads and writes since the last compaction; the TTL; the last request's time | At session start, after each turn, and after `/clear` or a resume |
 
 - The limits file and its history are PaceLine's; [PaceLine's
@@ -225,11 +226,13 @@ set and not empty, else `<config>/state/paceline`, the rule PaceLine uses.
   last 4 MB through `node`.
 - Until the first request reports an effort level, the effort comes from `modelSettings` or
   `effortLevel` in the settings Claude Code loaded.
-- The burn file is PaceLine's too; [its
+- The burn file is PaceLine's too: PitBoard reads `five-hour-burn-<key>.json` for the signed-in
+  account's key and no other burn file. A key that cannot be read for a moment keeps the last one,
+  and with no key at all no file is read. [Its
   format](../../paceline/docs/reference.md#the-five-hour-burn-file-for-readers) is the contract.
-  PitBoard uses it for the `5h limit` card only while it is at most 3 minutes old and matches the
-  signed-in account, the window and the percentage on the row. A missing or unreadable file draws
-  the row from PitBoard's own readings.
+  PitBoard uses a file for the `5h limit` card only while it is at most 3 minutes old and matches
+  the signed-in account, the window and the percentage on the row. A missing or unreadable file
+  draws the row from PitBoard's own readings.
 
 PitBoard runs these processes, in the CLI and in Desktop:
 

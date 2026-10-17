@@ -1,5 +1,35 @@
 # Changelog
 
+## 0.4.1 - 2026-10-17
+
+### Added
+
+- `paceline status --account KEY` reports the account whose key starts with `KEY` (at least 4 hex digits
+  of a key in `rate-limits.json`) instead of the signed-in one. No match, or several, exits with code 2
+  and lists the candidate keys. The option belongs to `status`; the gates and the night queue keep using
+  the account of the session.
+- When the signed-in account came from `.claude.json` and another account holds a reading under 30
+  minutes old, `status` adds `other account <8 digits> active; --account <8 digits>` for each such
+  account, and `--json` lists them under `data.other_accounts`.
+
+### Changed
+
+- Each account keeps its own five-hour burn snapshot, `<state>/five-hour-burn-<key>.json`, `<key>` being
+  the snapshot's account key, so with two accounts in use at once each file stays current. A snapshot
+  without an account is not written. `<state>/five-hour-burn.json` is no longer written, and a leftover
+  one is removed. The format of the snapshot is unchanged. PitBoard reads the per-account file, so update
+  PaceLine and PitBoard together: a PitBoard of an earlier release finds no snapshot and projects the
+  Threshold row to 100% from its own samples.
+
+### Fixed
+
+- A Claude Code Desktop session on one account no longer tags and reads under the account of a terminal
+  login on another. When the process has `CLAUDE_CODE_ACCOUNT_UUID` and `CLAUDE_CODE_ORGANIZATION_UUID`,
+  as a Desktop session does, the account key comes from them and `.claude.json` is read only without
+  them. After a `/login` or `/logout` in such a session the PaceLine hooks treat the account as
+  `account unknown` until the session restarts; `paceline status` and the gates run from it still
+  report the account the session started with.
+
 ## 0.4.0 - 2026-10-17
 
 ### Added

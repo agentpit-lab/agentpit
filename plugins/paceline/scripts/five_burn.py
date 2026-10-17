@@ -179,7 +179,6 @@ def reason(burn, reset_local):
             f"{burn['threshold_pct']:.0f}% at {burn['threshold_at_local']}, before reset {reset_local}")
 
 
-SNAPSHOT = "five-hour-burn.json"
 # The profile keys the merge needs, with the defaults of pace.PROFILE_DEFAULTS (a test keeps them equal).
 PROFILE_KEYS = {"timezone": "UTC", "day_hours": [8, 22], "night_hours": [0, 8],
                 "five_hour_threshold_day": 80.0, "five_hour_threshold_night": 95.0, "stale_threshold_min": 30}
@@ -202,8 +201,21 @@ def snapshot(now, account, five):
 
 
 def publish(sd, data):
+    """Write the snapshot to the file of its account, `five-hour-burn-<key>.json`.
+
+    A file per account lets two accounts in use at once each keep their own snapshot without a
+    read-modify-write of a shared one. A snapshot with no account is not written. A leftover
+    `five-hour-burn.json` of an earlier release is removed.
+    """
+    account = data.get("account")
+    if not account:
+        return
     sd.mkdir(parents=True, exist_ok=True)
-    limits_file.write_json(sd / SNAPSHOT, data)
+    limits_file.write_json(sd / f"five-hour-burn-{account}.json", data)
+    try:
+        (sd / "five-hour-burn.json").unlink()
+    except OSError:
+        pass
 
 
 def after_merge(sd, now, record):

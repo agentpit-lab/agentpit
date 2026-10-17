@@ -256,10 +256,14 @@ model-scoped buckets after the weekly figure, for example `7d 34% (Fable 7%)`. I
 show the limits of the account you use now.
 
 **Which setup:** use one configuration directory and `/login` when you use one account at a time.
-PaceLine keeps each account's readings in a partition of its own, and pace reads the partition of
-the account signed in now. Use a configuration directory per account (`CLAUDE_CONFIG_DIR`) when both
-accounts run sessions at the same time, or when each needs its own profile, plans, and night queue.
-See [Each configuration directory keeps its own
+The same holds when Claude Code Desktop is on one account and a terminal on the other: a Desktop
+session takes its account from the variables its host passes, so each session shows its own figures.
+In a plain terminal, `paceline status` ends with `other account <8 digits> active; --account <8
+digits>` while the other account has a fresh reading, and `paceline status --account <8 digits>`
+shows its figures. PaceLine keeps each account's readings in a partition of its own, and pace reads
+the partition of the account signed in now. Use a configuration directory per account
+(`CLAUDE_CONFIG_DIR`) when two terminal sessions on different accounts run at the same time, or when
+each needs its own profile, plans, and night queue. See [Each configuration directory keeps its own
 state](limitations.md#each-configuration-directory-keeps-its-own-state).
 
 1. Update with `/plugin marketplace update agentpit` and restart every open session. A session still

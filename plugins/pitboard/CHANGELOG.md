@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.1.13 - 2026-10-17
+
+### Changed
+
+- The `pitboard` button toggles the pane, in the CLI row and in the Desktop footer: a click opens a closed
+  pane and closes an open one. A pane behind another pane's tab comes to the front on the click; in a
+  terminal narrower than 110 columns that can take a second click. `/pitboard` still only opens the pane.
+  Verified in the CLI on Claude Code 2.1.302 and in Desktop on Claude Code 2.1.299.
+- In the CLI the button is drawn bracketed, `[ pitboard ]`, as the row's one action beside the plain
+  reading names.
+- The row reads the burn snapshot of its own account, `five-hour-burn-<key>.json`, and no other burn file.
+  With two accounts in use at once each row keeps its Threshold figure instead of losing it whenever the
+  other account's snapshot is the newer one. A key that cannot be read for a moment keeps the last one;
+  with no key at all the row reads no file. Update PitBoard and PaceLine together: a PaceLine of an
+  earlier release writes no per-account file, and the row then projects to 100% from its own samples.
+
+### Fixed
+
+- A Claude Code Desktop session on one account no longer shows the figures of a terminal login on another.
+  When the process has `CLAUDE_CODE_ACCOUNT_UUID` and `CLAUDE_CODE_ORGANIZATION_UUID`, as a Desktop session
+  does, the row takes its account from them and reads `.claude.json` only without them. After a `/login`
+  or `/logout` in such a session the account is marked unknown until the session restarts.
+
 ## 0.1.12 - 2026-10-17
 
 ### Added

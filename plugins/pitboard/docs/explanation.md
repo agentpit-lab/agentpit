@@ -45,7 +45,9 @@ The row sits where each surface lets a plugin draw:
 
 Either `pitboard` button opens the same pane as `/pitboard`. Claude Code counts the click as your
 request, so the pane opens in a terminal of any width; a pane a plugin opens on its own waits for
-144 columns.
+144 columns. The next click on the button closes the pane. A pane hidden behind another pane's tab
+is brought to the front by closing and reopening it, and that reopen is not counted as your request,
+so a terminal narrower than 110 columns can need a second click.
 
 ## How fresh the numbers are
 
@@ -130,11 +132,12 @@ Runs out = now + (100 - used %) / Pace hours
   five-hour limit reaches PaceLine's threshold, 80% by day and 95% at night by default, at the
   current Pace.
 
-PitBoard takes the projection from PaceLine's five-hour burn file, `five-hour-burn.json` (see [the
-file's format](../../paceline/docs/reference.md#the-five-hour-burn-file-for-readers)), only while
-all of these hold: the five-hour limit is below the file's threshold; the file is at most 3 minutes
-old; its account is the signed-in account; its reset is the window's reset; and its percentage used
-is the percentage on the row. Pace is then the file's rate, and Budget is the pace that reaches the
+PitBoard takes the projection from PaceLine's five-hour burn file of the signed-in account,
+`five-hour-burn-<key>.json` (see [the file's
+format](../../paceline/docs/reference.md#the-five-hour-burn-file-for-readers)), only while all of
+these hold: the five-hour limit is below the file's threshold; the file is at most 3 minutes old;
+its account is the signed-in account; its reset is the window's reset; and its percentage used is
+the percentage on the row. Pace is then the file's rate, and Budget is the pace that reaches the
 threshold exactly at the reset. In every other case, including PaceLine off or pace off, PitBoard
 projects from its own readings to 100% and shows Runs out.
 
