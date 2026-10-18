@@ -21,10 +21,10 @@ through the inbox, `<state>/inbox/`:
   session's claude.ai login to the request; PaceLine never sees a token. The answer goes to
   `<state>/inbox/usage-watch-<key>.json`, one file per account (`unknown` when none is known).
 
-A merge takes the inbox into the limits file. It runs after every turn and at session start. While a
-session is open, the module also checks the inbox every 15 seconds and merges any change. A pace
-command merges first when the data is older than `usage_snapshot_max_age_sec` (300 seconds). The
-`pace:` line before an Agent launch uses the limits file as it stands, without a merge.
+A merge takes the inbox into the limits file. The hooks module checks the inbox when Claude Code
+starts and then every 15 seconds while a session is open, and merges any change. A pace command
+merges first when the data is older than `usage_snapshot_max_age_sec` (300 seconds). The `pace:`
+line before an Agent launch uses the limits file as it stands, without a merge.
 
 ### Which account a reading belongs to
 
@@ -282,13 +282,14 @@ limit to clear.
 
 - One file, `<state>/away.json`, serves every session on the machine.
 - Your next message in any session clears the marker, so you do not need to turn it off. A
-  cache-watch wake does not clear it, and neither does the `/paceline:away` command that sets it.
+  cache-watch wake does not clear it, nor does the `/paceline:away` command that sets it, nor a
+  prompt from a schedule, a loop, a notification, another session or a channel.
 - `paceline away off` clears it by hand, and `paceline away status` shows whether it is set, since
   when, and by which session.
 - The marker has no expiry, and it changes nothing while no hard limit holds and the burn stays
   within the cap. See [The away marker has no expiry](limitations.md#the-away-marker-has-no-expiry)
-  and [A scheduled or injected prompt clears the away
-  marker](limitations.md#a-scheduled-or-injected-prompt-clears-the-away-marker).
+  and [A prompt through the Agent SDK leaves the away
+  marker](limitations.md#a-prompt-through-the-agent-sdk-leaves-the-away-marker).
 
 ## The forecast
 

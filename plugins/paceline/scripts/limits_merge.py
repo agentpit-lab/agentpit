@@ -1,10 +1,11 @@
 """Merges the sessions' limit readings from <state>/inbox/ into <state>/rate-limits.json.
 
-Run by the plugin's SessionStart and Stop hooks, asynchronously. The merge and its lock live in
-limits_file.py beside this script; this file is the hooks' entry point.
+Run by the hooks module's inbox watch (hooks/register.ts), at each session start and every 15 seconds
+while the inbox changed. The merge and its lock live in limits_file.py beside this script; this file
+is the module's entry point.
 
-Always exits 0 and prints nothing: a hook must never fail the session, so a failure goes to the
-debug log only. Standard library only.
+Always exits 0 and prints nothing: the module reads any other exit code as an interpreter that cannot
+run the script, and a failure goes to the debug log only. Standard library only.
 """
 import datetime as dt
 import os
@@ -30,7 +31,7 @@ def main():
     # The hook's input names the session; nothing here needs it, but an unread pipe can block the writer.
     try:
         if not sys.stdin.isatty():
-            sys.stdin.read()
+            sys.stdin.buffer.read()
     except (OSError, ValueError):
         pass
     too_old = require_python()

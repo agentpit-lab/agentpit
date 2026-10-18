@@ -33,5 +33,7 @@ Then tell the operator, in one or two lines and in their language, what the comm
 
 Limits: the marker changes nothing while no hard limit holds and launches stay within the agent cap.
 It has no expiry: a session that is open but never receives a message from the operator keeps
-the marker on. A prompt from a schedule or a loop clears it too. The plugin's `docs/limitations.md`
-lists every limit.
+the marker on. Only the operator's own message clears it: a prompt from a schedule, a loop, a
+notification, another session, a channel, `claude -p` or the Agent SDK leaves it set, so an operator
+who works only through `claude -p` or the Agent SDK clears it with `paceline away off`. The plugin's
+`docs/limitations.md` lists every limit.

@@ -224,7 +224,8 @@ FIVE_MIN_TEXT = (
 
 def _hook_payload():
     try:
-        return json.loads(sys.stdin.read() or "{}")
+        # Claude Code writes UTF-8; sys.stdin would decode it with the locale's code page.
+        return json.loads(sys.stdin.buffer.read().decode("utf-8") or "{}")
     except ValueError:
         return {}
 

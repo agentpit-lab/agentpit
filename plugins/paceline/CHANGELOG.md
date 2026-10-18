@@ -1,5 +1,39 @@
 # Changelog
 
+## 0.4.7 - 2026-10-18
+
+### Changed
+
+- The hooks module clears the away marker; the `UserPromptSubmit` command hook `away.py hook prompt`
+  is gone, so one Python process fewer starts on every prompt. Only your own message clears the
+  marker now: a prompt typed in the terminal or in Claude Code Desktop, sent through Remote Control,
+  or sent from Slack. A prompt from a schedule, a loop, a notification, another session, a channel,
+  `claude -p` or the Agent SDK leaves it set; if you work only through `claude -p` or the Agent SDK,
+  clear it with `paceline away off`.
+- The hooks module checks the inbox as soon as Claude Code starts, as well as every 15 seconds. The
+  `Stop` and `SessionStart` command hooks that ran `limits_merge.py` are gone, so no Python process
+  starts after a turn for the merge.
+
+## 0.4.6 - 2026-10-18
+
+### Fixed
+
+- The hooks read their input as UTF-8 whatever the locale's code page. On Windows with a non-UTF-8
+  code page such as cp1252 or cp1251, a hook input holding non-ASCII text, for example a Cyrillic
+  prompt or a path under a non-ASCII user profile, failed to decode or decoded garbled, and the hook
+  silently did nothing: no pace line, gate or reservation for an agent launch, no release at session
+  end, an away marker the operator's message did not clear, a cache-watch that ignored the prompt or
+  the compaction, and context-watch cleanup that skipped a project with a non-ASCII path.
+
+## 0.4.5 - 2026-10-18
+
+### Changed
+
+- The limitations page says that context-watch does not run where an organization manages Claude
+  Code (Team and Enterprise logins, and machines with managed settings): Claude Code's sec-default
+  guard holds back the events it runs on. It gives an administrator's workaround for a small team,
+  not tested. A fix is planned for a later version.
+
 ## 0.4.4 - 2026-10-18
 
 ### Fixed

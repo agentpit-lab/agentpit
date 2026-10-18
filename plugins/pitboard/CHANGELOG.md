@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.14 - 2026-10-18
+
+### Changed
+
+- The limitations page says that PitBoard sees a compaction late where an organization manages
+  Claude Code (Team and Enterprise logins, and machines with managed settings): Claude Code's
+  sec-default guard holds back the compaction event. It gives an administrator's workaround for a
+  small team, not tested. A fix is planned for a later version.
+
 ## 0.1.13 - 2026-10-17
 
 ### Changed

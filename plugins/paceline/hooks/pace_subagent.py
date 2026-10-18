@@ -58,7 +58,8 @@ def main():
     if not pace_on():
         return 0
     try:
-        payload = json.load(sys.stdin)
+        # Claude Code writes UTF-8; sys.stdin would decode it with the locale's code page.
+        payload = json.loads(sys.stdin.buffer.read().decode("utf-8"))
     except ValueError:
         return 0
     agent_id, agent_type = payload.get("agent_id"), payload.get("agent_type")

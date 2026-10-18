@@ -143,6 +143,23 @@ auto-compaction is off.
 **What still works:** the line, and a snapshot at each compaction of the main conversation. See
 [Recover after a compaction](how-to.md#recover-after-a-compaction).
 
+### Where an organization manages Claude Code, context-watch does not run
+
+On a Team or Enterprise login, and on a machine with managed settings, Claude Code seats its
+built-in `sec-default` guard. The guard keeps the prompt, tool-batch, session-start and compaction
+events from the hooks module of a plugin you install, and context-watch runs on those events. A fix
+is planned for a later version.
+
+**What you see:** no context line, no warnings at the set levels, no snapshot at a compaction, and
+no note after it to read one.
+
+**What still works:** pace, usage-watch and cache-watch. An administrator can run PaceLine in the
+organization's tier by naming `paceline@agentpit` in managed `appendPlugins`, or in `prependPlugins`
+ahead of `sec-default@builtin`; the guard does not skip that tier. That relaxes the organization's
+security settings, so it fits a small team whose owner can decide that, and hardly a large
+organization. This is from the [sec-default
+README](https://github.com/anthropics/claude-code/tree/main/mods/sec-default), not tested here.
+
 ## cache-watch
 
 ### cache-watch keeps only one-hour cache entries
@@ -351,20 +368,20 @@ for 60 seconds.
 **What still works:** the gate still asks or advises on the active reservations, and a launch
 reservation ends on its own after 60 seconds. See [Reservations](explanation.md#reservations).
 
-### A scheduled or injected prompt clears the away marker
+### A prompt through the Agent SDK leaves the away marker
 
-The hook that clears the away marker sees every prompt submitted to a session and cannot tell its
-source. It skips a cache-watch wake and the `/paceline:away` command, which it matches in the raw
-form (`/paceline:away` or `/away`) and in the form Claude Code expands into a `<command-name>` tag.
-Any other prompt counts as your message, including a prompt from a schedule or a loop, and one
-injected by another program. A form of the command that Claude Code passes differently clears the
-marker at once.
+The hooks module clears the away marker only on a prompt typed in the terminal or in Claude Code
+Desktop, sent through Remote Control, or sent from Slack. Claude Code marks a prompt from `claude
+-p` or the Agent SDK with the same origin as a prompt that Claude Code Desktop sends on its own,
+such as the first prompt of a session that another session starts, so the module leaves the marker
+on both. If you work only through `claude -p` or the Agent SDK, your prompts never clear the marker.
 
-**What you see:** `paceline away status` shows `away: off` soon after `paceline away on`, and a
-launch over the agent cap asks again.
+**What you see:** `paceline away status` still shows `away: on since <time>` after you send a prompt
+through `claude -p`, and a launch at a hard limit is denied instead of asked.
 
-**What still works:** set the marker again after the prompt has run. A cache-watch wake keeps the
-marker. See [The away marker](explanation.md#the-away-marker).
+**What still works:** run `paceline away off` when you are back, or send one message in the
+terminal, in Claude Code Desktop or through Remote Control. See [The away
+marker](explanation.md#the-away-marker).
 
 ### The away marker has no expiry
 

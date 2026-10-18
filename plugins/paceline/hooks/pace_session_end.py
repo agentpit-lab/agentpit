@@ -61,7 +61,8 @@ def main():
     if not pace_on():
         return 0
     try:
-        session = (json.load(sys.stdin) or {}).get("session_id")
+        # Claude Code writes UTF-8; sys.stdin would decode it with the locale's code page.
+        session = (json.loads(sys.stdin.buffer.read().decode("utf-8")) or {}).get("session_id")
     except (ValueError, AttributeError, OSError):
         return 0
     if not session or too_old():

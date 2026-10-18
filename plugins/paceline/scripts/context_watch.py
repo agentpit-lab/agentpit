@@ -164,7 +164,8 @@ def run_hook(name):
         if name != "session-start":
             return 0
         try:
-            payload = json.loads(sys.stdin.read() or "{}")
+            # Claude Code writes UTF-8; sys.stdin would decode it with the locale's code page.
+            payload = json.loads(sys.stdin.buffer.read().decode("utf-8") or "{}")
         except ValueError:
             payload = {}
         return hook_session_start(payload if isinstance(payload, dict) else {})

@@ -19,6 +19,7 @@ import {
 } from './context'
 import type { Fill, Settings } from './context'
 import { accountFileOf, accountKeyOf, accountKeyOfIds } from './account'
+import { AWAY_FILE, CLEARED, isAwayOn, isPersonPrompt } from './away'
 import { inboxKey, inboxPath, inboxReading, isDue, limitsKey, stateDirOf } from './inbox'
 import type { RateLimit, Sent } from './inbox'
 import { inboxFingerprint, PYTHONS, seenPath, WATCH_PERIOD_MS } from './watch'
@@ -260,7 +261,23 @@ async function usageTick($: EngineInterface) {
   }
 }
 
+// The person's own prompt in any session clears the away marker. Done before the turn starts, so a
+// launch early in it already sees the marker off.
+async function clearAway($: EngineInterface) {
+  const path = `${await stateDir($)}/${AWAY_FILE}`
+  if (isAwayOn(await textAt($, path))) await $.fs.write(path, CLEARED)
+}
+
 export const register: Register = on => {
+  on('prompt.submit', async ($, e, next) => {
+    try {
+      if (isPersonPrompt(e)) await clearAway($)
+    } catch {
+      // The marker stays; the prompt goes on.
+    }
+    return next(e)
+  })
+
   on('classic.UserPromptSubmit', async ($, e, next) => {
     const result = await next(e)
     try {
@@ -361,6 +378,8 @@ export const register: Register = on => {
         void usageTick($)
       })
     }
+    // The inbox is taken in when the process starts, not one period later; the timer covers turn ends.
+    void watchInbox($)
     return result
   })
 

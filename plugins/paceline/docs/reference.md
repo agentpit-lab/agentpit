@@ -267,9 +267,11 @@ Defaults: on, line on, warnings at 85% and 95%, snapshots kept 14 days.
   denied. The skill passes the session ID.
 - `paceline away off` clears the marker and prints `away: off`.
 - `paceline away status` prints `away: off`, or `away: on since <time>` and the session that set it.
-- The `UserPromptSubmit` hook `away.py hook prompt` clears the marker on your next message in any
-  session. It skips a cache-watch wake and the `/paceline:away` command, in its raw form
-  (`/paceline:away` or `/away`) and expanded into a `<command-name>` tag.
+- The hooks module clears the marker at `prompt.submit` on your next message in any session. A
+  prompt from a schedule or a loop, a notification, another session, a channel, a plugin, `claude
+  -p` or the Agent SDK leaves it, and so do a cache-watch wake and the `/paceline:away` command, in
+  its raw form (`/paceline:away` or `/away`), expanded into a `<command-name>` tag, or as the
+  command Claude Code names.
 
 `away` takes no common option. While the marker is set, the Agent and Workflow hook denies a launch
 that would ask. `paceline status --json` shows the marker under `away`. See [The away
@@ -463,7 +465,7 @@ first source of the time zone. A POSIX rule such as `CET-1CEST` is ignored.
 | `<state>/night-queue.json` | The night queue: the current run, the last 14 runs, and the items. |
 | `<state>/leftover-pool.json` | The leftover pool: when and for which weekly window it was approved, and the items. |
 | `<state>/five-hour-burn-<key>.json` | The five-hour burn snapshot of an account, for other readers: the file with the account's key holds that account's. PaceLine writes it and never reads it back. See [The five-hour burn file (for readers)](#the-five-hour-burn-file-for-readers). |
-| `<state>/away.json` | The away marker: `on`, `set_at`, and the `session` that set it. Missing means off. |
+| `<state>/away.json` | The away marker: `on`, `set_at`, and the `session` that set it. Missing, or `on` not true, means off. |
 | `<state>/pace.lock` | The lock of the pace files. |
 | `<state>/debug.on` | The debug flag file. |
 | `<state>/debug.log` (+ `.1`) | The debug log, rotated to `.1` past 1 MiB. |
@@ -648,10 +650,8 @@ and may add the model-scoped weekly limits:
   `name` and a numeric `used_percentage`. When that weekly bucket wins, the file's `scoped` becomes
   this list, or is removed when the list is empty or absent.
 
-The merge runs at session start and after each turn, in the background. While any session with
-PaceLine is open, busy or idle, it also runs within about 15 seconds of a new or changed inbox file.
-A pace command runs it when it finds the data older than `usage_snapshot_max_age_sec`. The merge
-holds `<state>/limits.lock`, so writers take turns. PaceLine needs no status line plugin.
+The merge runs when Claude Code starts and then every 15 seconds while the inbox changed, in the
+background.
 
 ## Hooks
 
@@ -659,19 +659,18 @@ holds `<state>/limits.lock`, so writers take turns. PaceLine needs no status lin
 |---|---|---|
 | Module: `UserPromptSubmit`, `PostToolBatch`, `session.compact`, `SessionStart` after a compaction | Every prompt, tool batch, and compaction | context-watch. Does nothing while context-watch is off. |
 | Module: `session.measure` | Once per model turn | Writes the session's inbox reading. Always on. |
-| Module: `session.start` timer | Every 15 seconds while the session is open | Lists `<state>/inbox/`, and runs `limits_merge.py` only when the inbox changed since the last merge. Always on. |
+| Module: `session.start` timer | At process start, then every 15 seconds while the session is open | Lists `<state>/inbox/`, and runs `limits_merge.py` only when the inbox changed since the last merge. Always on. |
 | Module: `session.start` timer | At session start, then every 10 seconds while the session is open | usage-watch. Reads its switch; while it is on and 125 seconds have passed, asks Claude Code for the account's usage. |
+| Module: `prompt.submit` | Every prompt | Clears the away marker when the prompt is your message: not a prompt from a schedule, a notification or another session, not a cache-watch wake, and not the `/paceline:away` command. Runs whether or not pace is on. |
 | `Stop`: `cache_watch.py hook stop` | After every turn | Waits for the next wake of a watched session; returns at once for any other session. When the cache expired before the wake, turns the session off with the reason `cache expired before the wake`. |
 | `UserPromptSubmit`: `cache_watch.py hook prompt` | Every prompt | Resets the wake count of a watched session. After a cache that expired before its wake, adds a one-time notice for the agent to pass on. |
 | `PreCompact`, `SessionStart` (`compact`): `cache_watch.py hook compact` | Before and after a compaction, manual or automatic | Turns a watched session off with the reason `compacted`, which also ends its waiting `Stop` hook. |
 | `SessionEnd`: `cache_watch.py hook session-end` | Session end | Removes the session's cache-watch state. |
 | `SessionStart`: `context_watch.py hook session-start` | Session start | Removes old snapshots while context-watch is on. |
-| `Stop`, `SessionStart` (`startup`, `resume`, `clear`): `limits_merge.py` | After every turn, at session start | Merges the inbox in the background. Always on. |
 | `PreToolUse` (`Agent`, `Workflow`): `pace_pre_agent.py` | Before each launch | Adds the `pace:` line and holds a `launch` reservation. Asks you at a hard limit, or over the agent cap in the five-hour burn state, and denies the launch instead while the away marker is set. |
 | `SubagentStart`, `SubagentStop`: `pace_subagent.py` | Subagent start and stop | Acquires and releases the subagent's reservation. The acquire closes the oldest `launch` reservation of the session. |
 | `SessionStart` (`startup`, `resume`): `pace_session_start.py` | Session start | Adds unconfirmed plans, the leftover-pool suggestion, and the time zone hint. |
 | `SessionEnd`: `pace_session_end.py` | Session end | Records the session's end in `<state>/ended-sessions/` and releases its reservations; the next pace call finishes a release that was cut off. |
-| `UserPromptSubmit`: `away.py hook prompt` | Every prompt | Clears the away marker when the prompt is your message: not a cache-watch wake and not the `/paceline:away` command. Runs whether or not pace is on. |
 
 The four pace hooks exit at once, with no output, while pace is off. While a function is off, its
 command hooks still start one Python process per matching event. The command hooks run `python3`

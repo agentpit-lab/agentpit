@@ -101,7 +101,7 @@ def main():
     on = pace_on()
     # Drained even while pace is off: an unread pipe can block the writer.
     try:
-        sys.stdin.read()
+        sys.stdin.buffer.read()
     except (OSError, ValueError):
         pass
     if not on or too_old():

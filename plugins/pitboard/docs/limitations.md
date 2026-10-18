@@ -200,3 +200,21 @@ v2.1.290, which ignores the setting and can still compact.
 
 **What still works:** `off` and `n/a` hold for the conditions PitBoard checks, and the figures of
 the Ctx card are unaffected. See [Context and cache](explanation.md#context-and-cache).
+
+### Where an organization manages Claude Code, PitBoard sees a compaction late
+
+On a Team or Enterprise login, and on a machine with managed settings, Claude Code seats its
+built-in `sec-default` guard. The guard keeps compaction events from the hooks module of a plugin
+you install, and PitBoard updates the row on that event. A fix is planned for a later version.
+
+**What you see:** after a compaction, the context reading keeps its figure from before it until the
+next request, and `Session` hits count from before it until the next turn ends. The note that
+compaction replaced the history and the next turn re-caches it does not show, and `Turns left` can
+rest on samples taken before the compaction.
+
+**What still works:** every other reading, and the limits. An administrator can run PitBoard in the
+organization's tier by naming `pitboard@agentpit` in managed `appendPlugins`, or in `prependPlugins`
+ahead of `sec-default@builtin`; the guard does not skip that tier. That relaxes the organization's
+security settings, so it fits a small team whose owner can decide that, and hardly a large
+organization. This is from the [sec-default
+README](https://github.com/anthropics/claude-code/tree/main/mods/sec-default), not tested here.
