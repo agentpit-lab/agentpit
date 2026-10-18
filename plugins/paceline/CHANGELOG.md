@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.4.8 - 2026-10-18
+
+### Fixed
+
+- The limitations page corrects the administrator's workaround for Claude Code's sec-default guard,
+  now tested on a Team organization. Naming the plugin in managed `appendPlugins` does not lift the
+  guard while you install PaceLine yourself from the public marketplace. Seating it as the
+  organization's plugin does: a `directory` marketplace in managed `extraKnownMarketplaces`, with
+  `enabledPlugins` and `appendPlugins` naming it; where the organization has server-managed
+  settings, the keys go into the admin console.
+
 ## 0.4.7 - 2026-10-18
 
 ### Changed
