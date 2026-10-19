@@ -638,6 +638,8 @@ class PolicyDriver(SqlDriver):
             "pg_last_wal_receive_lsn",
             "pg_last_wal_replay_lsn",
             "pg_last_xact_replay_timestamp",
+            "pg_current_wal_lsn",
+            "pg_wal_lsn_diff",
         }
     )
 

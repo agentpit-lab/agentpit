@@ -9,6 +9,9 @@ class ReplicationSlot:
     slot_name: str
     database: str
     active: bool
+    lag_bytes: Optional[int] = None
+    wal_status: Optional[str] = None
+    safe_wal_size: Optional[int] = None
 
 
 @dataclass
@@ -59,24 +62,42 @@ class ReplicationCalc:
             if active_slots:
                 result.append("\nActive replication slots:")
                 for slot in active_slots:
-                    result.append(f"- {slot.slot_name} (database: {slot.database})")
+                    result.append(self._format_slot(slot))
 
             if inactive_slots:
                 result.append("\nInactive replication slots:")
                 for slot in inactive_slots:
-                    result.append(f"- {slot.slot_name} (database: {slot.database})")
+                    result.append(self._format_slot(slot))
         else:
             result.append("\nNo replication slots found.")
 
         return "\n".join(result)
 
+    @staticmethod
+    def _format_slot(slot: ReplicationSlot) -> str:
+        parts = [f"database: {slot.database}"]
+        if slot.lag_bytes is not None:
+            parts.append(f"WAL held back: {slot.lag_bytes} bytes")
+        if slot.wal_status is not None:
+            parts.append(f"WAL status: {slot.wal_status}")
+        if slot.safe_wal_size is not None:
+            parts.append(f"safe WAL size: {slot.safe_wal_size} bytes")
+        return f"- {slot.slot_name} ({'; '.join(parts)})"
+
     async def _get_replication_metrics(self) -> ReplicationMetrics:
         """Get comprehensive replication metrics."""
+        is_replica = await self._is_replica()
+        replication_lag_seconds = await self._get_replication_lag()
+        is_replicating = await self._is_replicating()
+        slots = await self._get_replication_slots()
+        slot_lag = await self._get_slot_lag(is_replica)
+        for slot in slots:
+            slot.lag_bytes = slot_lag.get(slot.slot_name)
         return ReplicationMetrics(
-            is_replica=await self._is_replica(),
-            replication_lag_seconds=await self._get_replication_lag(),
-            is_replicating=await self._is_replicating(),
-            replication_slots=await self._get_replication_slots(),
+            is_replica=is_replica,
+            replication_lag_seconds=replication_lag_seconds,
+            is_replicating=is_replicating,
+            replication_slots=slots,
         )
 
     async def _is_replica(self) -> bool:
@@ -116,12 +137,15 @@ class ReplicationCalc:
         if await self._get_server_version() < 90400 or not self._feature_supported("replication_slots"):
             return []
 
+        # wal_status and safe_wal_size exist from PostgreSQL 13.
+        status_columns = ", wal_status, safe_wal_size" if await self._get_server_version() >= 130000 else ""
+
         try:
-            result = await self.sql_driver.execute_query("""
+            result = await self.sql_driver.execute_query(f"""
                 SELECT
                     slot_name,
                     database,
-                    active
+                    active{status_columns}
                 FROM pg_replication_slots
             """)
             if result is None:
@@ -132,12 +156,40 @@ class ReplicationCalc:
                     slot_name=row["slot_name"],
                     database=row["database"],
                     active=row["active"],
+                    wal_status=row.get("wal_status"),
+                    safe_wal_size=row.get("safe_wal_size"),
                 )
                 for row in result_list
             ]
         except Exception:
             self._feature_support["replication_slots"] = False
             return []
+
+    async def _get_slot_lag(self, is_replica: bool) -> dict[str, int]:
+        """Get the WAL each slot holds back, in bytes, by slot name.
+
+        A separate query, so a server that refuses it still lists the slots. pg_current_wal_lsn cannot run
+        during recovery, and a slot without restart_lsn (a lost slot) has no lag.
+        """
+        if is_replica or not self._feature_supported("slot_lag") or await self._get_server_version() < 100000:
+            return {}
+
+        try:
+            result = await self.sql_driver.execute_query("""
+                SELECT
+                    slot_name,
+                    pg_wal_lsn_diff(pg_current_wal_lsn(), restart_lsn) AS lag_bytes
+                FROM pg_replication_slots
+            """)
+            result_list = [dict(x.cells) for x in result] if result is not None else []
+            return {
+                row["slot_name"]: int(row["lag_bytes"])
+                for row in result_list
+                if row["lag_bytes"] is not None
+            }
+        except Exception:
+            self._feature_support["slot_lag"] = False
+            return {}
 
     async def _is_replicating(self) -> bool:
         """Check if replication is active."""

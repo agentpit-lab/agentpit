@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.2 - 2026-10-19
+
+### Added
+
+- The `diagnose` level admits `pg_current_wal_lsn` and `pg_wal_lsn_diff`, so an agent can read the
+  WAL a replication slot holds back with `diagnose_sql`. The `read` level does not.
+- The replication health check prints, for each slot, the WAL it holds back, its `wal_status` and its
+  `safe_wal_size`.
+
 ## 0.1.1 - 2026-10-16
 
 ### Added

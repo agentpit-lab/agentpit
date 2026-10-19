@@ -249,7 +249,9 @@ GRANT pg_monitor TO dbwise_diagnose;
 
 `pg_monitor` lets the role see other sessions' queries in `pg_stat_activity` and
 `pg_stat_statements`. It does not let it cancel or terminate other roles' sessions (verified on
-PostgreSQL 17.11).
+PostgreSQL 17.11). The slot lag in the replication check needs no grant: any role that can connect
+reads `pg_replication_slots` and runs `pg_current_wal_lsn` and `pg_wal_lsn_diff`, while `pg_monitor`
+additionally fills the sender positions of `pg_stat_replication` (verified on PostgreSQL 17.11).
 
 Grant `SELECT` on sequences and never `USAGE`. `analyze_db_health` reads each sequence to see how
 much of its range is used, and without `SELECT` it lists those sequences as not checked. `USAGE`

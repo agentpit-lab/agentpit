@@ -111,7 +111,7 @@ needs, and why the role gate does not apply to it.
 |  | `read` | `diagnose` |
 |---|---|---|
 | Statements | `SELECT` without a locking clause, `SHOW` | The same, plus `EXPLAIN` with any options, `ANALYZE` included, when the explained statement passes the policy |
-| Functions | A fixed list of functions for aggregates, math, strings, dates, JSON, arrays, catalog information and the like | The same list, plus `hypopg_create_index`, `hypopg_reset`, `hypopg_list_indexes`, `hypopg_relation_size`, `hypopg_get_indexdef`, `hypopg`, `pg_last_wal_receive_lsn`, `pg_last_wal_replay_lsn` and `pg_last_xact_replay_timestamp` |
+| Functions | A fixed list of functions for aggregates, math, strings, dates, JSON, arrays, catalog information and the like | The same list, plus `hypopg_create_index`, `hypopg_reset`, `hypopg_list_indexes`, `hypopg_relation_size`, `hypopg_get_indexdef`, `hypopg`, `pg_last_wal_receive_lsn`, `pg_last_wal_replay_lsn`, `pg_last_xact_replay_timestamp`, `pg_current_wal_lsn` and `pg_wal_lsn_diff` |
 
 Neither level admits the statements `VACUUM` and `ANALYZE`, `CREATE EXTENSION`, `PREPARE` and
 `DEALLOCATE`, `DECLARE`, `FETCH` and `CLOSE`, or `NOTIFY`. Neither admits `pg_current_xact_id` (each
