@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.4.9 - 2026-10-20
+
+### Added
+
+- The `night-queue` skill (`/paceline:night-queue`) tells the agent how to work a queue the operator
+  left running: start the run, obey the exit code of `paceline auto` before each item, report failures
+  and deferrals, and fill the morning report.
+- The `pace` skill takes a `plan` argument and triggers when the operator states a plan change in
+  words: it records the change with `paceline plan add`, finds a plan to move or cancel with
+  `paceline plan find`, and reports the new budget per hour.
+
 ## 0.4.8 - 2026-10-18
 
 ### Fixed

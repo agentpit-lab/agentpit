@@ -281,11 +281,12 @@ marker](explanation.md#the-away-marker).
 
 Each skill runs the matching command for you:
 
-- `/paceline:pace on|off|status|doctor|profile|profile set KEY VALUE`
+- `/paceline:pace on|off|status|doctor|profile|profile set KEY VALUE|plan`
 - `/paceline:cache-watch on|off|status|config`
 - `/paceline:away on|off|status`
 - `/paceline:context-watch status|config`
 - `/paceline:usage-watch on|off|status`
+- `/paceline:night-queue`
 
 ## Exit codes
 
