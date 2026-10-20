@@ -37,8 +37,8 @@ Stop only when `paceline auto` says stop.
 
 In the morning fill `${CLAUDE_PLUGIN_ROOT}/templates/morning-report.md` from
 `paceline queue report < /dev/null`: done, deferred and why, questions for the operator, spend
-against estimates, silent interruptions. The docs name no file for the filled report, so give it
-in your reply to the operator.
+against estimates, silent interruptions. Give the filled report in your reply to the operator; do
+not write it to a file.
 
 If `paceline` is not found, run `python "${CLAUDE_PLUGIN_ROOT}/scripts/paceline.py"` with the same
 arguments.

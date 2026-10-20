@@ -2,7 +2,7 @@
 
 export type Settings = { on: boolean; line: boolean; levels: number[]; snapshotDays: number }
 
-export const DEFAULT_SETTINGS: Settings = { on: true, line: true, levels: [85, 95], snapshotDays: 14 }
+export const DEFAULT_SETTINGS: Settings = { on: true, line: false, levels: [85, 95], snapshotDays: 14 }
 
 // cache_watch.py's WAKE_MARK: a cache-watch wake is not the operator's prompt.
 export const WAKE_MARK = 'cache-watch woke this session'

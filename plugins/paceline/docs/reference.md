@@ -246,11 +246,11 @@ in the session ID and the data directory.
 - `paceline context-watch status [--project DIR]` prints the settings, the project's snapshot folder
   with its number of snapshots, and the settings file.
 - `paceline context-watch config [--on|--off] [--line on|off] [--levels 85,95] [--days N]` shows or
-  changes the settings. `--off` turns off the line, the warnings, and the snapshots. `--line off`
-  hides only the line. Levels are ascending whole percents from 50 to 99. Snapshots are kept 1 to 90
-  days. Changes apply from the next prompt.
+  changes the settings. `--off` turns off the line, the warnings, and the snapshots. `--line on`
+  adds the line to every prompt; `--line off` hides it, which is the default. Levels are ascending
+  whole percents from 50 to 99. Snapshots are kept 1 to 90 days. Changes apply from the next prompt.
 
-Defaults: on, line on, warnings at 85% and 95%, snapshots kept 14 days.
+Defaults: on, line off, warnings at 85% and 95%, snapshots kept 14 days.
 
 ### usage-watch
 

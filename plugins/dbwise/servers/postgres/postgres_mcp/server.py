@@ -37,7 +37,10 @@ from .top_queries import TopQueriesCalc
 # Constants
 PG_STAT_STATEMENTS = "pg_stat_statements"
 HYPOPG_EXTENSION = "hypopg"
-ALIAS_PARAM_DESC = "Target alias. Call list_databases for the available aliases and their databases."
+ALIAS_PARAM_DESC = (
+    "Required. Target alias; a call without it is refused and names the available aliases. "
+    "Call list_databases for the aliases, their levels and their databases."
+)
 DATABASE_NAME_PARAM_DESC = "Target database name within the alias. Call list_databases for available names."
 PG_STAT_STATEMENTS_SCOPE_NOTE = (
     f"\n\nNote: {PG_STAT_STATEMENTS} has server-global scope; results include queries from all "
@@ -618,18 +621,37 @@ TOOL_ENTRIES: dict[str, ToolEntry] = {
         "one alias regardless of its state; its pools at every level are closed and the role check runs again.",
         ToolAnnotations(title="Reconnect", readOnlyHint=False),
     ),
-    "list_schemas": ToolEntry(list_schemas, "List Schemas", "Lists all schemas in the database.", _read_only("List Schemas")),
-    "list_objects": ToolEntry(list_objects, "List Objects", "Lists objects in a schema.", _read_only("List Objects")),
+    "list_schemas": ToolEntry(
+        list_schemas,
+        "List Schemas",
+        "Lists all schemas in one database of an alias. Use it first to find where the objects are; list_objects "
+        "then lists one schema's tables, views, sequences or extensions.",
+        _read_only("List Schemas"),
+    ),
+    "list_objects": ToolEntry(
+        list_objects,
+        "List Objects",
+        "Lists the objects of one type ('table' by default, or 'view', 'sequence', 'extension') in one schema; "
+        "extensions are listed for the whole database, whatever the schema. Use get_object_details for the "
+        "columns, constraints and indexes of one object.",
+        _read_only("List Objects"),
+    ),
     "get_object_details": ToolEntry(
         get_object_details,
         "Get Object Details",
-        "Shows detailed information about a database object.",
+        "Shows one table, view, sequence or extension, named by schema, object name and object type ('table' by "
+        "default); for a table it returns the columns, constraints and indexes, for a view its columns, for a "
+        "sequence its type, start value and increment, and for an extension its version.",
         _read_only("Get Object Details"),
     ),
     "read_sql": ToolEntry(
         read_sql,
         "Read SQL",
-        "This tool runs one or more SELECT or SHOW statements with the alias's read credential.",
+        "This tool runs one or more SELECT or SHOW statements with the alias's read credential. Other statements, "
+        "including EXPLAIN and SELECT with a locking clause, are refused by the read level's SQL policy, and each "
+        f"call stops after {POLICY_TIMEOUT_SECONDS} seconds. Use diagnose_sql for EXPLAIN and write_sql for a "
+        "change. Returns the result rows as lists of cells, 'No results' when there are none, or "
+        "'Error: <message>'.",
         _read_only("Read SQL"),
     ),
     "explain_query": ToolEntry(
@@ -682,7 +704,11 @@ TOOL_ENTRIES: dict[str, ToolEntry] = {
     "write_sql": ToolEntry(
         write_sql,
         "Write SQL",
-        "This tool runs any SQL with the alias's write credential and commits it.",
+        "This tool runs any SQL with the alias's write credential and commits it. No SQL policy and no "
+        f"dbwise time limit apply, unlike the {POLICY_TIMEOUT_SECONDS}-second limit of read_sql and "
+        "diagnose_sql, so a committed change cannot be undone from here. Use it only for a change the "
+        "operator asked for; use read_sql or diagnose_sql when the task only reads. Returns the result rows "
+        "as lists of cells, 'No results' when there are none, or 'Error: <message>'.",
         ToolAnnotations(title="Write SQL", destructiveHint=True),
     ),
 }

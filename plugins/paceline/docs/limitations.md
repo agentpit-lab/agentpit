@@ -134,14 +134,14 @@ confirmation at a hard limit](explanation.md#the-confirmation-at-a-hard-limit).
 ### context-watch leaves subagent compactions alone and gives no warnings with auto-compaction off
 
 context-watch leaves subagent compactions alone: it writes a snapshot only for the main
-conversation. With auto-compaction off, the context line measures against the context window, and no
-warnings come.
+conversation. With auto-compaction off, the context line, if you turned it on, measures against the
+context window, and no warnings come.
 
 **What you see:** no snapshot for a subagent's compaction, and no warning at 85% or 95% while
 auto-compaction is off.
 
-**What still works:** the line, and a snapshot at each compaction of the main conversation. See
-[Recover after a compaction](how-to.md#recover-after-a-compaction).
+**What still works:** the line, if you turned it on, and a snapshot at each compaction of the main
+conversation. See [Recover after a compaction](how-to.md#recover-after-a-compaction).
 
 ### Where an organization manages Claude Code, context-watch does not run
 

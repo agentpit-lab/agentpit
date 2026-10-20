@@ -5,7 +5,7 @@ usage limits. It has four functions, each turned on and off on its own:
 
 | Function | What it adds to a session | Default |
 |---|---|---|
-| context-watch | A one-line context gauge on every prompt, warnings before auto-compaction, and a snapshot of the session at each compaction. | On |
+| context-watch | Warnings before auto-compaction, a snapshot of the session at each compaction, and an optional one-line context gauge on every prompt. | On |
 | cache-watch | Wakes an idle session shortly before its one-hour prompt cache expires, so the cache is kept. | Off in every session until you turn it on there |
 | pace | A per-hour budget against the five-hour and weekly limits, advice before every Agent and Workflow launch, subagent reservations, and a night queue. | Off until you run `/paceline:pace on` |
 | usage-watch | Reads the account's exact usage and its model-scoped weekly limits through Claude Code every 125 seconds, so the limits stay current while sessions are idle. Needs a claude.ai login and an open session; reads an endpoint outside Anthropic's published API ([limitations](docs/limitations.md#usage-watch)). | Off until you run `/paceline:usage-watch on` |

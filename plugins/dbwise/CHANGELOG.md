@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.1.3 - 2026-10-20
+
+### Changed
+
+- The `alias` parameter of every tool says it is required; a call without it is refused and the
+  reply names the available aliases.
+- The descriptions of `write_sql`, `read_sql`, `list_schemas`, `list_objects` and `get_object_details`
+  name the tool's limits (no SQL policy and no time limit at `write`; the SQL policy and the
+  30-second limit at `read`), the neighbouring tool to use instead, and the reply format.
+
 ## 0.1.2 - 2026-10-19
 
 ### Added

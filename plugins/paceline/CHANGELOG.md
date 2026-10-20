@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.4.10 - 2026-10-20
+
+### Changed
+
+- context-watch no longer adds its context line to every prompt unless you turn it on with
+  `paceline context-watch config --line on`. The warnings at the set levels and the snapshots at each
+  compaction are unchanged. An existing settings file that has `line` keeps its value.
+- The `night-queue` skill tells the agent to give the filled morning report in its reply and not to
+  write it to a file.
+
 ## 0.4.9 - 2026-10-20
 
 ### Added

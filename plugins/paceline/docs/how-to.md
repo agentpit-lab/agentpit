@@ -184,10 +184,11 @@ expires 15:30 · next wake 15:22`.
 **When you need it:** a session was compacted, and you or the agent need what the summary dropped.
 context-watch is on from install, so this works without setup.
 
-1. Before the compaction, context-watch puts a line such as `context: 612k / 967k auto-compact point
-   (63%)` on every prompt. When the context first passes 85% and then 95% of the auto-compaction
-   point, the agent is told once per level to write its recovery point to the task's status file.
-   The levels reset after each compaction.
+1. Before the compaction, context-watch watches the context. When the context first passes 85% and
+   then 95% of the auto-compaction point, the agent is told once per level to write its recovery
+   point to the task's status file. The levels reset after each compaction. With `--line on`,
+   context-watch also puts a line such as `context: 612k / 967k auto-compact point (63%)` on every
+   prompt; the line is off by default.
 2. At each compaction of the main conversation, automatic or `/compact`, PaceLine writes
    `.claude/paceline/<session id>.md` in the project. It holds your last 3 prompts, the agent's last
    2 replies, the last 5 tool calls with their inputs cut to 200 characters (without results), and
@@ -203,7 +204,8 @@ against the context window, and no warnings come. Snapshots older than 14 days a
 session starts in the project.
 
 To change it, run `/paceline:context-watch config`, for example `--levels 80,90` for earlier
-warnings, `--line off` to hide only the line, or `--days 30` to keep snapshots longer.
+warnings, `--line on` to add a line such as `context: 612k / 967k auto-compact point (63%)` to every
+prompt, or `--days 30` to keep snapshots longer.
 
 **How to tell it worked:** after a compaction, `/paceline:context-watch status` counts the snapshot,
 for example `snapshots: /home/me/project/.claude/paceline (1 file)`, and the agent's next step

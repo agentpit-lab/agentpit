@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """context-watch: settings, status and snapshot cleanup for paceline's context-watch module.
 
-The module (hooks/register.ts) shows the agent its context against the auto-compaction point, warns
-at set levels and writes a snapshot of the session at each compaction. This script owns what the
-module cannot do: the settings command, and removing old snapshots at session start.
+The module (hooks/register.ts) warns the agent at set levels, writes a snapshot of the session at
+each compaction, and, when the line setting is on (it is off by default), shows the agent its context
+against the auto-compaction point on every prompt. This script owns what the module cannot do: the
+settings command, and removing old snapshots at session start.
 
 CLI (through bin/paceline):
     paceline context-watch config [--on | --off] [--line on|off] [--levels 85,95] [--days N]
@@ -25,7 +26,7 @@ from pathlib import Path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import limits_file  # noqa: E402
 
-DEFAULTS = {"on": True, "line": True, "levels": [85, 95], "snapshot_days": 14}
+DEFAULTS = {"on": True, "line": False, "levels": [85, 95], "snapshot_days": 14}
 LEVEL_RANGE = (50, 99)
 DAYS_RANGE = (1, 90)
 DAY_S = 86400
@@ -183,7 +184,8 @@ def main(argv=None):
     switch = config.add_mutually_exclusive_group()
     switch.add_argument("--on", dest="on", action="store_const", const=True)
     switch.add_argument("--off", dest="on", action="store_const", const=False)
-    config.add_argument("--line", choices=("on", "off"))
+    config.add_argument("--line", choices=("on", "off"),
+                        help="add (on) or remove (off) the context line on every prompt; off by default")
     config.add_argument("--levels")
     config.add_argument("--days", type=int)
     status = sub.add_parser("status")
