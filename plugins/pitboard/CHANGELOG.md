@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.1.16 - 2026-10-22
+
+### Fixed
+
+- The how-to page gains "Seat PitBoard as your organization's plugin": scripts for Windows, macOS and
+  Linux, shipped in the marketplace's `tools/`, that seat PaceLine and PitBoard past Claude Code's
+  sec-default guard, with the console key they need and how to verify, update and undo. The
+  limitations page points there and no longer says that `claude plugin list` shows the plugin with
+  `Scope: managed`.
+
 ## 0.1.15 - 2026-10-18
 
 ### Fixed

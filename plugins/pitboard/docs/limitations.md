@@ -215,13 +215,6 @@ rest on samples taken before the compaction.
 **What still works:** every other reading, and the limits. Naming `pitboard@agentpit` in managed
 `appendPlugins` does not lift the guard while you install PitBoard yourself from the public agentpit
 marketplace: a plugin you install is not the organization's plugin, so the guard still skips its
-hooks (tested with PaceLine on a Team organization). An administrator can seat PitBoard as the
-organization's plugin, which the guard does not skip, with three managed keys:
-`extraKnownMarketplaces` with a `directory` marketplace at an absolute path, whose
-`marketplace.json` lists each plugin by a relative `./plugins/<name>` source so that it loads in
-place; `enabledPlugins` with `"pitboard@<marketplace>": true`; and `appendPlugins` naming
-`pitboard@<marketplace>`. `claude plugin list` then shows `Scope: managed`. Where the organization
-has server-managed settings, the keys go into the admin console: under the default
-`managedSourcesBehavior` of `first-wins`, a local `managed-settings.json` adds nothing. That relaxes
-the organization's security settings, so it fits a small team whose owner can decide that, and
-hardly a large organization.
+hooks. An administrator can seat PitBoard as the organization's plugin, which the guard does not
+skip: see [Seat PitBoard as your organization's
+plugin](how-to.md#seat-pitboard-as-your-organizations-plugin).

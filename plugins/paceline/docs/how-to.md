@@ -321,3 +321,60 @@ shorter than 08:00 to 22:00, or a limit in the profile does not fit your machine
 line, for example `day_hours: [8, 22] -> [8, 24]`. A refused value exits 2, prints the reason, and
 changes nothing. The [profile keys](reference.md#profile-keys) list what each key does and its
 range.
+
+## Seat PaceLine as your organization's plugin
+
+**When you need it:** your organization manages Claude Code (a Team or Enterprise login, or a
+machine with managed settings) and context-watch does not run: see [the
+limitation](limitations.md#where-an-organization-manages-claude-code-context-watch-does-not-run).
+Claude Code's `sec-default` guard skips the hooks of a plugin you install yourself, but not of a
+plugin the organization's managed settings load from an administrator-only folder. Seating it there
+relaxes the organization's security settings, so it fits a small team whose owner decides that, and
+hardly a large organization.
+
+One script per platform seats PaceLine and PitBoard together. It fetches each plugin from the public
+agentpit repository at its release tag, copies it into an administrator-only folder, writes a
+managed settings file that enables it there, and disables your own copies, `paceline@agentpit` and
+`pitboard@agentpit`. It never edits an existing `managed-settings.json`. dbWise needs none of this:
+the guard leaves its hooks alone.
+
+1. Where the organization has server-managed settings (claude.ai, Organization settings > Claude
+   Code > Managed settings), add `"managedSourcesBehavior": "merge"` there. Without it Claude Code
+   ignores the plugin keys of this machine's managed file, and with your own copies disabled neither
+   plugin loads.
+2. On Windows, download
+   [Install-AgentpitOrg.ps1](https://github.com/agentpit-lab/agentpit/blob/main/tools/Install-AgentpitOrg.ps1)
+   and run it in PowerShell 7 as an administrator:
+
+   ```
+   pwsh -NoProfile -File .\Install-AgentpitOrg.ps1
+   ```
+
+3. On macOS or Linux, download
+   [install-agentpit-org.sh](https://github.com/agentpit-lab/agentpit/blob/main/tools/install-agentpit-org.sh)
+   and run it as yourself; it calls `sudo` where it writes system folders. It is tested on Windows
+   and Linux, not yet on macOS.
+
+   ```
+   sh install-agentpit-org.sh
+   ```
+
+   In a terminal the script lists the last ten releases of each plugin with the latest selected, and
+   Enter keeps it. `-Version pitboard=0.1.14` (`--version` in sh) pins a release; `-Latest`
+   (`--latest`) takes the latest of both without asking, as a run without a terminal does.
+   Unreleased builds install only from a local folder with `-Source` (`--source`).
+
+   The script writes two paths. Windows: `C:\Program Files\ClaudeCode\plugins\agentpit-org` and
+   `C:\Program Files\ClaudeCode\managed-settings.d\50-agentpit-org.json`. macOS: the same two under
+   `/Library/Application Support/ClaudeCode/`. Linux: `/opt/claude-code/plugins/agentpit-org` and
+   `/etc/claude-code/managed-settings.d/50-agentpit-org.json`.
+4. Restart every Claude Code session.
+
+**How to tell it worked:** `claude --debug` logs `hooks module paceline@agentpit-org loaded` with
+`tier append`, and no line says `bypassed by`. `claude plugin list` does not show a plugin loaded in
+place from a managed folder.
+
+To update, run the script again. To undo, run it with `-Uninstall` (`--uninstall`): it removes the
+folder and the managed file and enables your own copies again. The managed file applies to every
+login on the machine, a personal one included, and seats the guard there too: another plugin with a
+hooks module that you install from a marketplace loses the same events on that login.
