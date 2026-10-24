@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.1.4 - 2026-10-25
+
+### Fixed
+
+- The first start builds the server's environment again. The lock pinned pglast 7.11, which PyPI no
+  longer serves, so every new environment failed to install; it now pins pglast 8.7. The relock also
+  moves certifi, more-itertools, pycparser, pydantic-settings, sse-starlette and starlette by patch or
+  minor releases.
+- The refusal on native Windows ARM64 Python names `psycopg-binary` as the package without a wheel;
+  pglast 8.7 publishes one.
+- `explain_query` replaces each `$n` parameter with a sample value from the column it is compared
+  with. With several parameters, a parameter could take the column of another one, depending on the
+  server process, so `... = $1 AND note LIKE $2` could put a number into the `LIKE` pattern and be
+  refused.
+
+### Changed
+
+- SQL is parsed with the PostgreSQL 18 grammar. A statement that only PostgreSQL 18 accepts passes
+  the parse and is refused by an older server; the limitations page says so.
+
 ## 0.1.3 - 2026-10-20
 
 ### Changed

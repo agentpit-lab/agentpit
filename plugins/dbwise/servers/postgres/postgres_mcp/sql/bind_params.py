@@ -374,18 +374,14 @@ class SqlBindParams:
                 return self._replace_parameters_generic(modified_query)
 
             # Process each remaining parameter
+            clause_boundary_pattern = re.compile(r"\s(?:where|and|or)\s|[,(]", re.IGNORECASE)
             for match in reversed(param_matches):
                 param_position = match.start()
 
-                # Extract a narrower context
-                clause_start = max(
-                    modified_query.rfind(" where ", 0, param_position),
-                    modified_query.rfind(" and ", 0, param_position),
-                    modified_query.rfind(" or ", 0, param_position),
-                    modified_query.rfind(",", 0, param_position),
-                    modified_query.rfind("(", 0, param_position),
-                    -1,
-                )
+                # Extract a narrower context: from the last WHERE, AND, OR, comma or parenthesis before the
+                # parameter, in any case and after any whitespace
+                boundaries = list(clause_boundary_pattern.finditer(modified_query, 0, param_position))
+                clause_start = boundaries[-1].start() if boundaries else -1
 
                 if clause_start == -1:
                     clause_start = max(0, param_position - 100)
@@ -527,20 +523,26 @@ class SqlBindParams:
             return [table_name]  # Fallback to just the table name
 
     def _identify_parameter_column(self, context: str, table_columns: dict[str, set[str]]) -> tuple[str, str] | None:
-        """Identify which column a parameter likely belongs to based on context."""
+        """Identify which column a parameter likely belongs to based on context.
+
+        The context ends at the parameter, so each pattern is anchored to its end and matches only the
+        comparison of this parameter, not of an earlier one. Tables and columns are tried in sorted order,
+        so the result does not depend on set order (the hash seed).
+        """
         # Look for patterns like "column_name = $1" or "column_name IN ($1)"
-        for table, columns in table_columns.items():
-            for column in columns:
+        for table, columns in sorted(table_columns.items()):
+            for column in sorted(columns):
+                name = rf"\b{re.escape(column)}"
                 # Various patterns to match column references
                 patterns = [
-                    rf"{column}\s*=\s*\$\d+",  # column = $1
-                    rf"{column}\s+in\s+\([^)]*\$\d+[^)]*\)",  # column in (...$1...)
-                    rf"{column}\s+like\s+\$\d+",  # column like $1
-                    rf"{column}\s*>\s*\$\d+",  # column > $1
-                    rf"{column}\s*<\s*\$\d+",  # column < $1
-                    rf"{column}\s*>=\s*\$\d+",  # column >= $1
-                    rf"{column}\s*<=\s*\$\d+",  # column <= $1
-                    rf"{column}\s+between\s+\$\d+\s+and\s+\$\d+",  # column between $1 and $2
+                    rf"{name}\s*=\s*\$\d+\Z",  # column = $1
+                    rf"{name}\s+in\s+\([^)]*\$\d+[^)]*\)\Z",  # column in (...$1...)
+                    rf"{name}\s+like\s+\$\d+\Z",  # column like $1
+                    rf"{name}\s*>\s*\$\d+\Z",  # column > $1
+                    rf"{name}\s*<\s*\$\d+\Z",  # column < $1
+                    rf"{name}\s*>=\s*\$\d+\Z",  # column >= $1
+                    rf"{name}\s*<=\s*\$\d+\Z",  # column <= $1
+                    rf"{name}\s+between\s+\$\d+\s+and\s+\$\d+\Z",  # column between $1 and $2
                 ]
 
                 for pattern in patterns:

@@ -123,8 +123,8 @@ def arm64_refusal(os_name: str, build_platform: str):
     """`build_platform` is sysconfig.get_platform(): it names the interpreter's build, where
     platform.machine() names the host CPU and would refuse an x64 Python emulated on ARM64."""
     if os_name == "nt" and build_platform.lower() == "win-arm64":
-        return ("dbwise does not run on native Windows ARM64 Python: psycopg-binary and pglast publish no "
-                "wheel for it. Install an x64 Python 3.12 to 3.14; Windows runs it by emulation.")
+        return ("dbwise does not run on native Windows ARM64 Python: psycopg-binary publishes no wheel "
+                "for it. Install an x64 Python 3.12 to 3.14; Windows runs it by emulation.")
     return None
 
 

@@ -10,10 +10,10 @@ refusal reasons, see the [reference](reference.md).
 
 ### Windows on ARM64 is not supported
 
-The two compiled packages the PostgreSQL server needs, `psycopg-binary` and `pglast`, publish no
-wheel for a native Windows ARM64 Python. With such a Python, the bootstrap stops before it runs pip
-and says so. An x64 Python 3.12 to 3.14 is the way around it: Windows on ARM runs it by emulation.
-That the x64 wheels then install and run under emulation is not verified.
+The compiled package the PostgreSQL server needs, `psycopg-binary`, publishes no wheel for a native
+Windows ARM64 Python. With such a Python, the bootstrap stops before it runs pip and says so. An x64
+Python 3.12 to 3.14 is the way around it: Windows on ARM runs it by emulation. That the x64 wheels
+then install and run under emulation is not verified.
 
 **What you see:** the `postgres` server starts as the stub and offers only `dbwise_status`, which
 says dbWise does not run on native Windows ARM64 Python. Nothing is written to `bootstrap.log`. In a
@@ -231,6 +231,12 @@ the dblink extension`.
 the whole PostgreSQL server. Their results include queries from every database on the server, not
 only the database you named. The extension must be loaded through `shared_preload_libraries` and
 created in the database.
+
+### The SQL parser accepts PostgreSQL 18 syntax
+
+dbWise parses SQL with the PostgreSQL 18 grammar, so a statement that only PostgreSQL 18 accepts
+passes the parse and is refused by an older server; a construct the allowlist does not know is
+refused before the statement reaches any server.
 
 ## Sequence health check
 
