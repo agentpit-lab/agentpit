@@ -19,9 +19,12 @@ tool has no `CLAUDE_PLUGIN_DATA`, so keep the quoted path as written:
 - `on`: `paceline cache-watch on --session ${CLAUDE_SESSION_ID} --data-dir "${CLAUDE_PLUGIN_DATA}" [--lead MIN] [--max N] < /dev/null`
 - `off`: `paceline cache-watch off --session ${CLAUDE_SESSION_ID} --data-dir "${CLAUDE_PLUGIN_DATA}" < /dev/null`
 - `status`: `paceline cache-watch status --data-dir "${CLAUDE_PLUGIN_DATA}" < /dev/null`
-- `config`: `paceline cache-watch config --data-dir "${CLAUDE_PLUGIN_DATA}" [--lead MIN] [--max N] < /dev/null`
+- `config`: `paceline cache-watch config [--lead MIN] [--max N] < /dev/null`
 
-Pass `--lead` and `--max` only when the operator gave them. If `paceline` is not found, run
+Pass `--lead` and `--max` only when the operator gave them. When they are left out, `on` uses the
+defaults, 5 minutes before expiry and 5 wakes unless changed; `config` sets them for every session
+and installation, in `<state>/cache-watch.json` (`$PACELINE_STATE_DIR`, else `state/paceline` under
+`$CLAUDE_CONFIG_DIR` or `~/.claude`). If `paceline` is not found, run
 `python "${CLAUDE_PLUGIN_ROOT}/scripts/paceline.py" cache-watch` with the same arguments.
 
 Then tell the operator, in one or two lines and in their language, what the command printed:

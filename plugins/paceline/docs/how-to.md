@@ -52,9 +52,8 @@ what the week can spare.
    Then, before each item, it runs `paceline auto` and follows its exit code:
    - `0` (start): run `paceline queue start <id>` for the item named in the output, do the work, then
      `paceline queue done <id>`. When the item's checks fail, run `paceline queue fail <id>` and fix
-     them; after `gate_fix_attempts` (3) failures the item is deferred. When an item needs your
-     permission, run `paceline queue defer <id>`. Deferring an item also defers the items that depend
-     on it.
+     them; after 3 failures the item is deferred. When an item needs your permission, run `paceline
+     queue defer <id>`. Deferring an item also defers the items that depend on it.
    - `10` (wait): wait, then run `paceline auto` again. With `--json`, `wait_until` says until when.
    - `11` (stop): end the run.
 5. In the morning, the agent fills the report template `templates/morning-report.md` from `paceline
@@ -82,7 +81,7 @@ you want the budget to follow.
    ```
 
    An `away` plan gives its day hours no budget; a `heavy` plan multiplies their weight by
-   `--weight`, default `heavy_weight` (2).
+   `--weight`, 2 by default.
 2. To move or cancel a plan, find it first:
 
    ```
@@ -171,9 +170,10 @@ costs at least 20 times the read (a one-hour cache write is 2 times the input pr
 0.1 times or less). Each wake still counts against the five-hour limit; how much a cache read weighs
 in subscription limits is not published. With the defaults, that is at most five wakes per absence;
 see [each wake counts against the five-hour
-limit](limitations.md#each-wake-counts-against-the-five-hour-limit). To change the defaults, run
-`/paceline:cache-watch config --lead 10 --max 3`; to change them for one session, pass the same
-options to `on`.
+limit](limitations.md#each-wake-counts-against-the-five-hour-limit). The defaults live in
+`<state>/cache-watch.json` and are the same in every session on this machine. To change them, run
+`/paceline:cache-watch config --lead 10 --max 3`, or use the settings view (`/paceline:settings
+pane`); to change them for one session, pass the same options to `on`.
 
 **How to tell it worked:** `/paceline:cache-watch status` shows the session as `on`, with the cache
 expiry and the next wake, for example `<session id> · on · lead 5 min · wakes 0/5 · cache 1h ·
@@ -296,10 +296,17 @@ figures at once.
 **When you need it:** the budget counts in the wrong time zone, your working day is longer or
 shorter than 08:00 to 22:00, or a limit in the profile does not fit your machine.
 
-1. Look at the current values:
+1. Look at the current values. `/paceline:settings` shows every setting and switch: a summary with
+   the four switches, a table for each group, a `●` before each value that differs from its default,
+   and the count of Advanced settings that differ, and `/paceline:settings pane` opens a pane where
+   you edit a value and save it with the same checks as `paceline profile set`. In a session where
+   PaceLine's hooks module does not run, or in a plain terminal, `paceline settings` prints the same
+   list as text. The pane is read-only on a phone. A new skill needs a new session in Claude Code
+   Desktop, so start one after you update PaceLine:
 
    ```
-   paceline profile
+   /paceline:settings
+   /paceline:settings pane
    ```
 
 2. Change one key. The value is read as JSON when it parses, else as text:
@@ -314,13 +321,66 @@ shorter than 08:00 to 22:00, or a limit in the profile does not fit your machine
    (`min_free_commit_mb` and `commit_reserve_mb`). The defaults for the memory floor and the hours
    are starting points. If a confirmation prompt appears at most Agent launches, lower
    `min_free_commit_mb`; if your day is longer, widen `day_hours`.
-3. To keep `UTC` while this machine is in another zone, run `paceline profile set timezone UTC`.
-   That also silences the time zone hint at session start.
+3. A new profile follows this machine's time zone, so it moves when the machine does. To count in a
+   fixed zone instead, for example a team's zone, run `paceline profile set timezone Europe/Kyiv`:
+   it also turns the mode to `fixed`. `paceline profile set timezone_mode machine` follows the
+   machine again. To keep `UTC` while this machine is in another zone, run `paceline profile set
+   timezone UTC`. That also silences the time zone hint at session start. A profile created by an
+   earlier version stays fixed until you choose the machine mode.
 
 **How to tell it worked:** `profile set` prints `KEY: OLD -> NEW` and the new `paceline status`
-line, for example `day_hours: [8, 22] -> [8, 24]`. A refused value exits 2, prints the reason, and
-changes nothing. The [profile keys](reference.md#profile-keys) list what each key does and its
-range.
+line, for example `day_hours: [8, 22] -> [8, 24]`; the pane shows the same line in a message after a
+save. A refused value exits 2, prints the reason, and changes nothing. The [profile
+keys](reference.md#profile-keys) list what each key does and its range. To change the five-hour,
+reserve, and throttle keys together, see [Choose a spending style](#choose-a-spending-style).
+
+## Choose a spending style
+
+**When you need it:** you want PaceLine to keep a margin below the limits, or to use the whole
+limit, and you want to see what that does to your week before you choose.
+
+1. Compare the styles on your own week: your profile, your zone, and your account's next weekly
+   reset. Without options, `paceline simulate` replays every style through four week shapes, with
+   and without a night queue; a narrower run is easier to read:
+
+   ```
+   paceline simulate --style careful --style balanced --week on-track --night-queue no
+   ```
+
+   Each row says how much of the week is left unused at the reset, how much the weekend day hours
+   and the nights spent, and for how many hours a launch would ask you first (`asks h`). The figures
+   come from a model; [the weekly simulation](explanation.md#the-weekly-simulation) says what it
+   leaves out. The settings view shows the same for an on-track week as `≈ X % unused` under the
+   style choice.
+2. Choose the style. `careful` keeps a margin, `balanced` is the defaults, `full` uses the whole
+   limit:
+
+   ```
+   paceline profile style careful
+   ```
+
+   In the settings view, pick it in the Spending style group. "What it sets (9)" opens the nine
+   values, each editable alone; changing one makes the style Custom.
+3. To override a style's values, write `<state>/pace-styles.json` by hand. PaceLine reads it for
+   `profile style`, `settings`, and `simulate`, and never writes it:
+
+   ```json
+   {"careful": {"reserve_pct": 10, "weekend_cap_pct": 18}, "full": {"throttle_weekly_pct": 95}}
+   ```
+
+   A value that fails the checks of `profile set`, a style name other than the three, and a key
+   outside the style's nine are ignored, each with a warning in `paceline settings`; the built-in
+   value stays in force. Apply the style again after you edit the file, because a profile set to a
+   style before its override changed reads as `custom`.
+4. The ninth value of a style, `reserve_release_min_hours`, starts the release of the reserve at
+   least that many hours before the reset: 54 for `balanced` and `full`, 0 (no floor) for `careful`.
+   Existing profiles have 54 too. The hours count back from your account's own reset, so the floor
+   works for any reset day. To get the release start of earlier versions back, run `paceline profile
+   set reserve_release_min_hours 0`.
+
+**How to tell it worked:** `paceline profile style` prints one `KEY: OLD -> NEW` line for each key
+that changed and the new status line, and `paceline settings` shows the style by name, for example
+`Spending style: careful`.
 
 ## Seat PaceLine as your organization's plugin
 

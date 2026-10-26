@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.1.5 - 2026-10-26
+
+### Fixed
+
+- `explain_query` gives a text column under an upper-case `LIKE $n` the pattern `'%test%'`, as it
+  did for a lower-case `like`, instead of a plain sample value; the plan is estimated for a pattern
+  match. The `BETWEEN` check and the fallback replacement read `LIKE`, `BETWEEN` and `AND` in either
+  case too.
+
+### Changed
+
+- The Ukrainian documentation pages use the impersonal register.
+
 ## 0.1.4 - 2026-10-25
 
 ### Fixed

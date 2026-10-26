@@ -47,8 +47,10 @@ The budget per hour is much higher or lower than you expect, or it is 0.
 - The profile's time zone or day hours do not match your day, so the clock falls in a night or off
   hour, and the budget shown is that of the next day hour.
 - A declared `away` plan gives its day hours no budget; a `heavy` plan raises their share.
-- The reserve holds back `reserve_pct` until the end of the week.
-- On a weekend, the weekend day hours share at most `weekend_cap_pct` of the week.
+- The reserve holds back `reserve_pct` until its release starts, which is no later than
+  `reserve_release_min_hours` before the reset.
+- On a weekend, the weekend day hours share at most `weekend_cap_pct` of the week, plus the reserve
+  released since the weekend began.
 - With `--model`, `PACELINE_MODEL`, or `ANTHROPIC_MODEL` set, a model-scoped weekly bucket counts
   when it is higher than the weekly reading.
 - No hour can get more than `five_hour_to_week_pct / 5` percent of the week.
@@ -66,7 +68,9 @@ hour, `current_plan` is the plan in force, `reserve_pct` and `spendable_pct` sho
 counts.
 
 **Fix:** correct the profile with `paceline profile set` (see [Change a profile
-setting](how-to.md#change-a-profile-setting)), or cancel a plan that no longer holds. The [budget
+setting](how-to.md#change-a-profile-setting)), or cancel a plan that no longer holds.
+`/paceline:settings` shows every value and marks the ones that differ from the defaults; `paceline
+simulate` shows what a spending style does to a week. The [budget
 simulator](https://agentpit-lab.github.io/agentpit/plugins/paceline/docs/budget-simulator.html)
 shows how each input moves the budget, and the [explanation](explanation.md#the-budget-per-hour)
 gives the rules.
@@ -75,10 +79,10 @@ gives the rules.
 
 `paceline status` shows `STALE data N min old`, and the `pace:` line shows `STALE data`.
 
-**Cause:** the newest reading is older than `stale_threshold_min` (30 minutes). Without usage-watch,
-readings refresh only when a session on this machine takes a model turn, so the data ages while no
-session works. While the data is stale, the hard limits on the five-hour and weekly windows are
-skipped, and the night queue waits.
+**Cause:** the newest reading is older than 30 minutes. Without usage-watch, readings refresh only
+when a session on this machine takes a model turn, so the data ages while no session works. While
+the data is stale, the hard limits on the five-hour and weekly windows are skipped, and the night
+queue waits.
 
 **Check:**
 
@@ -99,16 +103,20 @@ idle (see [Keep usage current while idle](how-to.md#keep-usage-current-while-idl
 Day and night hours are shifted, or a session start says the profile counts in UTC while this
 machine is in another zone.
 
-**Cause:** a new profile takes this machine's zone only when it can detect it and Python here has
-data for it; otherwise the profile keeps `UTC`. The zone comes from `TZ` when it holds a zone name,
-then on Windows from ICU (Windows 10 1903 and later), and on macOS and Linux from the target of
-`/etc/localtime` or from `/etc/timezone`. An existing profile keeps its zone.
+**Cause:** a new profile follows this machine's zone (machine mode): on every command PaceLine
+detects the machine's zone and, when Python here has data for it, counts in that zone, so the
+profile moves when the machine does. When the zone cannot be detected or Python has no data for it,
+the zone last stored stays in use, and a new profile keeps `UTC`. The zone comes from `TZ` when it
+holds a zone name, then on Windows from ICU (Windows 10 1903 and later), and on macOS and Linux from
+the target of `/etc/localtime` or from `/etc/timezone`. A profile created by an earlier version is
+in fixed mode and keeps its zone until you choose machine mode.
 
-Without the `tzdata` package, Python may have no zone data, which is common on Windows. PaceLine
-then knows only `UTC` and built-in Central and Eastern European zones with EU summer time:
-`Europe/Madrid`, `Europe/Paris`, `Europe/Berlin`, `Europe/Rome`, `Europe/Amsterdam`,
-`Europe/Brussels`, `Europe/Vienna`, `Europe/Warsaw`, `Europe/Prague`, `Europe/Stockholm`,
-`Europe/Kyiv`, `Europe/Kiev`, `Europe/Helsinki`, `Europe/Athens`, and `Europe/Riga`.
+Without the `tzdata` package, Python may have no zone data, which is common on Windows; machine mode
+then cannot follow the machine, and the profile stays `UTC`. PaceLine then knows only `UTC` and
+built-in Central and Eastern European zones with EU summer time: `Europe/Madrid`, `Europe/Paris`,
+`Europe/Berlin`, `Europe/Rome`, `Europe/Amsterdam`, `Europe/Brussels`, `Europe/Vienna`,
+`Europe/Warsaw`, `Europe/Prague`, `Europe/Stockholm`, `Europe/Kyiv`, `Europe/Kiev`,
+`Europe/Helsinki`, `Europe/Athens`, and `Europe/Riga`.
 
 **Check:**
 
@@ -116,13 +124,16 @@ then knows only `UTC` and built-in Central and Eastern European zones with EU su
 paceline profile check
 ```
 
-It prints the profile's zone, whether it is confirmed, and the detected zone, or a hint with the
-command to run.
+In machine mode it prints `timezone follows this machine: <zone>`, or says that Python has no data
+for the machine's zone and which zone is in use. In fixed mode it prints the profile's zone, whether
+it is confirmed, and the detected zone, or a hint with the commands to run. `paceline doctor` shows
+the mode and the zone in use in its `timezone` probe.
 
-**Fix:** set the zone:
+**Fix:** set a fixed zone, which turns the mode to `fixed`, or follow the machine again:
 
 ```
 paceline profile set timezone America/New_York
+paceline profile set timezone_mode machine
 ```
 
 If the command refuses the zone because Python has no data for it, install the data first with

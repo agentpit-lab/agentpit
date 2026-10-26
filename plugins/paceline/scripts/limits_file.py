@@ -389,7 +389,7 @@ def implausible(incoming, clock):
 # ---------------------------------------------------------------- files
 
 def read_json(path):
-    with contextlib.suppress(OSError, ValueError):
+    with contextlib.suppress(OSError, ValueError, RecursionError):
         parsed = json.loads(path.read_text(encoding="utf-8"))
         return parsed if isinstance(parsed, dict) else None
     return None

@@ -176,7 +176,7 @@ At `read` and at `diagnose` the role has to:
   `pg_signal_backend`, `pg_maintain`, `pg_read_server_files`, `pg_write_server_files`,
   `pg_execute_server_program`, `pg_checkpoint` and `pg_create_subscription`. Membership in an
   application's role lets the member cancel and terminate that role's sessions (verified on
-  PostgreSQL 17.11) and passes on what that role owns and is granted;
+  PostgreSQL 17 and 18) and passes on what that role owns and is granted;
 - be unable to execute the functions of the `dblink` extension and hold no `USAGE` on a foreign
   server. On a database with `dblink` installed and its default grants, this takes the `REVOKE` in
   step 5.
@@ -227,9 +227,9 @@ every object created later, sequences included:
 GRANT pg_read_all_data TO dbwise_read;
 ```
 
-`pg_read_all_data` passes the gate at `read` and at `diagnose` (verified on PostgreSQL 17.11). It
-spans every schema of the database, so use the explicit grants when the agent should see only some
-of them.
+`pg_read_all_data` passes the gate at `read` and at `diagnose` (verified on PostgreSQL 17 and 18).
+It spans every schema of the database, so use the explicit grants when the agent should see only
+some of them.
 
 ### 3. Grant the `diagnose` role
 
@@ -249,15 +249,16 @@ GRANT pg_monitor TO dbwise_diagnose;
 
 `pg_monitor` lets the role see other sessions' queries in `pg_stat_activity` and
 `pg_stat_statements`. It does not let it cancel or terminate other roles' sessions (verified on
-PostgreSQL 17.11). The slot lag in the replication check needs no grant: any role that can connect
-reads `pg_replication_slots` and runs `pg_current_wal_lsn` and `pg_wal_lsn_diff`, while `pg_monitor`
-additionally fills the sender positions of `pg_stat_replication` (verified on PostgreSQL 17.11).
+PostgreSQL 17 and 18). The slot lag in the replication check needs no grant: any role that can
+connect reads `pg_replication_slots` and runs `pg_current_wal_lsn` and `pg_wal_lsn_diff`, while
+`pg_monitor` additionally fills the sender positions of `pg_stat_replication` (verified on
+PostgreSQL 17 and 18).
 
 Grant `SELECT` on sequences and never `USAGE`. `analyze_db_health` reads each sequence to see how
 much of its range is used, and without `SELECT` it lists those sequences as not checked. `USAGE`
 would let the role call `nextval`, and the gate counts `USAGE` on a sequence as a write grant, so
 the alias would be refused. `pg_read_all_data` instead of these grants gives the same `SELECT` on
-sequences without `USAGE` (verified on PostgreSQL 17.11).
+sequences without `USAGE` (verified on PostgreSQL 17 and 18).
 
 `hypopg` 1.4.3 grants its views of hypothetical indexes to their owner only. The schema grants above
 cover them when the extension already exists in `public`. If `hypopg` is created later, grant them
@@ -294,9 +295,9 @@ ALTER ROLE dbwise_diagnose SET work_mem = '32MB';
 ```
 
 These defaults are guards for availability and for a mistake. They are not part of the guarantee,
-because a session can change some of them. On PostgreSQL 17.11 a session of a plain role could set
+because a session can change some of them. On PostgreSQL 17 and 18 a session of a plain role can set
 `default_transaction_read_only`, `statement_timeout`, `work_mem` and
-`idle_in_transaction_session_timeout` back, and was refused `temp_file_limit`. dbWise refuses the
+`idle_in_transaction_session_timeout` back, and is refused `temp_file_limit`. dbWise refuses the
 statements that change them, which is what keeps the agent from doing it. The guarantee is the
 grants above and the role gate.
 
@@ -332,9 +333,9 @@ it never touches yours. Running the statement again is harmless. `dbwise doctor`
 `REVOKE` for the PostgreSQL function it finds executable by `PUBLIC`, as an `advice:` line.
 
 A database created later from `template1` copies its catalog, so running the statement in
-`template1` as well makes new databases start revoked (verified on PostgreSQL 17.11). On a managed
-service where you are not a superuser, whether you may change the ACLs of `pg_catalog` functions:
-not verified.
+`template1` as well makes new databases start revoked (verified on PostgreSQL 17 and 18). On a
+managed service where you are not a superuser, whether you may change the ACLs of `pg_catalog`
+functions: not verified.
 
 **The trade-off:** an application that takes advisory locks, or uses `dblink`, through `PUBLIC`
 loses them until you grant them back to the roles that use them. Grant each function that

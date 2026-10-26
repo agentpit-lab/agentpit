@@ -631,6 +631,7 @@ class SqlBindParams:
 
     def _get_replacement_value(self, stats: dict[str, Any], context: str) -> str:
         """Generate an appropriate replacement value based on column statistics."""
+        context = context.lower()
         data_type = stats.get("data_type", "").lower()
         common_vals = stats.get("common_vals")
         histogram_bounds = stats.get("histogram_bounds")
@@ -731,7 +732,7 @@ class SqlBindParams:
             modified_query = query
 
             # Replace string parameters
-            modified_query = re.sub(r"like \$\d+", "like '%'", modified_query)
+            modified_query = re.sub(r"(like\s+)\$\d+", r"\1'%'", modified_query, flags=re.IGNORECASE)
 
             # Context-aware replacements
             modified_query = re.sub(
@@ -751,8 +752,8 @@ class SqlBindParams:
             )
 
             # Replace numeric parameters in inequalities
-            modified_query = re.sub(r"(\d+) and \$\d+", r"\1 and 100", modified_query)
-            modified_query = re.sub(r"\$\d+ and (\d+)", r"1 and \1", modified_query)
+            modified_query = re.sub(r"(\d+\s+and\s+)\$\d+", r"\g<1>100", modified_query, flags=re.IGNORECASE)
+            modified_query = re.sub(r"\$\d+(\s+and\s+\d+)", r"1\1", modified_query, flags=re.IGNORECASE)
             modified_query = re.sub(r">\s*\$\d+", "> 1", modified_query)
             modified_query = re.sub(r"<\s*\$\d+", "< 100", modified_query)
             modified_query = re.sub(r"=\s*\$\d+\b", "= 45", modified_query)

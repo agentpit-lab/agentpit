@@ -29,7 +29,10 @@ import away  # noqa: E402
 import five_burn  # noqa: E402
 import limits_file  # noqa: E402
 import localzone  # noqa: E402
-from five_burn import CET_ZONES, EET_ZONES, EuropeanZone, _last_sunday, classify, fmt_local  # noqa: E402,F401
+from five_burn import (  # noqa: E402,F401
+    CET_ZONES, EET_ZONES, STALE_THRESHOLD_MIN, EuropeanZone, _last_sunday, classify, detect_zone, effective_zone,
+    fmt_local,
+)
 from limits_file import (  # noqa: E402,F401
     FUTURE_SLACK, NO_PARTITION, RECORD_META, STALE_EPOCH, bucket_at, bucket_times, dated_record, history_account_filter,
     is_bucket, parse_iso, pick_partition, read_history, safe_iso,
@@ -51,6 +54,7 @@ EXIT_STOP = 11
 PROFILE_DEFAULTS = {
     "version": 1,
     "timezone": "UTC",
+    "timezone_mode": "machine",
     "timezone_confirmed": False,
     "day_hours": [8, 22],
     "night_hours": [0, 8],
@@ -59,21 +63,12 @@ PROFILE_DEFAULTS = {
     "weekend_cap_pct": 20.0,
     "reserve_pct": 8.0,
     "reserve_decay_start": {"weekday": 4, "hour": 18},
+    "reserve_release_min_hours": 54,
     "five_hour_threshold_day": 80.0,
     "five_hour_threshold_night": 95.0,
     "five_hour_hard_stop": 95.0,
     "five_hour_to_week_pct": 10.0,
-    "heavy_weight": 2.0,
-    "night_base_pct": 5.0,
-    "host_night_capacity_pct": None,
-    "lease_ttl_min": 30,
-    "agent_lease_ttl_min": 240,
     "subagent_estimate_pct": 1.0,
-    "stale_threshold_min": 30,
-    "usage_snapshot_max_age_sec": 300,
-    "capacity_warn_ratio": 0.9,
-    "auto_refresh_five_hour_pct": 85.0,
-    "auto_refresh_cache_sec": 125,
     "min_free_commit_mb": 2048,
     "commit_reserve_mb": 2048,
     "heavy_job_mb": 6000,
@@ -84,25 +79,89 @@ PROFILE_DEFAULTS = {
     "throttle_weekly_pct": 85.0,
     "scoped_exhausted_pct": 95.0,
     "leftover_suggest_pct": 10.0,
-    "gate_fix_attempts": 3,
-    "calibration_min_days": 14,
     "plans": [],
     "next_plan_id": 1,
 }
+
+# Values that tune the implementation rather than how the operator works (intent 0047): fixed here, not in
+# the profile. pages/paceline-budget/port.js copies the ones it reads; the golden test keeps them equal.
+HEAVY_WEIGHT = 2.0  # the weight of a heavy plan without --weight
+NIGHT_BASE_PCT = 5.0  # the night allowance before any surplus
+LEASE_TTL_MIN = 30  # the lease of a reservation without a key
+AGENT_LEASE_TTL_MIN = 240  # the lease of a keyed reservation (a gate, a hook-held subagent)
+USAGE_SNAPSHOT_MAX_AGE_SEC = 300  # a command merges the inbox first when the data is older
+CAPACITY_WARN_RATIO = 0.9  # status warns when the week's rest reaches this share of the day hours' capacity
+AUTO_REFRESH_FIVE_HOUR_PCT = 85.0  # from this five-hour usage, auto merges the inbox sooner:
+AUTO_REFRESH_CACHE_SEC = 125  # when the data is older than this
+GATE_FIX_ATTEMPTS = 3  # failed fixes before a queue item is deferred
+CALIBRATION_MIN_DAYS = 14  # the history calibrate needs
+
+# Keys earlier versions kept in the profile; a stored profile that still has them loses them when read.
+RETIRED_PROFILE_KEYS = (
+    "heavy_weight", "night_base_pct", "host_night_capacity_pct", "lease_ttl_min", "agent_lease_ttl_min",
+    "stale_threshold_min", "usage_snapshot_max_age_sec", "capacity_warn_ratio", "auto_refresh_five_hour_pct",
+    "auto_refresh_cache_sec", "gate_fix_attempts", "calibration_min_days")
+
+
+# The spending styles: one choice that sets these keys together. The profile stores no style name; the style
+# is whichever one's values (after the operator's overrides in pace-styles.json) equal the profile's.
+SPENDING_STYLE_KEYS = (
+    "five_hour_threshold_day", "five_hour_threshold_night", "five_hour_hard_stop", "reserve_pct",
+    "reserve_decay_start", "throttle_weekly_pct", "weekend_cap_pct", "leftover_suggest_pct",
+    "reserve_release_min_hours")
+SPENDING_STYLE_NAMES = ("careful", "balanced", "full")
+SPENDING_STYLES = {
+    "careful": {
+        "five_hour_threshold_day": 70.0, "five_hour_threshold_night": 90.0, "five_hour_hard_stop": 90.0,
+        "reserve_pct": 12.0, "reserve_decay_start": {"weekday": 4, "hour": 18}, "throttle_weekly_pct": 80.0,
+        "weekend_cap_pct": 15.0, "leftover_suggest_pct": 15.0,
+        "reserve_release_min_hours": 0},
+    "balanced": {k: json.loads(json.dumps(PROFILE_DEFAULTS[k])) for k in SPENDING_STYLE_KEYS},
+    "full": {
+        "five_hour_threshold_day": 90.0, "five_hour_threshold_night": 97.0, "five_hour_hard_stop": 97.0,
+        "reserve_pct": 4.0, "reserve_decay_start": {"weekday": 3, "hour": 18}, "throttle_weekly_pct": 92.0,
+        "weekend_cap_pct": 30.0, "leftover_suggest_pct": 5.0,
+        "reserve_release_min_hours": 54},
+}
+STYLE_OVERRIDES_FILE = "pace-styles.json"
 
 
 class PaceError(Exception):
     pass
 
 
+# What a stored profile without the key reads as, where that differs from the default of a new profile: a
+# stored zone may be a deliberate one, so an old profile keeps counting in it.
+MIGRATION_VALUES = {"timezone_mode": "fixed"}
+
+
 def migrate_profile(raw):
-    """Add every key a stored profile lacks with its default. Returns True when anything changed."""
+    """Add every key a stored profile lacks (MIGRATION_VALUES first, else its default) and drop the retired keys.
+    Returns True when anything changed."""
     changed = False
+    for k in RETIRED_PROFILE_KEYS:
+        if k in raw:
+            del raw[k]
+            changed = True
     for k, v in PROFILE_DEFAULTS.items():
         if k not in raw:
-            raw[k] = json.loads(json.dumps(v))
+            raw[k] = json.loads(json.dumps(MIGRATION_VALUES.get(k, v)))
             changed = True
     return changed
+
+
+def load_stored_profile(path):
+    """The profile at `path` with every key present: (profile, changed).
+
+    One reader for every caller. No file yet is a copy of PROFILE_DEFAULTS (timezone_mode "machine", spec
+    R6); a stored file lacking a key gets MIGRATION_VALUES (an old profile is "fixed").
+    `changed` is True when the file is absent or a key was added. A file that is not valid JSON is a PaceError."""
+    raw = read_json(path, None)
+    if raw is None:
+        return json.loads(json.dumps(PROFILE_DEFAULTS)), True
+    if not isinstance(raw, dict):
+        raise PaceError(f"{path.name} must hold one JSON object; left untouched, fix it by hand")
+    return raw, migrate_profile(raw)
 
 
 # ---------------------------------------------------------------- time zone
@@ -112,21 +171,6 @@ def load_zone(key, force_builtin=False):
         return five_burn.load_zone(key, force_builtin)
     except five_burn.ZoneUnavailable as error:
         raise PaceError(str(error)) from None
-
-
-def detect_zone():
-    """The machine's zone and whether load_zone can use it here: (None, False) when nothing is found."""
-    try:
-        name = localzone.detect()
-    except Exception:  # noqa: BLE001 - a detector failure means nothing was detected
-        return None, False
-    if not name:
-        return None, False
-    try:
-        load_zone(name)
-    except Exception:  # noqa: BLE001 - zoneinfo can fail in more ways than PaceError
-        return name, False
-    return name, True
 
 
 def local_dt(day, hour, tz):
@@ -177,7 +221,7 @@ def read_json(path, default):
         return default
     try:
         return json.loads(text)
-    except ValueError as error:
+    except (ValueError, RecursionError) as error:
         raise PaceError(f"{path.name} is not valid JSON ({error}); left untouched, fix it by hand")
 
 
@@ -256,14 +300,13 @@ class Store:
         for key, (name, default) in self.FILES.items():
             path = sd / name
             if key == "profile":
-                raw = read_json(path, None)
-                if raw is None:
-                    raw = json.loads(json.dumps(PROFILE_DEFAULTS))
-                    zone, usable = detect_zone()
-                    if zone and usable:
-                        raw["timezone"], raw["timezone_confirmed"] = zone, True
+                raw, changed = load_stored_profile(path)
+                if changed:
                     self.dirty.add(key)
-                if migrate_profile(raw):
+                # In machine mode the zone is resolved on every load; a new profile takes it the same way.
+                _, zone, followed = effective_zone(raw, detect_zone)
+                if followed and (raw.get("timezone") != zone or not raw.get("timezone_confirmed")):
+                    raw["timezone"], raw["timezone_confirmed"] = zone, True
                     self.dirty.add(key)
                 self.data[key] = raw
             else:
@@ -637,7 +680,7 @@ def read_usage(sd, profile, now, key, reason, allow_merge, max_age):
         if record is not None:
             record["_at"] = parse_iso(record.get("observed_at")) or now
         return {"record": record, "source": "file", "error": None, "history": history, "account": account}
-    limit = profile["usage_snapshot_max_age_sec"] if max_age is None else max_age
+    limit = USAGE_SNAPSHOT_MAX_AGE_SEC if max_age is None else max_age
 
     def fresh(record):
         return record is not None and (now - record["_at"]).total_seconds() < limit
@@ -680,7 +723,7 @@ def effective_used(record, model):
 def plan_weight(profile, plan):
     if plan["type"] == "away":
         return 0.0
-    return float(plan.get("weight") or profile["heavy_weight"])
+    return float(plan.get("weight") or HEAVY_WEIGHT)
 
 
 def plan_at(plans, t):
@@ -795,8 +838,10 @@ def allocate(total, slots, weekend_cap_left):
     return rates, alloc
 
 
-def reserve_at(t, reset, tz, profile):
-    base = float(profile["reserve_pct"])
+def release_start(reset, tz, profile):
+    """The instant the reserve's straight line to 0 at the reset starts: the last reserve_decay_start before
+    the reset, or reset - reserve_release_min_hours when that is earlier. With 0 hours the floor is the reset
+    itself and never wins, so the configured start alone decides."""
     decay = profile["reserve_decay_start"]
     reset_day = reset.astimezone(tz).date()
     start = None
@@ -807,9 +852,16 @@ def reserve_at(t, reset, tz, profile):
             if candidate < reset:
                 start = candidate
                 break
+    floor = reset - dt.timedelta(hours=profile["reserve_release_min_hours"])
+    return floor if start is None else min(start, floor)
+
+
+def reserve_at(t, reset, tz, profile):
+    base = float(profile["reserve_pct"])
+    start = release_start(reset, tz, profile)
     if t >= reset:
         return 0.0
-    if start is None or t <= start:
+    if t <= start:
         return base
     return base * (reset - t).total_seconds() / (reset - start).total_seconds()
 
@@ -828,11 +880,18 @@ def used_at(history, t, reset, model):
     return effective_used(best, model) if best else None
 
 
-def weekend_day_spend(history, now, reset, tz, profile, model, effective, runs=None):
-    """What the current weekend spent in its day hours; night spend is funded from surplus and not capped."""
+def weekend_start(now, reset, tz):
+    """The instant the current weekend's day hours count from: Saturday 00:00 local, or the window's start."""
     local = now.astimezone(tz)
     saturday = local.date() - dt.timedelta(days=local.weekday() - 5)
-    start = max(local_dt(saturday, 0, tz), reset - WEEK)
+    return max(local_dt(saturday, 0, tz), reset - WEEK)
+
+
+def weekend_day_spend(history, now, reset, tz, profile, model, effective, runs=None):
+    """What the current weekend spent in its day hours; night spend is funded from surplus and not capped."""
+    start = weekend_start(now, reset, tz)
+    local = now.astimezone(tz)
+    saturday = local.date() - dt.timedelta(days=local.weekday() - 5)
     before = used_at(history, start, reset, model)
     spent = effective - (before if before is not None else 0.0)
     n0, n1 = profile["night_hours"]
@@ -897,19 +956,22 @@ def compute(now, profile, usage, model=None, commit_mb=None, outstanding=0.0, ru
     window_start = reset - WEEK
     remaining = max(0.0, 100.0 - effective)
     reserve = reserve_at(now, reset, tz, profile)
+    release = release_start(reset, tz, profile)
     spendable = max(0.0, remaining - reserve)
 
     age_min = (now - record["_at"]).total_seconds() / 60.0 if record.get("_at") else math.inf
-    stale = age_min > profile["stale_threshold_min"]
+    stale = age_min > STALE_THRESHOLD_MIN
 
     plans = profile.get("plans", [])
     slots = build_slots(now, reset, tz, profile, plans)
     local_now = now.astimezone(tz)
 
     weekend_spent = 0.0
+    weekend_released = 0.0
     if local_now.weekday() >= 5:
         weekend_spent = weekend_day_spend(history, now, reset, tz, profile, model, effective, runs)
-    weekend_cap_left = max(0.0, float(profile["weekend_cap_pct"]) - weekend_spent)
+        weekend_released = max(0.0, reserve_at(weekend_start(now, reset, tz), reset, tz, profile) - reserve)
+    weekend_cap_left = max(0.0, float(profile["weekend_cap_pct"]) + weekend_released - weekend_spent)
     rates, alloc = allocate(spendable, slots, weekend_cap_left)
 
     week_slots = build_slots(window_start, reset, tz, profile, [])
@@ -926,7 +988,7 @@ def compute(now, profile, usage, model=None, commit_mb=None, outstanding=0.0, ru
     day_share = profile["five_hour_threshold_day"] / 100.0
     day_capacity = sum(s.cap * day_share for s in slots if s.kind in ("work", "weekend") and s.weight > 0)
     unallocated = max(0.0, spendable - sum(alloc))
-    capacity_warning = remaining >= profile["capacity_warn_ratio"] * day_capacity
+    capacity_warning = remaining >= CAPACITY_WARN_RATIO * day_capacity
 
     current = next((s for s in slots if s.kind in ("work", "weekend") and s.weight > 0), None)
     per_hour_cap = k / 5.0
@@ -975,13 +1037,16 @@ def compute(now, profile, usage, model=None, commit_mb=None, outstanding=0.0, ru
                    "remaining_pct": remaining, "reset": iso_ms(reset), "reset_local": fmt_local(reset, tz),
                    "hours_to_reset": round(hours_to_reset, 2), "elapsed_pct": round(elapsed_pct, 1)},
         "reserve_pct": round(reserve, 3),
+        "reserve_release_start": iso_ms(release),
+        "reserve_release_start_local": fmt_local(release, tz),
         "spendable_pct": round(spendable, 3),
         "budget_per_hour_pct": round(budget_per_hour, 3),
         "normal_per_hour_pct": round(normal_rate, 3),
         "normal_pct_kind": normal_kind,
         "rates": {k2: (None if v == math.inf else round(v, 4)) for k2, v in rates.items()},
         "weekend": {"cap_pct": profile["weekend_cap_pct"], "spent_pct": round(weekend_spent, 3),
-                    "cap_left_pct": round(weekend_cap_left, 3)},
+                    "cap_left_pct": round(weekend_cap_left, 3),
+                    "reserve_released_pct": round(weekend_released, 3)},
         "surplus_pct": round(surplus, 3),
         "expected_day_spend_pct": round(expected_spend, 3),
         "day_capacity_pct": round(day_capacity, 3),
@@ -1014,16 +1079,13 @@ def night_info(now, reset, tz, profile, slots, alloc, spendable, surplus, commit
     start, end = min(start, reset), min(end, reset)
     hours = max(0.0, (end - start).total_seconds() / 3600.0)
     window_capacity = hours * profile["five_hour_to_week_pct"] / 5.0 * profile["five_hour_threshold_night"] / 100.0
-    host = profile.get("host_night_capacity_pct")
-    host = math.inf if host is None else float(host)
-    if commit_mb is not None and commit_mb < profile["min_free_commit_mb"]:
-        host = 0.0
+    host = 0.0 if commit_mb is not None and commit_mb < profile["min_free_commit_mb"] else math.inf
     last_night = local_dt(night_date, day_start, tz) >= reset
     next_day_share = 0.0
     if not last_night:
         next_day_share = sum(a for s, a in zip(slots, alloc)
                              if s.kind in ("work", "weekend") and s.local.date() == night_date)
-    base = float(profile["night_base_pct"])
+    base = NIGHT_BASE_PCT
     allowance = max(0.0, min(base + surplus, window_capacity, host, spendable - next_day_share))
     return {"date": night_date.isoformat(), "start": iso_ms(start), "end": iso_ms(end), "hours": round(hours, 2),
             "last_before_reset": last_night, "base_pct": base, "window_capacity_pct": round(window_capacity, 3),
@@ -1158,9 +1220,9 @@ def outstanding_pct(registry, effective):
 
 
 def prune_reservations(registry, profile, now, alive=pid_alive):
-    ttl = dt.timedelta(minutes=profile["lease_ttl_min"])
+    ttl = dt.timedelta(minutes=LEASE_TTL_MIN)
     # A keyed reservation is held by a hook pair that never renews it, and a subagent can outlive the lease.
-    agent_ttl = dt.timedelta(minutes=profile["agent_lease_ttl_min"])
+    agent_ttl = dt.timedelta(minutes=AGENT_LEASE_TTL_MIN)
     kept, dropped = [], []
     for r in registry["reservations"]:
         if r["kind"] == LAUNCH_KIND:
@@ -1313,11 +1375,11 @@ def calibrate(history, store, now, profile, model):
     tz = load_zone(profile["timezone"])
     if not history:
         return {"days": 0, "proposals": [], "evidence": {},
-                "note": f"not enough history: 0 days, need {profile['calibration_min_days']}"}
+                "note": f"not enough history: 0 days, need {CALIBRATION_MIN_DAYS}"}
     days = (history[-1]["_at"] - history[0]["_at"]).total_seconds() / 86400.0
     result = {"days": round(days, 1), "proposals": [], "evidence": {}}
-    if days < profile["calibration_min_days"]:
-        result["note"] = f"not enough history: {days:.1f} days, need {profile['calibration_min_days']}"
+    if days < CALIBRATION_MIN_DAYS:
+        result["note"] = f"not enough history: {days:.1f} days, need {CALIBRATION_MIN_DAYS}"
         return result
     d5 = d7 = 0.0
     for a, b in zip(history, history[1:]):
@@ -1339,13 +1401,16 @@ def calibrate(history, store, now, profile, model):
     windows = {}
     for r in history:
         windows.setdefault(r["seven_day"].get("resets_at"), []).append(r)
-    unused, weekend_share, nights = [], [], []
+    unused, weekend_share, nights, at_release = [], [], [], []
     for reset_iso, records in windows.items():
         reset = parse_iso(reset_iso)
         if not reset or reset > now:
             continue
         final = effective_used(records[-1], model)
         unused.append(100.0 - final)
+        used_release = used_at(records, release_start(reset, tz, profile), reset, model)
+        if used_release is not None:
+            at_release.append(100.0 - used_release)
         start = reset - WEEK
         first_monday = next((start + dt.timedelta(hours=h) for h in range(0, 168)
                              if (start + dt.timedelta(hours=h)).astimezone(tz).weekday() == 0
@@ -1365,9 +1430,16 @@ def calibrate(history, store, now, profile, model):
         mean_unused = statistics.mean(unused)
         result["evidence"]["unused_at_reset_pct"] = [round(u, 1) for u in unused]
         reserve = profile["reserve_pct"]
-        if mean_unused <= 2:
+        # Under the weekend rule an on-track week ends near 1 % unused, so the raise looks at what was left
+        # when the reserve was released, not at the reset; a window without a reading by then is skipped.
+        left_at_release = statistics.mean(at_release) if at_release else None
+        if left_at_release is not None:
+            result["evidence"]["left_at_release_pct"] = [round(u, 1) for u in at_release]
+        if left_at_release is not None and left_at_release < reserve:
             result["proposals"].append({"parameter": "reserve_pct", "current": reserve, "proposed": reserve + 2,
-                                        "evidence": f"weeks ended with {mean_unused:.1f}% unused on average"})
+                                        "evidence": f"weeks reached the release of the reserve with "
+                                                    f"{left_at_release:.1f}% left on average, below the "
+                                                    f"{reserve:g}% reserve"})
         elif mean_unused > profile["leftover_suggest_pct"] and reserve > 4:
             result["proposals"].append({"parameter": "reserve_pct", "current": reserve, "proposed": max(4, reserve - 2),
                                         "evidence": f"weeks ended with {mean_unused:.1f}% unused on average"})
@@ -1384,10 +1456,6 @@ def calibrate(history, store, now, profile, model):
     if nights:
         mean_night = statistics.mean(nights)
         result["evidence"]["night_spend_mean_pct"] = round(mean_night, 2)
-        if abs(mean_night - profile["night_base_pct"]) > 1:
-            result["proposals"].append({"parameter": "night_base_pct", "current": profile["night_base_pct"],
-                                        "proposed": round(max(2.0, mean_night), 1),
-                                        "evidence": f"mean night spend {mean_night:.1f}% over {len(nights)} nights"})
     clean = [c for c in store["registry"]["completed"]
              if c.get("actual_pct") is not None and c.get("estimate_pct") and not c.get("overlapped")]
     # Hook reservations carry the fixed profile estimate, so they calibrate that value, not the multiplier.
@@ -1564,13 +1632,12 @@ def cmd_auto(ctx):
         store.save()
     try:
         calc = ctx.calc(store)
-        profile = store["profile"]
         age_sec = (calc["data"]["age_min"] or 0) * 60
-        if (calc["five_hour"]["used_pct"] >= profile["auto_refresh_five_hour_pct"] and calc["data"]["source"] != "file"
-                and age_sec >= profile["auto_refresh_cache_sec"]):
+        if (calc["five_hour"]["used_pct"] >= AUTO_REFRESH_FIVE_HOUR_PCT and calc["data"]["source"] != "file"
+                and age_sec >= AUTO_REFRESH_CACHE_SEC):
             # Near the five-hour ceiling, older data can hide a window that is already full: merge what
             # the sessions have handed over since.
-            calc = ctx.calc(store, max_age=profile["auto_refresh_cache_sec"])
+            calc = ctx.calc(store, max_age=AUTO_REFRESH_CACHE_SEC)
     except PaceError as error:
         stopped = switch_stop(ctx.now, store)
         if stopped:
@@ -1760,7 +1827,7 @@ def cmd_plan(ctx):
                 raise PaceError("plan end must be after its start")
             if end <= ctx.now:
                 raise PaceError("plan lies in the past; past absences need no declaration")
-            weight = a.weight if a.weight is not None else (0.0 if a.type == "away" else profile["heavy_weight"])
+            weight = a.weight if a.weight is not None else (0.0 if a.type == "away" else HEAVY_WEIGHT)
             plan = {"id": f"P{profile['next_plan_id']}", "type": a.type, "start": start.astimezone(tz).isoformat(),
                     "end": end.astimezone(tz).isoformat(),
                     "phrase": a.phrase or "", "declared_at": iso_ms(ctx.now), "weight": weight, "confirmed_on": None}
@@ -1837,11 +1904,12 @@ def cmd_plan(ctx):
 
 
 def read_profile(sd):
-    profile = {}
-    with contextlib.suppress(PaceError):
-        profile = read_json(sd / "pace-profile.json", {}) or {}
-    migrate_profile(profile)
-    return profile
+    try:
+        return load_stored_profile(sd / "pace-profile.json")[0]
+    except PaceError:
+        profile = {}
+        migrate_profile(profile)
+        return profile
 
 
 def current_effective(ctx, allow_merge=True):
@@ -1906,7 +1974,7 @@ def cmd_reserve(ctx):
                 if r["id"] == a.id:
                     r["renewed_at"] = iso_ms(ctx.now)
                     store.touch("registry")
-                    return f"renewed {r['id']} until {iso_ms(ctx.now + dt.timedelta(minutes=store['profile']['lease_ttl_min']))}", {"reservation": r}, EXIT_OK
+                    return f"renewed {r['id']} until {iso_ms(ctx.now + dt.timedelta(minutes=LEASE_TTL_MIN))}", {"reservation": r}, EXIT_OK
             return f"no active reservation {a.id} (expired or released)", {"reservation": None}, EXIT_NONE
         return mutate(ctx, fn, need_calc=False)
     if a.res_cmd in ("release", "release-session"):
@@ -2110,7 +2178,7 @@ def cmd_queue(ctx):
             item = find_item(data, a.id)
             if a.q_cmd == "fail":
                 item["attempts"] = item.get("attempts", 0) + 1
-                limit = store["profile"]["gate_fix_attempts"]
+                limit = GATE_FIX_ATTEMPTS
                 if item["attempts"] < limit:
                     store.touch(key)
                     return (f"{item['id']} failed attempt {item['attempts']}/{limit}, keep fixing",
@@ -2201,6 +2269,10 @@ def check_profile_value(key, value):
     if key in PROFILE_INTERNAL_KEYS:
         raise PaceError(f"{key} is set by paceline itself")
     default = PROFILE_DEFAULTS[key]
+    if key == "timezone_mode":
+        if value in five_burn.TIMEZONE_MODES:
+            return value
+        raise PaceError('timezone_mode must be "machine" or "fixed"')
     if key == "timezone":
         if not isinstance(value, str) or not value.strip():
             raise PaceError("timezone must be the name of a time zone, for example Europe/Madrid")
@@ -2218,14 +2290,16 @@ def check_profile_value(key, value):
             return {"weekday": int(value["weekday"]), "hour": int(value["hour"])}
         raise PaceError('reserve_decay_start must be {"weekday": W, "hour": H} with a weekday 0-6 and an hour '
                         "0-23 (Monday is 0)")
+    if key == "reserve_release_min_hours":
+        if _is_whole(value) and 0 <= value <= 168:
+            return int(value)
+        raise PaceError("reserve_release_min_hours must be a whole number of hours in 0-168 (0: no floor)")
     if key in ("models", "routine_models"):
         if isinstance(value, list) and value and all(isinstance(m, str) and m.strip() for m in value):
             return value
         raise PaceError(f'{key} must be a list of model names, for example ["opus", "sonnet"]')
-    if value is None and default is None:
-        return None
     if not _is_number(value):
-        raise PaceError(f"{key} must be a number" + (" or null" if default is None else ""))
+        raise PaceError(f"{key} must be a number")
     if isinstance(default, int) and not _is_whole(value):
         raise PaceError(f"{key} must be a whole number")
     if key in PROFILE_PERCENT_KEYS and not 0 <= value <= 100:
@@ -2235,31 +2309,52 @@ def check_profile_value(key, value):
     return int(value) if isinstance(default, int) else value
 
 
+def profile_mode(profile):
+    """The time zone mode of a profile, "machine" or "fixed" (an invalid or missing value reads as fixed)."""
+    return effective_zone(profile, lambda: (None, False))[0]
+
+
 def timezone_hint(profile, detected, usable):
     """What to tell the owner while the profile counts in UTC and this machine is in another zone."""
     if profile.get("timezone") != "UTC" or profile.get("timezone_confirmed") or not detected or detected == "UTC":
         return None
+    machine = "`paceline profile set timezone_mode machine`"
+    if profile_mode(profile) == "machine":
+        # Detection is tried on every load, so this holds only while the detected zone has no data here.
+        return (f"This machine is in {detected}, but Python here has no time zone data for it, so the pace profile "
+                "counts in UTC. Run `python -m pip install tzdata`; the profile then follows this machine.")
     command = f"`paceline profile set timezone {detected}`"
     if usable:
         return (f"This machine is in {detected}, but the pace profile counts in UTC. Run {command} to count in "
-                "this machine's zone, or `paceline profile set timezone UTC` to keep UTC.")
+                f"this machine's zone, {machine} to follow this machine as it changes, or "
+                "`paceline profile set timezone UTC` to keep UTC.")
     return (f"This machine is in {detected}, but the pace profile counts in UTC, and Python here has no time zone "
-            f"data for {detected}. Run `python -m pip install tzdata` first, then {command}.")
+            f"data for {detected}. Run `python -m pip install tzdata` first, then {command} or {machine}.")
 
 
 def profile_check(ctx, profile):
     detected, usable = detect_zone()
     confirmed = bool(profile.get("timezone_confirmed"))
     hint = timezone_hint(profile, detected, usable)
+    mode = profile_mode(profile)
     result = {"timezone": profile.get("timezone"), "confirmed": confirmed, "detected": detected,
-              "usable": usable, "hint": hint}
+              "usable": usable, "hint": hint, "mode": mode,
+              "effective": effective_zone(profile, lambda: (detected, usable))[1]}
     if hint:
         line = hint
+    elif mode == "machine":
+        line = (f"timezone follows this machine: {profile.get('timezone')}" if usable
+                else f"timezone follows this machine, but Python here has no time zone data for {detected} "
+                   f"(install tzdata); using {profile.get('timezone')}" if detected
+                   else f"timezone follows this machine, but no zone was detected; using {profile.get('timezone')}")
     else:
         line = (f"timezone {profile.get('timezone')} ({'confirmed' if confirmed else 'not confirmed'}); detected "
                 + (f"{detected}" + ("" if usable else " (no time zone data for it here)") if detected else "nothing"))
     emit(ctx.args, line, result)
     return EXIT_OK
+
+
+NL = "\n"
 
 
 def profile_set(ctx):
@@ -2273,12 +2368,28 @@ def profile_set(ctx):
             return EXIT_USAGE
         profile = store["profile"]
         old = profile[key]
+        old_zone, old_mode = profile["timezone"], profile_mode(profile)
         profile[key] = new
         if key == "timezone":
             profile["timezone_confirmed"] = True
+            profile["timezone_mode"] = "fixed"
+        elif key == "timezone_mode":
+            if new == "machine":
+                _, zone, followed = effective_zone(profile, detect_zone)
+                if followed:
+                    profile["timezone"], profile["timezone_confirmed"] = zone, True
+            else:
+                profile["timezone_confirmed"] = True
         store.touch("profile")
         store.save()
     change = f"{key}: {json.dumps(old, ensure_ascii=False)} -> {json.dumps(new, ensure_ascii=False)}"
+    if key == "timezone" and old_mode != "fixed":
+        change += NL + 'timezone_mode: "machine" -> "fixed" (a zone you set no longer follows this machine)'
+    elif key == "timezone_mode":
+        if profile["timezone"] != old_zone:
+            change += NL + f"timezone: {json.dumps(old_zone)} -> {json.dumps(profile['timezone'])}"
+        elif new == "machine" and old_mode != "machine":
+            change += NL + f"timezone stays {json.dumps(old_zone)}: no usable zone was detected on this machine"
     payload = {"key": key, "old": old, "new": new, "status_line": None, "status": None}
     try:
         line, calc = status_report(ctx, store)
@@ -2289,10 +2400,106 @@ def profile_set(ctx):
     return EXIT_OK
 
 
+def load_style_overrides(sd):
+    """The operator's hand-written style overrides: ({style: {key: value}}, [warning, ...]).
+
+    Each value passes check_profile_value; what fails is ignored with one warning, and the built-in value
+    stays in force. A missing file is no override and no warning."""
+    path = sd / STYLE_OVERRIDES_FILE
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return {}, []
+    except (OSError, ValueError, RecursionError) as error:
+        return {}, [f"{path.name}: ignored, it cannot be read as JSON ({error})"]
+    if not isinstance(raw, dict):
+        return {}, [f"{path.name}: ignored, it must hold one JSON object"]
+    overrides, warnings = {}, []
+    for name, values in raw.items():
+        if name not in SPENDING_STYLE_NAMES:
+            warnings.append(f"{path.name}: style {name} ignored; the styles are {', '.join(SPENDING_STYLE_NAMES)}")
+            continue
+        if not isinstance(values, dict):
+            warnings.append(f"{path.name}: style {name} ignored, it must be an object of keys and values")
+            continue
+        for key, value in values.items():
+            if key not in SPENDING_STYLE_KEYS:
+                warnings.append(f"{path.name}: {name}.{key} ignored; a style sets only "
+                                f"{', '.join(SPENDING_STYLE_KEYS)}")
+                continue
+            try:
+                overrides.setdefault(name, {})[key] = check_profile_value(key, value)
+            except PaceError as error:
+                warnings.append(f"{path.name}: {name}.{key} ignored, {error}")
+    return overrides, warnings
+
+
+def style_values(name, overrides):
+    """The values of style name with the overrides applied, as {key: (value, "builtin" | "override")}."""
+    out = {}
+    for key in SPENDING_STYLE_KEYS:
+        if key in overrides.get(name, {}):
+            out[key] = (json.loads(json.dumps(overrides[name][key])), "override")
+        else:
+            out[key] = (json.loads(json.dumps(SPENDING_STYLES[name][key])), "builtin")
+    return out
+
+
+def style_of(profile, overrides):
+    """The name of the style whose values equal the profile's, else "custom"."""
+    for name in SPENDING_STYLE_NAMES:
+        if all(profile.get(k) == v for k, (v, _source) in style_values(name, overrides).items()):
+            return name
+    return "custom"
+
+
+def profile_style(ctx):
+    name = ctx.args.name
+    if name not in SPENDING_STYLE_NAMES:
+        print(f"paceline: unknown style {name}; the styles are {', '.join(SPENDING_STYLE_NAMES)}; nothing changed",
+              file=sys.stderr)
+        return EXIT_USAGE
+    with locked(ctx.sd):
+        store = Store(ctx.sd)
+        overrides, warnings = load_style_overrides(ctx.sd)
+        checked = {}
+        for key, (value, _source) in style_values(name, overrides).items():
+            try:
+                checked[key] = check_profile_value(key, value)
+            except PaceError as error:
+                for warning in warnings:
+                    print(f"paceline: {warning}", file=sys.stderr)
+                print(f"paceline: style {name}: {error}; nothing changed", file=sys.stderr)
+                return EXIT_ERROR
+        profile = store["profile"]
+        changes = []
+        for key, new in checked.items():
+            old = profile[key]
+            if old != new:
+                changes.append({"key": key, "old": old, "new": new})
+            profile[key] = new
+        store.touch("profile")
+        store.save()
+    for warning in warnings:
+        print(f"paceline: {warning}", file=sys.stderr)
+    lines = [f"{c['key']}: {json.dumps(c['old'], ensure_ascii=False)} -> {json.dumps(c['new'], ensure_ascii=False)}"
+             for c in changes] or [f"style {name}: nothing to change"]
+    payload = {"style": name, "changes": changes, "warnings": warnings, "status_line": None, "status": None}
+    try:
+        line, calc = status_report(ctx, store)
+        payload.update(status_line=line, status=calc)
+    except PaceError as error:
+        line = f"status unavailable: {error}"
+    emit(ctx.args, "\n".join([*lines, line]), payload)
+    return EXIT_OK
+
+
 def cmd_profile(ctx):
     action = getattr(ctx.args, "profile_cmd", None) or "show"
     if action == "set":
         return profile_set(ctx)
+    if action == "style":
+        return profile_style(ctx)
     with locked(ctx.sd):
         store = Store(ctx.sd)
         store.save()
@@ -2300,6 +2507,124 @@ def cmd_profile(ctx):
         return profile_check(ctx, store["profile"])
     profile = {k: v for k, v in store["profile"].items() if k != "plans"}
     emit(ctx.args, json.dumps(profile, ensure_ascii=False), profile)
+    return EXIT_OK
+
+
+def settings_report(ctx):
+    """Everything `paceline settings` shows, as the JSON object of the spec's shared design."""
+    import cache_watch
+    import context_watch
+    import simulate
+    import usage_watch
+    # Only what the view shows is read: the profile (in memory, nothing is saved), the watcher files, the
+    # switches and the style overrides. A damaged night queue, pool or registry file cannot reach it.
+    with locked(ctx.sd):
+        profile, _changed = load_stored_profile(ctx.sd / "pace-profile.json")
+        stored_zone = profile.get("timezone")
+        mode, zone_name, followed = effective_zone(profile, detect_zone)
+        profile["timezone"] = zone_name
+        if followed:
+            profile["timezone_confirmed"] = True
+        context = context_watch.load_settings(ctx.sd)
+        cache = cache_watch.load_defaults(directory=ctx.sd)
+        marker = away.read(ctx.sd)
+        switches = {"pace": limits_file.pace_enabled(ctx.sd), "usage_watch": usage_watch.is_on(ctx.sd),
+                    "away": {"on": marker["on"], "set_at": marker["set_at"] if isinstance(marker["set_at"], str) else None},
+                    "context_watch": context["on"]}
+        overrides, warnings = load_style_overrides(ctx.sd)
+    detected, usable = detect_zone()
+    timezone = {"mode": profile_mode(profile), "stored": stored_zone if isinstance(stored_zone, str) else "UTC",
+                "effective": profile["timezone"], "detected": detected, "usable": usable,
+                "hint": timezone_hint(profile, detected, usable)}
+    preview, inputs = simulate.cached_preview(ctx, sys.modules[__name__])
+    return {
+        "profile": {k: {"value": profile[k], "default": json.loads(json.dumps(PROFILE_DEFAULTS[k]))}
+                    for k in PROFILE_DEFAULTS if k not in PROFILE_INTERNAL_KEYS},
+        "context_watch": {
+            "line": {"value": context["line"], "default": context_watch.DEFAULTS["line"], "range": "on or off"},
+            "levels": {"value": context["levels"], "default": context_watch.DEFAULTS["levels"],
+                       "range": "%d-%d, rising" % context_watch.LEVEL_RANGE},
+            "snapshot_days": {"value": context["snapshot_days"], "default": context_watch.DEFAULTS["snapshot_days"],
+                              "range": "%d-%d" % context_watch.DAYS_RANGE}},
+        "cache_watch": {
+            "lead_minutes": {"value": cache["lead_minutes"], "default": cache_watch.DEFAULTS["lead_minutes"],
+                             "range": "%d-%d" % cache_watch.LEAD_RANGE},
+            "max_wakes": {"value": cache["max_wakes"], "default": cache_watch.DEFAULTS["max_wakes"],
+                          "range": "%d-%d" % cache_watch.MAX_RANGE}},
+        "switches": switches,
+        "timezone": timezone,
+        "styles": {name: {k: {"value": value, "builtin": json.loads(json.dumps(SPENDING_STYLES[name][k])),
+                              "source": source}
+                          for k, (value, source) in style_values(name, overrides).items()}
+                   for name in SPENDING_STYLE_NAMES},
+        "style": style_of(profile, overrides),
+        "style_warnings": warnings,
+        "preview": preview,
+        "preview_inputs": inputs,
+        "files": {"profile": str(ctx.sd / "pace-profile.json"), "context_watch": str(context_watch.settings_path(ctx.sd)),
+                  "cache_watch": str(cache_watch.defaults_path(ctx.sd)), "styles": str(ctx.sd / STYLE_OVERRIDES_FILE)},
+    }
+
+
+def settings_text(report):
+    def shown(value):
+        return json.dumps(value, ensure_ascii=False)
+
+    def rows(entries, marked=None):
+        width = max(len(k) for k in entries)
+        out = []
+        for k, e in entries.items():
+            changed = e["value"] != e["default"] if marked is None else marked(k, e)
+            tail = ""
+            if changed and k == "timezone":
+                tail = "  (default follows this machine)"
+            elif changed:
+                tail = "  (default " + shown(e["default"]) + ")"
+            out.append(f"  {'* ' if changed else '  '}{k:<{width}}  {shown(e['value'])}{tail}")
+        return out
+
+    def profile_marked(k, e):
+        # The zone row is marked while the mode is fixed (the default mode follows the machine); the mode row never.
+        if k == "timezone":
+            return report["timezone"]["mode"] != "machine"
+        return k != "timezone_mode" and e["value"] != e["default"]
+
+    sw = report["switches"]
+    onoff = lambda on: "on" if on else "off"  # noqa: E731
+    zone = report["timezone"]
+    lines = [f"PaceLine settings. Switches: pace {onoff(sw['pace'])}, usage-watch {onoff(sw['usage_watch'])}, "
+             f"away {onoff(sw['away']['on'])}, context-watch {onoff(sw['context_watch'])}",
+             "A * marks a value that differs from its default.", "",
+             f"Spending style: {report['style']}"]
+    if report["preview"]:
+        when = (report["preview_inputs"] or {}).get("reset_local")
+        lines.append("An on-track week" + (f" to your reset {when}" if when else "") +
+                     ", without a night queue (from the cached `paceline simulate --preview`):")
+        for name in (*SPENDING_STYLE_NAMES, "current"):
+            row = report["preview"].get(name)
+            if row:
+                asks = f", asks {row['asks_h']} h" if row.get("asks_h") else ""
+                lines.append(f"  {name}: about {row['unused_pct']:g}% unused{asks}")
+    else:
+        lines.append("No cached week preview; `paceline simulate --preview --cached` makes one.")
+    for name, values in report["styles"].items():
+        over = [k for k, v in values.items() if v["source"] == "override"]
+        if over:
+            lines.append(f"  {name}: overridden in {report['files']['styles']}: {', '.join(over)}")
+    lines += [f"  warning: {w}" for w in report["style_warnings"]]
+    lines += ["", f"Time zone: {zone['mode']} mode, stored {zone['stored']}, in use {zone['effective']}, "
+                  f"detected {zone['detected'] or 'nothing'}{'' if zone['usable'] else ' (not usable here)'}"]
+    if zone["hint"]:
+        lines.append(f"  {zone['hint']}")
+    lines += ["", f"Profile ({report['files']['profile']}):", *rows(report["profile"], profile_marked), "",
+              f"context-watch ({report['files']['context_watch']}):", *rows(report["context_watch"]), "",
+              f"cache-watch defaults ({report['files']['cache_watch']}):", *rows(report["cache_watch"])]
+    return NL.join(lines)
+
+
+def cmd_settings(ctx):
+    report = settings_report(ctx)
+    emit(ctx.args, settings_text(report), report)
     return EXIT_OK
 
 
@@ -2404,7 +2729,7 @@ def probe_inbox(sd, profile, now, live):
     if live:
         _, merged, error = update_usage(sd, now, lock_wait=MERGE_LOCK_WAIT_SEC)
         evidence["live"] = {"merged": merged, "error": error}
-    if age is None or age > profile["stale_threshold_min"]:
+    if age is None or age > STALE_THRESHOLD_MIN:
         evidence["hint"] = ("No recent reading in the inbox: it fills after each answer in a session with paceline "
                             "loaded, so it stays empty while no session runs.")
         return "warn", evidence
@@ -2470,8 +2795,10 @@ def probe_memory():
 
 
 def probe_timezone(profile, now):
-    tz = load_zone(profile["timezone"])
-    return "ok", {"profile_timezone": profile["timezone"], "zone": type(tz).__name__, "now_local": fmt_local(now, tz)}
+    mode, effective, _ = effective_zone(profile, detect_zone)
+    tz = load_zone(effective)
+    return "ok", {"profile_timezone": profile["timezone"], "mode": mode,
+                  "effective": effective, "zone": type(tz).__name__, "now_local": fmt_local(now, tz)}
 
 
 def probe_hooks():
@@ -2572,6 +2899,17 @@ def cmd_doctor(ctx):
     return EXIT_OK
 
 
+def iso_instant_arg(text):
+    """argparse type for --reset: an ISO 8601 instant, else a usage error (exit 2)."""
+    try:
+        ok = parse_iso(text) is not None
+    except (ValueError, TypeError, OverflowError):
+        ok = False
+    if not ok:
+        raise argparse.ArgumentTypeError(f"{text!r} is not an ISO 8601 instant")
+    return text
+
+
 def build_parser():
     common = argparse.ArgumentParser(add_help=False, argument_default=argparse.SUPPRESS)
     common.add_argument("--json", action="store_true", help="print the full result as JSON")
@@ -2594,6 +2932,21 @@ def build_parser():
     sub.add_parser("auto", parents=[common], help="autonomous parameters for the next queue item").add_argument(
         "--start-run", action="store_true", help="begin a new night run: fix tonight's allowance and baseline")
     sub.add_parser("calibrate", parents=[common], help="propose parameter corrections from history")
+    sim = sub.add_parser("simulate", parents=[common],
+                         help="replay a week through the budget for each spending style (a model: one reading per hour, "
+                              "no plans or reservations)")
+    sim.add_argument("--style", action="append", choices=("careful", "balanced", "full", "current", "all"),
+                     help="a spending style to replay; repeatable (default: all)")
+    sim.add_argument("--week", action="append", choices=("on-track", "heavy-start", "light-start", "away-thu-fri", "all"),
+                     help="a week shape to replay; repeatable (default: all)")
+    sim.add_argument("--night-queue", choices=("no", "yes", "both"), help="with, without or both (default: both)")
+    sim.add_argument("--reset", metavar="ISO", type=iso_instant_arg, help="the weekly reset the window ends at (default: the account's next, "
+                     "else the next Monday 00:00 in the profile's zone)")
+    sim.add_argument("--defaults", action="store_true", help="use the built-in defaults in UTC instead of your profile")
+    sim.add_argument("--preview", action="store_true", help="the view's selection: on-track week, both queues, all styles")
+    sim.add_argument("--cached", action="store_true", help="answer from pace-simulate.json when its key matches, else store")
+    sub.add_parser("settings", parents=[common], help="every setting and switch with its value, default and source; "
+                   "read-only")
     prof = sub.add_parser("profile", parents=[common],
                           help="print, change or check the profile (creates it with the detected time zone)")
     prsub = prof.add_subparsers(dest="profile_cmd")
@@ -2601,6 +2954,8 @@ def build_parser():
     p = prsub.add_parser("set", parents=[common], help="change one key, with checks")
     p.add_argument("key")
     p.add_argument("value", help="JSON when it parses, else text, for example Europe/Madrid or '[8, 24]'")
+    p = prsub.add_parser("style", parents=[common], help="take one spending style's values for its keys together")
+    p.add_argument("name", metavar="{careful,balanced,full}", help="careful, balanced or full")
     prsub.add_parser("check", parents=[common], help="the time zone against this machine's, with a hint")
     doctor = sub.add_parser("doctor", parents=[common], help="diagnose pace on this machine; read-only without --live")
     doctor.add_argument("--live", action="store_true", help="also run one merge under the normal lock")
@@ -2690,6 +3045,11 @@ GROUPS = {"away": "tell the launch gate that you are away, so it denies a launch
           "usage-watch": "read the account's exact usage through Claude Code: on|off|status"}
 
 
+def cmd_simulate(ctx):
+    import simulate
+    return simulate.main(ctx, sys.modules[__name__])
+
+
 def cmd_group(ctx):
     if ctx.args.cmd == "away":
         import away
@@ -2725,7 +3085,8 @@ def main(argv=None):
     ctx = Context(args)
     TRACE_DIR = ctx.sd
     handlers = {"status": cmd_status, "auto": cmd_auto, "plan": cmd_plan, "reserve": cmd_reserve,
-                "queue": cmd_queue, "calibrate": cmd_calibrate, "profile": cmd_profile,
+                "queue": cmd_queue, "calibrate": cmd_calibrate, "simulate": cmd_simulate, "profile": cmd_profile,
+                "settings": cmd_settings,
                 "merge": cmd_merge, "doctor": cmd_doctor, "on": cmd_switch, "off": cmd_switch,
                 "cache-watch": cmd_group, "context-watch": cmd_group, "usage-watch": cmd_group}
     started, code = time.monotonic(), EXIT_ERROR

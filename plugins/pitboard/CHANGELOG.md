@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.17 - 2026-10-26
+
+### Changed
+
+- The Ukrainian documentation pages use the impersonal register.
+
 ## 0.1.16 - 2026-10-22
 
 ### Fixed

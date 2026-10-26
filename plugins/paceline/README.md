@@ -45,6 +45,11 @@ Then run `/paceline:pace status` to see the budget, and check the time zone with
 `paceline profile check`. The `paceline` command is on the `PATH` only in the session's Bash tool,
 so run it there or ask the agent to.
 
+`/paceline:settings` shows every setting and switch in one place, and `/paceline:settings pane` opens
+a pane that changes them. Pace comes in three spending styles, careful, balanced and full: choose
+one with `paceline profile style NAME`, and compare them with `paceline simulate` or the pane's
+preview.
+
 ## Contents
 
 - [Getting started](docs/getting-started.html): the four functions, setup, and where pace shows
@@ -54,7 +59,8 @@ so run it there or ask the agent to.
   budget and the night queue's decision. Online:
   [budget simulator](https://agentpit-lab.github.io/agentpit/plugins/paceline/docs/budget-simulator.html).
 - [How-to guides](docs/how-to.md): run a night queue, declare a plan, hold the cache, recover after
-  a compaction, keep usage current, use two accounts, change a profile setting.
+  a compaction, keep usage current, use two accounts, change a profile setting, choose a spending
+  style.
   Online page:
   [how-to guides](https://agentpit-lab.github.io/agentpit/plugins/paceline/docs/how-to.html).
 - [Explanation](docs/explanation.md): how the budget, the forecast, and the night queue's decisions

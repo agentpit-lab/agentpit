@@ -14,9 +14,12 @@ CLI (through bin/paceline):
     paceline cache-watch on --session ID --data-dir DIR [--lead MIN] [--max N]
     paceline cache-watch off --session ID --data-dir DIR
     paceline cache-watch status --data-dir DIR
-    paceline cache-watch config --data-dir DIR [--lead MIN] [--max N]
+    paceline cache-watch config [--lead MIN] [--max N]
 Hooks (through hooks/hooks.json; the data dir comes from CLAUDE_PLUGIN_DATA):
     cache_watch.py hook stop|prompt|compact|session-end
+
+The defaults (lead, max) are shared by every installation: they live in <state>/cache-watch.json, where
+<state> is PACELINE_STATE_DIR, else <config dir>/state/paceline.
 
 Stdlib only, Python 3.9+. A hook never fails the session: any error exits 0, and a cache state it
 cannot read never wakes it.
@@ -29,6 +32,9 @@ import time
 import uuid
 from datetime import datetime
 from pathlib import Path
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import limits_file  # noqa: E402
 
 HOUR_S = 3600
 # Count the cache as gone a little early, so a wake never lands just after it expired.
@@ -61,14 +67,26 @@ def _write_json(path, data):
 
 
 def _read_json(path):
-    try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return None
+    return limits_file.read_json(path)
 
 
-def load_defaults(data_dir):
-    stored = _read_json(state_dir(data_dir) / "defaults.json") or {}
+def defaults_path(directory=None):
+    return (Path(directory) if directory else limits_file.paceline_dir()) / "cache-watch.json"
+
+
+def _valid_default(key, value):
+    bounds = LEAD_RANGE if key == "lead_minutes" else MAX_RANGE
+    return isinstance(value, int) and not isinstance(value, bool) and bounds[0] <= value <= bounds[1]
+
+
+def _valid_values(stored):
+    stored = stored if isinstance(stored, dict) else {}
+    return {k: stored[k] for k in DEFAULTS if _valid_default(k, stored.get(k))}
+
+
+def load_defaults(directory=None):
+    """The shared defaults; a value that is missing or out of range reads as its default."""
+    stored = _valid_values(_read_json(defaults_path(directory)))
     return {k: stored.get(k, v) for k, v in DEFAULTS.items()}
 
 
@@ -387,7 +405,7 @@ def cmd_on(args):
     if info["regime"] == "5m":
         print("not started: this session writes five-minute cache entries; cache-watch keeps only one-hour entries")
         return 3
-    defaults = load_defaults(args.data_dir)
+    defaults = load_defaults()
     state = {
         "on": True,
         "lead": args.lead if args.lead is not None else defaults["lead_minutes"],
@@ -427,14 +445,13 @@ def cmd_status(args):
     folder = state_dir(args.data_dir)
     rows = []
     for path in sorted(folder.glob("*.json")) if folder.is_dir() else []:
-        if path.name == "defaults.json":
-            continue
         state = _read_json(path)
-        transcript = Path(state.get("transcript") or "") if state else None
-        try:
-            fresh = transcript is not None and now() - transcript.stat().st_mtime < STALE_S
-        except OSError:
-            fresh = False
+        fresh = False
+        if state and state.get("transcript"):
+            try:
+                fresh = now() - Path(state["transcript"]).stat().st_mtime < STALE_S
+            except OSError:
+                pass
         if not fresh:
             try:
                 path.unlink()
@@ -451,13 +468,13 @@ def cmd_status(args):
 def cmd_config(args):
     _in_range("lead", args.lead, LEAD_RANGE, " minutes")
     _in_range("max", args.max, MAX_RANGE)
-    values = load_defaults(args.data_dir)
+    values = load_defaults()
     if args.lead is not None:
         values["lead_minutes"] = args.lead
     if args.max is not None:
         values["max_wakes"] = args.max
     if args.lead is not None or args.max is not None:
-        _write_json(state_dir(args.data_dir) / "defaults.json", values)
+        _write_json(defaults_path(), values)
     print(f"defaults: lead {values['lead_minutes']} min · max {values['max_wakes']} wakes without a reply")
     return 0
 
@@ -470,7 +487,8 @@ def main(argv=None):
     sub = parser.add_subparsers(dest="command", required=True)
     for name in ("on", "off", "status", "config"):
         p = sub.add_parser(name)
-        p.add_argument("--data-dir", required=True)
+        if name != "config":
+            p.add_argument("--data-dir", required=True)
         if name in ("on", "off"):
             p.add_argument("--session", required=True)
         if name in ("on", "config"):

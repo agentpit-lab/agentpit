@@ -1,5 +1,64 @@
 # Changelog
 
+## 0.5.0 - 2026-10-26
+
+### Added
+
+- `/paceline:settings` shows every PaceLine setting and switch in tiers (your day, this machine, the
+  watchers, the spending style), marks a value that differs from its default with a "●", and counts
+  the Advanced settings that differ. `/paceline:settings pane` opens a pane that edits a value with
+  the same checks as `paceline profile set`, switches pace, usage-watch, away and context-watch, and
+  shows a preview of each spending style. `/paceline:settings advanced [topic]` lists the Advanced
+  settings. The hooks module answers the command before the model runs;
+  without the module the skill runs `paceline settings`, which prints the same settings.
+- `paceline settings` (with `--json`) prints every setting and switch with its value, its default
+  and where it comes from. It changes nothing.
+- Three spending styles, careful, balanced and full, each a set of nine profile values that move
+  together. `paceline profile style NAME` takes one; `pace-styles.json` in the state directory
+  overrides a style's values by hand, and a value it cannot use is ignored with a warning. A profile
+  whose nine values match no style exactly, as an existing profile with any of them changed does,
+  shows as `custom`.
+- `paceline simulate` replays a week hour by hour through the real budget code for each style, week
+  shape (on track, heavy start, light start, away Thursday and Friday) and night queue, and prints
+  how much of the weekly limit each leaves unused and how often the hook would ask. It is a model: one
+  reading per hour, no plans or reservations. `--preview --cached` is the view's selection, kept in
+  `pace-simulate.json`.
+- Two profile keys. `timezone_mode` is `machine` (the profile counts in this machine's time zone) or
+  `fixed`. `reserve_release_min_hours` is the number of hours before the weekly reset by which the
+  reserve starts to release at the latest.
+
+### Changed
+
+- A new profile follows the machine's time zone (`timezone_mode` `machine`); an existing profile
+  migrates to `fixed` and keeps its zone. `paceline profile set timezone NAME` fixes a zone and
+  says so; `paceline profile set timezone_mode machine` follows the machine again.
+- The reserve is released no later than `reserve_release_min_hours` before the reset, 54 by default
+  (careful 0, balanced 54, full 54), so the release no longer starts only on the configured weekday
+  and hour when that is later. Existing profiles migrate to 54. `paceline profile set
+  reserve_release_min_hours 0` restores the earlier start.
+- On a weekend the cap grows by the reserve released since the weekend began, so the released
+  reserve can be spent then. `paceline status --json` shows it as `weekend.reserve_released_pct`, and
+  adds `reserve_release_start` and `reserve_release_start_local` at the top level.
+- `paceline calibrate` decides whether to raise `reserve_pct` from what was left when the reserve was
+  released, not from what was unused at the reset, which the weekend rule now spends down to about 1%.
+  A week with no reading by then is skipped, and the evidence gains `left_at_release_pct`.
+- cache-watch keeps its defaults (`lead_minutes`, `max_wakes`) in `<state>/cache-watch.json`, shared by
+  every installation, instead of `defaults.json` in each installation's data directory. Values kept
+  in the old file are not carried over.
+- The settings view and the inbox merge still find `python` when `python3` is missing, also when the
+  engine's rejection of `python3` is worded in a way the module does not recognise: a read tries the
+  next interpreter after such a rejection, and a write stays final and shows the engine's message.
+- The Ukrainian documentation pages use the impersonal register.
+- Eleven profile keys that tune the implementation are fixed at their former defaults and are no
+  longer settings: `lease_ttl_min`, `agent_lease_ttl_min`, `stale_threshold_min`,
+  `usage_snapshot_max_age_sec`, `auto_refresh_five_hour_pct`, `auto_refresh_cache_sec`,
+  `calibration_min_days`, `gate_fix_attempts`, `capacity_warn_ratio`, `heavy_weight` and
+  `night_base_pct`. `host_night_capacity_pct` is removed: the night allowance is no longer capped by
+  a set share, and still drops to 0 while free memory is low. A stored profile loses these twelve keys
+  when it is read, without a message; `paceline profile set` refuses them as unknown keys. The
+  Advanced settings list 6 entries instead of 18, and `paceline calibrate` no longer proposes a night
+  base.
+
 ## 0.4.11 - 2026-10-22
 
 ### Fixed

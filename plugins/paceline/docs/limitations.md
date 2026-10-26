@@ -129,6 +129,33 @@ only and the launch goes ahead. A night queue checks `paceline auto` before each
 waits or stops at the same limits, and waits when the burn leaves no room for an agent. See [The
 confirmation at a hard limit](explanation.md#the-confirmation-at-a-hard-limit).
 
+### The settings pane needs the hooks module and is read-only on a phone
+
+`/paceline:settings pane` opens an editable pane that PaceLine's hooks module draws. On a phone,
+Claude Code has no input or select, so the pane is read-only there. Where the module does not run,
+for example where an organization manages Claude Code, there is no pane.
+
+**What you see:** on a phone, values with no editors and no switch buttons. Where the module does
+not run, `/paceline:settings` reaches the model as the skill's text, which runs `paceline settings`,
+and `pane` says that the module does not run.
+
+**What still works:** `paceline settings` prints every value as text, and `paceline profile set`,
+`paceline profile style`, and the other commands change them. See [Change a profile
+setting](how-to.md#change-a-profile-setting).
+
+### A skill that an update adds needs a new session in Claude Code Desktop
+
+Claude Code Desktop does not pick up a skill that was added to a plugin while a session is open.
+After an update that adds `/paceline:settings`, the command stays missing until a new session
+starts.
+
+**What you see:** `/paceline:settings` is not in the command list of a session that was open during
+the update.
+
+**What still works:** `paceline settings` in the Bash tool, and every other PaceLine command and
+skill. A new session lists `/paceline:settings`. See [Change a profile
+setting](how-to.md#change-a-profile-setting).
+
 ## context-watch
 
 ### context-watch leaves subagent compactions alone and gives no warnings with auto-compaction off
@@ -405,6 +432,34 @@ built-in European zones.
 
 **What still works:** see [The time zone is wrong](troubleshooting.md#the-time-zone-is-wrong).
 
+### The settings pane has no switch element and no editor for style overrides
+
+Claude Code gives the pane no switch or checkbox element, so each of the four switches is a button
+that reads `● pace` while it is on and `○ pace` while it is off (likewise for each switch). The pane
+has no editor for style overrides: you write `<state>/pace-styles.json` by hand, and the pane only
+shows the values in force.
+
+**What you see:** a button where a switch would be, and in the spending style's nine values a note
+"(override)" beside a value that the file sets.
+
+**What still works:** `paceline settings` shows each value in force with its source, and `paceline
+profile style` applies the overrides. See [Choose a spending
+style](how-to.md#choose-a-spending-style).
+
+### paceline simulate is a model of a week, not a forecast of yours
+
+`paceline simulate` replays a synthetic week through PaceLine's own budget code. It is a model: one
+reading per hour, a rolling five-hour sum instead of Claude Code's fixed windows, no declared plans
+and no reservations, a night queue that spends its whole allowance, and four fixed week shapes
+instead of your history.
+
+**What you see:** the figures, and the settings view's `≈ X % unused`, can differ from what a real
+week gives; the last digit can also differ between Python versions.
+
+**What still works:** the budget, the recommendation, and the hard limits that it runs are
+PaceLine's own code, so the effect of a style on the budget is real. See [the weekly
+simulation](explanation.md#the-weekly-simulation).
+
 ## usage-watch
 
 ### usage-watch is off by default
@@ -482,7 +537,7 @@ usage-watch, the data is as of the last turn of any session on this machine.
 The measured cost of a reservation or queue item is a change in account-wide weekly usage, so
 parallel work inflates it. A reservation that overlapped another is marked `overlapped`, and
 `paceline calibrate` leaves it out. The forecast and `paceline calibrate` need history: 3 hours of
-the last day for the forecast, and `calibration_min_days` (14) days for calibration.
+the last day for the forecast, and 14 days for calibration.
 
 **What you see:** no forecast, or no calibration proposal, until the history is there.
 

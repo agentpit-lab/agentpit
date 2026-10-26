@@ -7,7 +7,7 @@
     paceline away status
 
 One marker, <state>/away.json, is shared by every session. The owner's next message in any session
-clears it; the hooks module (hooks/register.ts, hooks/away.ts) does that, and decides which prompts
+clears it; the hooks module (hooks/register.tsx, hooks/away.ts) does that, and decides which prompts
 count. Stdlib only, Python 3.9+.
 """
 import argparse

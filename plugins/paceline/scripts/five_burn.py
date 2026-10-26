@@ -11,6 +11,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import limits_file  # noqa: E402
+import localzone  # noqa: E402
 
 UTC = dt.timezone.utc
 HOUR = dt.timedelta(hours=1)
@@ -88,6 +89,46 @@ def load_zone(key, force_builtin=False):
     if key in ("UTC", "Etc/UTC"):
         return UTC
     raise ZoneUnavailable(f"time zone {key} unavailable: install tzdata or use a CET/EET zone")
+
+
+def detect_zone():
+    """The machine's zone and whether load_zone can use it here: (None, False) when nothing is found."""
+    try:
+        name = localzone.detect()
+    except Exception:  # noqa: BLE001 - a detector failure means nothing was detected
+        return None, False
+    if not name:
+        return None, False
+    try:
+        load_zone(name)
+    except Exception:  # noqa: BLE001 - zoneinfo can fail in more ways than ZoneUnavailable
+        return name, False
+    return name, True
+
+
+TIMEZONE_MODES = ("machine", "fixed")
+
+
+def effective_zone(stored, detect=None):
+    """The mode and the zone to use for a stored profile: (mode, zone, followed).
+
+    `stored` is the profile as read (None when there is none yet). The mode is the stored `timezone_mode`
+    when it is one of the two strings; else "fixed" for a stored profile (an old one, or a hand-edited
+    invalid value) and "machine" when there is no profile yet. In machine mode a usable detected zone is
+    the one to use (`followed` is then True), else the stored zone stays in use. Nothing is written here.
+    """
+    stored = stored if isinstance(stored, dict) else None
+    mode = stored.get("timezone_mode") if stored is not None else None
+    if mode not in TIMEZONE_MODES:
+        mode = "fixed" if stored is not None else "machine"
+    zone = stored.get("timezone") if stored is not None else None
+    if not isinstance(zone, str) or not zone.strip():
+        zone = "UTC"
+    if mode == "machine":
+        name, usable = (detect or detect_zone)()
+        if name and usable:
+            return mode, name, True
+    return mode, zone, False
 
 
 def fmt_local(d, tz):
@@ -180,8 +221,10 @@ def reason(burn, reset_local):
 
 
 # The profile keys the merge needs, with the defaults of pace.PROFILE_DEFAULTS (a test keeps them equal).
-PROFILE_KEYS = {"timezone": "UTC", "day_hours": [8, 22], "night_hours": [0, 8],
-                "five_hour_threshold_day": 80.0, "five_hour_threshold_night": 95.0, "stale_threshold_min": 30}
+PROFILE_KEYS = {"timezone": "UTC", "timezone_mode": "machine", "day_hours": [8, 22], "night_hours": [0, 8],
+                "five_hour_threshold_day": 80.0, "five_hour_threshold_night": 95.0}
+# Limit data older than this many minutes is stale (pace.py reads it from here).
+STALE_THRESHOLD_MIN = 30
 
 
 def snapshot(now, account, five):
@@ -235,13 +278,14 @@ def after_merge(sd, now, record):
     reset = limits_file.safe_iso(held.get("resets_at")) if limits_file.is_bucket(held) else None
     if dated is None or reset is None or reset <= now:
         return
-    stored = limits_file.read_json(sd / "pace-profile.json") or {}
-    profile = {name: stored.get(name, default) for name, default in PROFILE_KEYS.items()}
-    tz = load_zone(profile["timezone"])
+    stored = limits_file.read_json(sd / "pace-profile.json")
+    profile = {name: (stored or {}).get(name, default) for name, default in PROFILE_KEYS.items()}
+    # The mode comes from effective_zone, never from the default above: an old profile reads as fixed.
+    tz = load_zone(effective_zone(stored)[1])
     night = classify(now.astimezone(tz), profile) == "night"
     threshold = float(profile["five_hour_threshold_night" if night else "five_hour_threshold_day"])
     used = float(held["used_percentage"])
-    stale = (now - dated["_at"]).total_seconds() / 60.0 > profile["stale_threshold_min"]
+    stale = (now - dated["_at"]).total_seconds() / 60.0 > STALE_THRESHOLD_MIN
     window = limits_file.window_of(held)
 
     def is_base(record):

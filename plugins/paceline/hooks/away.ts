@@ -9,8 +9,11 @@ export const AWAY_FILE = 'away.json'
 export const CLEARED = '{"on": false}'
 
 // The command that sets the marker: Claude Code submits it as a prompt before the model runs it.
-const COMMAND_NAMES = ['/paceline:away', '/away']
-const EXPANDED_COMMAND = /<command-name>\s*(?:\/paceline:away|\/away)\s*<\/command-name>/i
+// Its names derive from the plugin's own name, so no name is written here.
+const escapeRegExp = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+const commandNames = (plugin: string): string[] => [`/${plugin}:away`.toLowerCase(), '/away']
+const expandedCommand = (plugin: string): RegExp =>
+  new RegExp(`<command-name>\\s*(?:\\/${escapeRegExp(plugin)}:away|\\/away)\\s*<\\/command-name>`, 'i')
 
 // The person's own message: typed at the terminal or in Desktop ('composer'), sent through Remote Control
 // ('bridge') or a Slack ping. 'sdk' is left out: Desktop stamps it on a prompt it sends on its own, such as
@@ -36,14 +39,14 @@ export function isAwayOn(text: unknown): boolean {
 
 // A prompt the person wrote: not a cache-watch wake, not the command that sets the marker, and from
 // the person's own origin. An engine that stamps no origin leaves the text to decide.
-export function isPersonPrompt(e: PromptSeen): boolean {
+export function isPersonPrompt(e: PromptSeen, plugin: string): boolean {
   if (e.origin !== undefined) {
     const kind = (e.origin as { kind?: unknown }).kind
     if (typeof kind !== 'string' || !PERSON_ORIGINS.includes(kind)) return false
   }
-  if (e.command && ['paceline:away', 'away'].includes(e.command.name)) return false
+  if (e.command && [`${plugin}:away`, 'away'].includes(e.command.name)) return false
   const text = String(e.text ?? '').trim()
-  if (!text || text.includes(WAKE_MARK) || EXPANDED_COMMAND.test(text)) return false
+  if (!text || text.includes(WAKE_MARK) || expandedCommand(plugin).test(text)) return false
   const first = text.split(/\s+/, 1)[0]!.toLowerCase()
-  return !COMMAND_NAMES.includes(first)
+  return !commandNames(plugin).includes(first)
 }

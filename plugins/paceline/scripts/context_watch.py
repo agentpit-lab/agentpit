@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """context-watch: settings, status and snapshot cleanup for paceline's context-watch module.
 
-The module (hooks/register.ts) warns the agent at set levels, writes a snapshot of the session at
+The module (hooks/register.tsx) warns the agent at set levels, writes a snapshot of the session at
 each compaction, and, when the line setting is on (it is off by default), shows the agent its context
 against the auto-compaction point on every prompt. This script owns what the module cannot do: the
 settings command, and removing old snapshots at session start.
@@ -36,8 +36,8 @@ SNAPSHOT_DIR = (".claude", "paceline")
 now = time.time
 
 
-def settings_path():
-    return limits_file.paceline_dir() / "context-watch.json"
+def settings_path(directory=None):
+    return (Path(directory) if directory else limits_file.paceline_dir()) / "context-watch.json"
 
 
 def _valid_levels(value):
@@ -49,13 +49,8 @@ def _valid_levels(value):
     )
 
 
-def load_settings():
-    try:
-        stored = json.loads(settings_path().read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        stored = None
-    if not isinstance(stored, dict):
-        stored = {}
+def load_settings(directory=None):
+    stored = limits_file.read_json(settings_path(directory)) or {}
     settings = dict(DEFAULTS)
     for key in ("on", "line"):
         if isinstance(stored.get(key), bool):

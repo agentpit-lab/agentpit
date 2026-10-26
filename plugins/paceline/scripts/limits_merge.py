@@ -1,6 +1,6 @@
 """Merges the sessions' limit readings from <state>/inbox/ into <state>/rate-limits.json.
 
-Run by the hooks module's inbox watch (hooks/register.ts), at each session start and every 15 seconds
+Run by the hooks module's inbox watch (hooks/register.tsx), at each session start and every 15 seconds
 while the inbox changed. The merge and its lock live in limits_file.py beside this script; this file
 is the module's entry point.
 

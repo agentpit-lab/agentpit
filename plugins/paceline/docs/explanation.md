@@ -5,7 +5,8 @@
 This page explains where PaceLine's numbers come from and how pace turns them into a budget, a
 recommendation, and the night queue's decisions. For the exact commands and keys, see the
 [reference](reference.md). To try the budget with your own numbers, open the [budget
-simulator](https://agentpit-lab.github.io/agentpit/plugins/paceline/docs/budget-simulator.html).
+simulator](https://agentpit-lab.github.io/agentpit/plugins/paceline/docs/budget-simulator.html); to
+see what a spending style does to a whole week, run `paceline simulate`.
 
 ## Where usage readings come from
 
@@ -23,8 +24,8 @@ through the inbox, `<state>/inbox/`:
 
 A merge takes the inbox into the limits file. The hooks module checks the inbox when Claude Code
 starts and then every 15 seconds while a session is open, and merges any change. A pace command
-merges first when the data is older than `usage_snapshot_max_age_sec` (300 seconds). The `pace:`
-line before an Agent launch uses the limits file as it stands, without a merge.
+merges first when the data is older than 300 seconds. The `pace:` line before an Agent launch uses
+the limits file as it stands, without a merge.
 
 ### Which account a reading belongs to
 
@@ -80,9 +81,9 @@ Code refuses the request, and usage-watch records `network error`.
 - A session reading arrives with the session's own request, so it trails the account by one request.
   It changes only when a session on this machine takes a turn. Usage from another machine or from
   claude.ai shows up after the next local turn.
-- pace dates the limits file by its oldest live bucket. When that age passes `stale_threshold_min`
-  (30 minutes), the data is `STALE`: the hard limits on the five-hour and weekly windows are
-  skipped, and the night queue waits.
+- pace dates the limits file by its oldest live bucket. When that age passes 30 minutes, the data is
+  `STALE`: the hard limits on the five-hour and weekly windows are skipped, and the night queue
+  waits.
 - With usage-watch on and any session open, the data is at most about two and a half minutes old:
   125 seconds between requests plus up to 15 seconds to the merge.
 - For 15 minutes after an exact reading, session readings leave that bucket alone. The [inbox
@@ -140,8 +141,7 @@ reset and starts 7 days earlier. pace sorts each hour of the window into one kin
 5. Off hours, the rest of each day, get no budget.
 
 Declared plans change the weight of day hours: an `away` plan sets it to 0, and a `heavy` plan
-multiplies it by the plan's weight (`heavy_weight`, 2, by default). Where plans overlap, the later
-declaration wins.
+multiplies it by the plan's weight (2 by default). Where plans overlap, the later declaration wins.
 
 ## The budget per hour
 
@@ -151,21 +151,27 @@ pace computes the budget in these steps:
    current model when that is higher. Model-scoped buckets come only from usage-watch, and only
    count when pace knows the model (`--model`, `PACELINE_MODEL`, or `ANTHROPIC_MODEL`).
 2. **What is left.** 100% minus the effective usage.
-3. **The reserve.** `reserve_pct` (8%) is held back until the last `reserve_decay_start` before the
-   reset (Friday 18:00 by default). From then it falls in a straight line to 0 at the reset.
+3. **The reserve.** `reserve_pct` (8%) is held back until the release starts, and then falls in a
+   straight line to 0 at the reset. The release starts at the last `reserve_decay_start` before the
+   reset (Friday 18:00 by default) or `reserve_release_min_hours` (54 by default) before the reset,
+   whichever is earlier. A floor of 0 leaves `reserve_decay_start` alone. The hours count back from
+   the account's own reset, so a reset on Friday 22:00 starts the release on Wednesday afternoon,
+   and a reset on Monday 00:00 starts it on Friday 18:00 either way.
 4. **Spendable.** What is left minus the reserve, never below 0.
 5. **The split.** pace spreads the spendable share over the remaining day hours up to the reset, in
    proportion to each hour's weight. No hour gets more than its capacity, `five_hour_to_week_pct /
    5` percent of the week (2% by default); what a capped hour cannot take goes to the others. When
    the spendable share covers every hour's capacity, each hour gets its capacity.
 6. **The weekend cap.** The weekend day hours get at most `weekend_cap_pct` (20%) together, minus
-   what the current weekend's day hours have already spent. Weekend nights are not counted against
-   the cap. The rest goes to the weekday hours.
+   what the current weekend's day hours have already spent, plus the reserve that has been released
+   since the weekend began: the reserve falls on the weekend, and those hours are the only ones left
+   to spend it. Weekend nights are not counted against the cap. The rest goes to the weekday hours.
 7. **The budget.** The share of the current hour, or of the next day hour with a weight above 0 when
    the current hour is a night, off, or `away` hour.
 
-**Try it:** To move these steps with your own numbers, open the [budget
-simulator](https://agentpit-lab.github.io/agentpit/plugins/paceline/docs/budget-simulator.html).
+**Try it:** To move these steps with your own numbers at one instant, open the [budget
+simulator](https://agentpit-lab.github.io/agentpit/plugins/paceline/docs/budget-simulator.html). To
+replay a whole week, run `paceline simulate` (see [the weekly simulation](#the-weekly-simulation)).
 
 The split starts from what remains now, so a past absence creates no lag to catch up.
 
@@ -173,9 +179,109 @@ The **norm** is the same split of `100 - reserve_pct` over the whole weekly wind
 the even rate for a week used from start to end. `paceline status` shows the norm for the kind of
 hour the budget belongs to, for example `budget 1.45%/h (weekday norm 1.03)`.
 
-`paceline status` also warns when what remains of the week reaches `capacity_warn_ratio` (0.9) of
-what the remaining day hours can spend at the day threshold: the remaining day hours can then barely
-use what is left.
+`paceline status` also warns when what remains of the week reaches 90% of what the remaining day
+hours can spend at the day threshold: the remaining day hours can then barely use what is left.
+
+## The spending styles
+
+A spending style is nine profile keys that move together, so that one choice sets how close to the
+limits PaceLine lets work run. `careful` keeps a margin, `balanced` is the profile's defaults, and
+`full` uses the whole limit. `paceline profile style careful|balanced|full` writes all nine, and the
+settings view (`/paceline:settings pane`) offers the same as one choice. The profile stores no style
+name: a profile whose nine values equal a style's, after your overrides in
+`<state>/pace-styles.json`, shows that style, and any other combination shows `custom`. The
+[reference](reference.md#settings-and-spending-styles) lists the values.
+
+What each key of a style does:
+
+- `five_hour_threshold_day`, `five_hour_threshold_night`: the five-hour usage at which background
+  work pauses and a launch asks you first. A higher value lets a burst take the window closer to its
+  limit.
+- `five_hour_hard_stop`: the five-hour usage at which the recommendation starts nothing new.
+- `reserve_pct`, `reserve_decay_start`, `reserve_release_min_hours`: how much of the week stays held
+  back, and when it starts to be released (see [the budget per hour](#the-budget-per-hour)).
+  `careful` holds more, and has no floor, so it releases at `reserve_decay_start` alone; `full`
+  holds less, and its release starts at Thursday 18:00 or 54 hours before the reset, whichever is
+  earlier.
+- `throttle_weekly_pct`: the weekly usage from which the recommendation moves routine work to the
+  routine models.
+- `weekend_cap_pct`: the most the weekend day hours may spend together, before the released reserve
+  is added.
+- `leftover_suggest_pct`: the forecast unused share above which pace suggests a leftover pool.
+
+You can override a style's values by hand in `<state>/pace-styles.json`; the file is read by
+`profile style`, `settings`, and `simulate`, and PaceLine never writes it. The budget itself never
+reads a style: it reads the nine keys that a style wrote into the profile.
+
+## The weekly simulation
+
+`paceline simulate` replays one weekly window through the same budget code that `paceline status`
+runs, hour by hour, 168 steps, so you can see what a spending style does to a week before you choose
+it. The settings view shows the result for an on-track week under each style, as `≈ X % unused`.
+
+What the simulated operator does, each hour:
+
+- It builds an exact reading: the weekly usage so far, and a five-hour usage that is the spend of
+  the last five hours over `five_hour_to_week_pct`, with the five-hour reset three hours ahead.
+- In a day hour it spends the hour's budget times the week's factor, never more than
+  `five_hour_to_week_pct / 5` per hour, and nothing while the recommendation blocks.
+- With a night queue it also spends the night's whole allowance over the night hours.
+
+The four week shapes:
+
+- `on-track`: the factor is 1 in every day hour.
+- `heavy-start`: the factor is 2 in the window's first 72 hours, then 1. It shows how the budget
+  re-plans after an early overspend.
+- `light-start`: the factor is 0.5 in the first 72 hours, then 1. It shows how the budget re-plans
+  after an early underspend.
+- `away-thu-fri`: the factor is 0 in the day hours of local Thursday and Friday, then 1. It shows
+  what the weekend cap protects when weekdays go unused.
+
+It is a model: one reading per hour, a rolling five-hour sum instead of Claude Code's fixed windows,
+no declared plans and no reservations, free memory pinned at 64 GiB and data age at 0, a night queue
+that spends its whole allowance, and week shapes that are synthetic, not your history.
+`leftover_suggest_pct` is not exercised. The same inputs give the same figures on one Python
+version, and the last digit can differ between versions.
+
+The reset day changes the figures. The weekend and the release floor count back from the account's
+own reset, so an account that resets on Friday evening spends its reserve and its weekend
+differently from one that resets on Monday morning. The table below shows the styles on the four
+weeks.
+
+| Style | Week | Night queue | Unused | Weekend spend | Night spend | Hours a launch asks | Throttled hours | Peak five-hour |
+|---|---|---|---|---|---|---|---|---|
+| `careful` | on-track | no | 1.3 % | 25.0 % | 0.0 % | 0 | 4 | 66.9 % |
+| `careful` | on-track | yes | 0.7 % | 18.4 % | 30.0 % | 0 | 42 | 55.1 % |
+| `careful` | heavy-start | no | 0.7 % | 24.8 % | 0.0 % | 21 | 51 | 99.7 % |
+| `careful` | heavy-start | yes | 0.7 % | 12.9 % | 27.9 % | 11 | 70 | 94.3 % |
+| `careful` | light-start | no | 1.4 % | 25.0 % | 0.0 % | 21 | 4 | 88.7 % |
+| `careful` | light-start | yes | 0.7 % | 20.0 % | 38.1 % | 0 | 25 | 57.9 % |
+| `careful` | away-thu-fri | no | 31.2 % | 25.0 % | 0.0 % | 0 | 0 | 66.9 % |
+| `careful` | away-thu-fri | yes | 0.7 % | 23.3 % | 39.4 % | 2 | 13 | 90.0 % |
+| `balanced` | on-track | no | 0.9 % | 26.7 % | 0.0 % | 0 | 0 | 62.4 % |
+| `balanced` | on-track | yes | 0.4 % | 17.2 % | 30.0 % | 0 | 42 | 47.9 % |
+| `balanced` | heavy-start | no | 0.4 % | 22.3 % | 0.0 % | 7 | 48 | 99.1 % |
+| `balanced` | heavy-start | yes | 0.4 % | 9.8 % | 28.1 % | 11 | 79 | 92.9 % |
+| `balanced` | light-start | no | 0.9 % | 26.7 % | 0.0 % | 20 | 0 | 86.0 % |
+| `balanced` | light-start | yes | 0.4 % | 20.5 % | 37.2 % | 0 | 17 | 51.4 % |
+| `balanced` | away-thu-fri | no | 30.1 % | 26.7 % | 0.0 % | 0 | 0 | 62.4 % |
+| `balanced` | away-thu-fri | yes | 0.4 % | 23.7 % | 39.9 % | 1 | 7 | 95.0 % |
+| `full` | on-track | no | 0.2 % | 30.9 % | 0.0 % | 0 | 0 | 60.3 % |
+| `full` | on-track | yes | 0.2 % | 15.0 % | 30.0 % | 0 | 41 | 46.5 % |
+| `full` | heavy-start | no | 0.2 % | 19.0 % | 0.0 % | 6 | 55 | 95.9 % |
+| `full` | heavy-start | yes | 0.2 % | 6.0 % | 28.7 % | 1 | 78 | 90.9 % |
+| `full` | light-start | no | 0.3 % | 32.3 % | 0.0 % | 0 | 0 | 81.9 % |
+| `full` | light-start | yes | 0.2 % | 20.1 % | 36.0 % | 0 | 14 | 44.6 % |
+| `full` | away-thu-fri | no | 26.5 % | 32.3 % | 0.0 % | 0 | 0 | 62.8 % |
+| `full` | away-thu-fri | yes | 0.2 % | 24.7 % | 38.8 % | 0 | 0 | 86.1 % |
+
+These figures are for the default profile with a Monday 00:00 UTC reset. An account with another
+reset day gets different figures. For your own account, run `paceline simulate`, or read the preview
+in the settings view. In the table, `Unused` is the share of the week left at the reset, `Weekend
+spend` and `Night spend` are the shares spent in those hours, `Hours a launch asks` counts the hours
+in which a launch would ask you first, `Throttled hours` the day hours of throttling, and `Peak
+five-hour` the highest five-hour usage. The docs build generates the table from `paceline simulate`;
+it is not typed by hand.
 
 ## The recommendation
 
@@ -260,8 +366,8 @@ asks you to confirm the launch when one of these holds:
   rate](#the-five-hour-burn-rate)) and the launch goes over the agent cap, that is, the active
   reservations of all sessions are at or above `max_parallel_agents`. A cap of 0 asks for every
   launch. Within the cap the burn is advice only. A reservation of an agent that never reported its
-  stop counts until its lease ends (`agent_lease_ttl_min`, 240 minutes), so a crashed agent can keep
-  the count up for that long.
+  stop counts until its lease ends (240 minutes), so a crashed agent can keep the count up for that
+  long.
 
 The reason goes in front of the tool's description, so it shows in every permission prompt. A hard
 limit's reason starts with `pace hard limit:` and a burn's with `pace 5h burn:`; when both hold, the
@@ -303,10 +409,10 @@ above `leftover_suggest_pct` (10%) adds the suggestion to propose leftover tasks
 The night is the current night hours, or the next ones when the clock is outside them, cut at the
 weekly reset. The allowance for the night queue is the smallest of these, never below 0:
 
-- `night_base_pct` (5%) plus the **surplus**: the spendable share minus what the norm would spend in
-  the remaining day hours.
+- 5% plus the **surplus**: the spendable share minus what the norm would spend in the remaining day
+  hours.
 - The night's capacity: its hours × `five_hour_to_week_pct / 5` × `five_hour_threshold_night`.
-- `host_night_capacity_pct`, when set; 0 while free memory is below `min_free_commit_mb`.
+- 0 while free memory is below `min_free_commit_mb`; otherwise this bound does not apply.
 - The spendable share minus what the next day's day hours are allocated. On the last night before
   the reset, nothing is kept for the next day.
 
@@ -406,9 +512,9 @@ To walk through the same decisions one step at a time, answer the questions belo
   account is not checked.
 
 In `auto`, the throttle depends only on weekly usage: at `throttle_weekly_pct` with more than 24
-hours to the reset, the allowed models are `routine_models`. When five-hour usage is at or above
-`auto_refresh_five_hour_pct` (85%) and the data is older than `auto_refresh_cache_sec` (125
-seconds), `auto` merges the inbox first, so a window that has already filled is not missed.
+hours to the reset, the allowed models are `routine_models`. When five-hour usage is at or above 85%
+and the data is older than 125 seconds, `auto` merges the inbox first, so a window that has already
+filled is not missed.
 
 In `auto`, the burn rate is projected to `five_hour_threshold_night` at any hour, because a night
 run answers to the night threshold. The agent count is capped as in [The five-hour burn

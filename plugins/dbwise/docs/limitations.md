@@ -188,11 +188,11 @@ A call at `read` or `diagnose` has a statement timeout of 30 seconds, set for th
 LOCAL`, and the client stops waiting after the same time. Role defaults that a DBA sets with `ALTER
 ROLE ... SET` (`default_transaction_read_only`, `statement_timeout` and others) are availability
 guards, not part of the guarantee: a session can lift `statement_timeout` and
-`default_transaction_read_only` itself. On PostgreSQL 17.11 a session of a plain role also set
-`work_mem` and `idle_in_transaction_session_timeout` back and was refused `temp_file_limit`.
-dbWise's allowlist, which refuses the statements that change them, is what keeps the model from
-doing it. `write` has no statement timeout. The statements that set these defaults are in [Create
-the database roles for dbWise](how-to.md#create-the-database-roles-for-dbwise).
+`default_transaction_read_only` itself. On PostgreSQL 17 and 18 a session of a plain role also sets
+`work_mem` and `idle_in_transaction_session_timeout` back and is refused `temp_file_limit`. dbWise's
+allowlist, which refuses the statements that change them, is what keeps the model from doing it.
+`write` has no statement timeout. The statements that set these defaults are in [Create the database
+roles for dbWise](how-to.md#create-the-database-roles-for-dbwise).
 
 ### `EXPLAIN ANALYZE` runs the query and loads the server
 

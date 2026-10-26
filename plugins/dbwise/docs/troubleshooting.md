@@ -141,10 +141,10 @@ the role the alias's credential uses. After the fix, reconnect `plugin:dbwise:po
 | `the role has USAGE on a foreign server` | `REVOKE USAGE ON FOREIGN SERVER server_name FROM dbwise_read;`, and the same `FROM PUBLIC` when it was granted there |
 | at `read`: `the role is a member of pg_monitor, ... which belong to the diagnose level` (the reason names `pg_monitor`, `pg_read_all_stats` or `pg_stat_scan_tables`) | `REVOKE pg_monitor FROM dbwise_read;` when the reason names `pg_monitor`: the other two come with it. Otherwise revoke the role the reason names. Use the monitoring roles on the `diagnose` credential only |
 
-The statements above were run on PostgreSQL 17.11 against a role built to hit each reason, and each
-cleared it. Where the grants came from is easiest to see in `dbwise doctor`, whose `audit:` lines
-list what the role owns and the write grants that reach it, directly, through `PUBLIC` or through a
-role it inherits.
+The statements above are tested on PostgreSQL 17 and 18 against a role built to hit each reason, and
+each clears it. Where the grants came from is easiest to see in `dbwise doctor`, whose `audit:`
+lines list what the role owns and the write grants that reach it, directly, through `PUBLIC` or
+through a role it inherits.
 
 ### The server is configured with `role_check warn`
 

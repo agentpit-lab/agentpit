@@ -2,7 +2,7 @@
 
     paceline usage-watch on|off|status
 
-The reader itself is the plugin's function-hooks module (hooks/register.ts, hooks/usage.ts): it asks
+The reader itself is the plugin's function-hooks module (hooks/register.tsx, hooks/usage.ts): it asks
 Claude Code for the figures /usage shows and writes them to the inbox. This script only writes the
 switch, <state>/usage-watch.json, and reads the module's gate of the account it resolves,
 <state>/usage-watch.state-<key>.json (usage-watch.state-unknown.json with no account). It sends no
