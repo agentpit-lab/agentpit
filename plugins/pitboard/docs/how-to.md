@@ -33,6 +33,15 @@ them. PitBoard reads that file when it exists; it needs no setting for it.
    usage-watch is off until you turn it on. While it is on, PaceLine reads the account's usage, the
    figures `/usage` shows, every 125 seconds, and merges them with the model-scoped limits into the
    limits file.
+4. To see the plan rows in the `Week` card, turn pace on:
+
+   ```
+   /paceline:pace on
+   ```
+
+   With pace on, PaceLine writes its week plan file, and the card adds `Plan` and `Reserve` and
+   measures `Spare`, `Overspent` and the tick against the plan. With pace off, the card keeps the
+   even pace.
 
 **How to tell it worked:**
 
@@ -46,8 +55,12 @@ them. PitBoard reads that file when it exists; it needs no setting for it.
   disappears](troubleshooting.md#a-model-scoped-limit-disappears).
 - When PaceLine's pace is on and the five-hour window would reach PaceLine's threshold before the
   reset, the `5h limit` card shows a `Threshold` row with the threshold and the clock time, for
-  example `80% at 19:40`, instead of `Runs out`, and the limit turns red. Without a fresh burn file,
+  example `95% at 19:40`, instead of `Runs out`, and the limit turns red. Without a fresh burn file,
   the card projects to 100% and shows `Runs out`.
+- With pace on, the `Week` card shows `Plan` (`within` or `above`, and the mode) and, when the plan
+  keeps a reserve, `Reserve`, within about 40 seconds of the next part's start. If it does not, see
+  [The plan rows need PaceLine's week plan
+  file](limitations.md#the-plan-rows-need-pacelines-week-plan-file).
 
 ## Move the state directory
 
@@ -104,15 +117,16 @@ The five-hour and weekly limits are bars. Each model-scoped limit is a pie. The 
 group between the context and the cache while an advisor is set. `ⓘ` ends the row.
 
 1. Point at a reading. PitBoard shades it and shows its card: the reading's name, one row per value,
-   a bar for a limit, and advice when the reading needs a decision. While the `pitboard` pane is
+   a bar for a limit, and advice when the reading needs a decision. While the `PitBoard` pane is
    open, the row shows no cards, since the pane holds every one; the shading stays.
 2. Read a limit's bar. The fill is the share used. The tick marks where an even pace to the reset
-   would stand now, which is the share of the window gone. A fill past the tick spends faster than
-   the window allows.
+   would stand now, which is the share of the window gone; on the Week card with PaceLine's plan it
+   marks where the plan expects the week now. A fill past the tick spends faster than the window
+   allows.
 3. Read the colours: grey needs nothing, amber is worth a glance, red changes what to do next. See
    [Levels](reference.md#levels) for the thresholds.
-4. For the explanations behind a card, click `pitboard` in the footer under the prompt, between the
-   mode and the model name, or run `/pitboard`; see [Open every card with
+4. For the explanations behind a card, click `[ PitBoard ]` in the footer under the prompt, between
+   the mode and the model name, or run `/pitboard`; see [Open every card with
    `/pitboard`](#open-every-card-with-pitboard).
 
 The bars change with the window's width. PitBoard keeps the row on one line where it can:
@@ -133,13 +147,13 @@ In the CLI the row sits under the prompt, below Claude Code's own mode and hint 
 rule above it. Each reading is its name and a two-cell gauge. A number appears only once the reading
 leaves calm, which keeps the row short while nothing needs you.
 
-1. Let the row wrap. It breaks between groups: context, cache, limits, and `ⓘ` with `pitboard`. A
+1. Let the row wrap. It breaks between groups: context, cache, limits, and `ⓘ` with `PitBoard`. A
    group stays whole.
 2. To read one reading's values, click its name, or press Enter while the name has focus. Its card
    opens as one line under the row, with `▲` under the name. The `ⓘ` card takes a second line from
    `Claude Code` on.
 3. A detail line that is wider than the terminal is cut at its end. To read every value, click
-   `pitboard` at the end of the row, or run `/pitboard`.
+   `PitBoard` at the end of the row, or run `/pitboard`.
 
 **How to tell it worked:** the groups stack on separate lines, and a click on a name opens its line.
 A second click on the same name closes it.
@@ -155,17 +169,18 @@ narrow terminal, or the readings in the Claude mobile app, which has no row.
    /pitboard
    ```
 
-   Or click `pitboard`: in the CLI the bracketed `[ pitboard ]` at the end of the row, beside `ⓘ`;
-   in Desktop in the footer under the prompt, between the mode and the model name. The mobile app
+   Or click the button: in the CLI `[ PitBoard ]` at the end of the row, beside `ⓘ`; in Desktop `[
+   PitBoard ]` in the footer under the prompt, between the mode and the model name. The mobile app
    has the command only.
-2. Read the pane, titled `pitboard`, from the top:
+2. Read the pane, titled `PitBoard`, from the top:
    - **Needs attention**, only while something needs a decision: each warning with its advice, the most
      urgent first.
    - Every card in the row's order, with all its rows and its explanations. The advisor's card follows
      the context's while an advisor is set; the session card comes last.
-   - Under `5h limit` and `Week`, a bar with the used share and the even-pace tick. The `5h limit` bar
-     also shows, paler, where the current pace leads by the reset.
-3. Click `pitboard` again to close the pane, or use its close mark or Escape. If another pane is in
+   - Under `5h limit` and `Week`, a bar with the used share and the tick: the even pace, or with
+     PaceLine's plan the plan. The `5h limit` bar also shows, paler, where the current pace leads by
+     the reset.
+3. Click `PitBoard` again to close the pane, or use its close mark or Escape. If another pane is in
    front of it, the click brings it to the front first; in a terminal narrower than 110 columns that
    can take a second click.
 

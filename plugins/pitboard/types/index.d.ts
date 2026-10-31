@@ -67,7 +67,47 @@ export type StatusBurn = {
   limited: boolean
 }
 
+// paceline's week-plan-<key>.json: the current part of one account's week plan, as of computed_at. Every
+// instant is ISO 8601 with a zone designator. share_pct is null for an unplanned part.
+export type StatusWeekPlan = {
+  version: 1
+  computed_at: string
+  account: string
+  mode: 'inform' | 'limit'
+  inform_until: string | null
+  week_resets_at: string
+  five_hour_to_week_pct: number
+  reserve: {
+    pct: number
+    name?: string | null
+    release?: string | null
+    release_at: string | null
+    error?: string | null
+  }
+  part: {
+    day?: string
+    kind?: string
+    start: string
+    end: string
+    share_pct: number | null
+    unplanned: boolean
+    used_at_start: number
+    estimated: boolean
+    fixed_at?: string
+    weight?: number
+  }
+  later: { day?: string; kind?: string; start?: string; end?: string; weight: number; share_pct?: number | null }[]
+}
+
+// A button another plugin adds to PitBoard's row and Desktop footer through $.pitboard.addButton; a press
+// is that plugin's to answer (on('ui.press', { plugin: 'pitboard', element: `button-${key}` })).
+export type PitboardButton = { key: string; label: string }
+export type Pitboard = { addButton: (button: PitboardButton) => Promise<void> }
+
 declare module 'claude-code' {
+  interface EngineInterface {
+    pitboard: Pitboard
+  }
   interface PluginState {
     pitboard: {
       measure: StatusMeasure | null
@@ -80,6 +120,8 @@ declare module 'claude-code' {
       // readings of unknown account.
       // paceline's five-hour burn snapshot, null when absent or unreadable.
       fiveBurn: StatusBurn | null
+      // paceline's week plan file for the held account, null when absent or unreadable.
+      weekPlan: StatusWeekPlan | null
       account: { key: string | null; isFileUnknown: boolean } | null
       nowMs: number
       desktopNow: number
@@ -93,6 +135,8 @@ declare module 'claude-code' {
       advisorPick: { value: string | null; before?: string | null } | null
       // True while the /pitboard pane is placed: the desktop row then leaves its cards to the pane.
       paneOpen: boolean
+      // The buttons other plugins added, in the order added.
+      buttons: PitboardButton[]
     }
   }
 }

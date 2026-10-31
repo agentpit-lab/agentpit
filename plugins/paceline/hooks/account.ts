@@ -2,6 +2,8 @@
 // scripts/limits_file.py (account_file, account_key_of, account_key_of_ids) and in pitboard's hooks/account.ts; one test
 // vector holds the three together.
 
+// limits_file.ACCOUNT_KEY: the form of a key.
+export const ACCOUNT_KEY = /^[0-9a-f]{16}$/
 export const ACCOUNT_PREFIX = 'paceline-account-v1'
 
 export type AccountReason = 'no-file' | 'unreadable' | 'no-account'
@@ -38,12 +40,39 @@ export function accountKeyOf(text: string | null): Account {
 }
 
 // The key of an account named by its identifiers, wherever they came from: the state file or the
-// process environment. An organization that is not a UUID counts as empty.
+// profile answer. An organization that is not a UUID counts as empty.
 export function accountKeyOfIds(accountUuid: unknown, organizationUuid: unknown): Account {
   const account = uuidOrNull(accountUuid)
   const organization = uuidOrNull(organizationUuid) ?? ''
   if (account === null) return { key: null, reason: 'no-account' }
   return { key: sha256Hex(`${ACCOUNT_PREFIX}:${account}:${organization}`).slice(0, 16), reason: null }
+}
+
+// The account of the credential a session runs under: Claude Code's own profile endpoint, asked through
+// $.http.fetch with the session's credential handle.
+export const PROFILE_URL = 'https://api.anthropic.com/api/oauth/profile'
+
+// The answer of PROFILE_URL (null text when none could be read) to the account's one-way key. Only
+// account.uuid and organization.uuid are touched; nothing else of the body is kept.
+export function profileKeyOf(status: number, text: string | null): Account {
+  if (status !== 200 || typeof text !== 'string') return { key: null, reason: 'unreadable' }
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(text)
+  } catch {
+    return { key: null, reason: 'unreadable' }
+  }
+  const part = (name: string): Record<string, unknown> => {
+    const raw = parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? (parsed as Record<string, unknown>)[name] : null
+    return raw && typeof raw === 'object' && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {}
+  }
+  return accountKeyOfIds(part('account').uuid, part('organization').uuid)
+}
+
+// Claude Code's credentials file: <config>/.credentials.json, where <config> is CLAUDE_CONFIG_DIR, else
+// <home>/.claude. Only its modification time is read.
+export function credentialsFileOf(env: { configDir?: string | null; home?: string | null }): string {
+  return `${env.configDir ? env.configDir : `${env.home ?? ''}/.claude`}/.credentials.json`
 }
 
 function utf8(text: string): number[] {

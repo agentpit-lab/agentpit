@@ -1,6 +1,7 @@
 import type { StatusMeta } from '../types'
 import { PIE_PX, ringMarksWidth, type Card, type CardBar, type Tone } from './desktop'
-import type { CacheView, ContextView, Level, View } from './view'
+import type { CacheView, ContextView, Level, PlanView, View } from './view'
+import { planLevel } from './view'
 
 // The terminal and the pane draw in theme keys: the engine resolves each against the person's
 // theme, light or dark, and a mod cannot read which one is active to pick a colour itself.
@@ -222,6 +223,8 @@ export type Gauge = {
   // A limit: desktop draws it as a bar with an even-pace tick at this share of the window gone,
   // null when the reset is unknown, and its value and time to reset always.
   pace?: number | null
+  // What the tick is called in the alt text; omitted, it is the even pace.
+  paceName?: string
   reset?: string
   card: Card
 }
@@ -342,12 +345,13 @@ function hitCard(v: View): Card {
 // readings first: 10 minutes for 5h, an hour for the week, whose percentage moves in whole points.
 // Pace and Budget stack in the left column, so the two rates compare down it; `beside` is what
 // stands right of Pace (when the limit runs out), an empty cell otherwise.
-function paceRows(ratePerHour: number | null, budgetPerHour: number | null, needs: string, alarm: Level, beside: Rows): Rows {
+// `noBudget` is what Budget reads when it is null.
+function paceRows(ratePerHour: number | null, budgetPerHour: number | null, needs: string, alarm: Level, beside: Rows, noBudget = 'n/a (reset unknown)'): Rows {
   const isOver = ratePerHour !== null && budgetPerHour !== null && ratePerHour > budgetPerHour
   return [
     ['Pace', ratePerHour !== null ? rate(ratePerHour) : `n/a (needs ${needs})`, isOver ? alarm : undefined],
     ...(beside.length ? beside : [GAP]),
-    ['Budget', budgetPerHour !== null ? rate(budgetPerHour) : 'n/a (reset unknown)'],
+    ['Budget', budgetPerHour !== null ? rate(budgetPerHour) : noBudget],
   ]
 }
 
@@ -392,8 +396,31 @@ function fiveCard(v: View): Card {
   return { title: '5h limit', level: f.level, rows, ...noted(advice, explain), bar }
 }
 
+// The plan card's rows from Plan to Reserve: the verdict, the lead against the part's share, the reserve.
+function planRows(p: PlanView, v: View, resetAt: number | null): Rows {
+  const level = planLevel(p)
+  const verdict =
+    p.isUnplannedWeek
+      ? `${pct0(p.unplannedPct ?? 0)} unplanned, expires ${resetAt !== null ? clock(resetAt, v.meta, true) : 'n/a'}`
+      : p.isUnplannedPart
+        ? 'unplanned part'
+        : `${p.isAbove ? 'above' : 'within'} · ${p.mode}`
+  const rows: Rows = [['Plan', verdict, level === 'calm' ? undefined : level]]
+  if (p.lead !== null) {
+    const hours = p.leadHours !== null ? ` (${span(Math.round(p.leadHours * 60) * 60_000)})` : ''
+    rows.push([p.lead > 0 ? 'Overspent' : 'Spare', `${Math.round(Math.abs(p.lead))} pts${hours}`, p.isAbove ? level : undefined])
+  }
+  const r = p.reserve
+  if (r.kind === 'unknown') rows.push(['Reserve', 'unknown: the stop is off'])
+  else if (r.kind === 'held') {
+    rows.push(['Reserve', `${pct0(r.pct)} ${r.isToReset ? 'to the reset' : `until ${clock(r.releaseAt, v.meta, true)}`}`, r.isStop ? 'act' : undefined])
+  } else if (r.kind === 'released') rows.push(['Reserve', `${pct0(r.pct)} released ${clock(r.releaseAt, v.meta, true)}`])
+  return rows
+}
+
 function weekCard(v: View): Card {
   const w = v.week
+  const p = w?.plan ?? null
   // What even pace would have spent by now, and how far the week is from it, in points and in hours
   // of budget (a week spends 100% over 168 h): Spare below it, uncoloured; Overspent past it, yellow,
   // and red past a day.
@@ -401,19 +428,41 @@ function weekCard(v: View): Card {
   const lead = w && even !== null ? w.pct - even : null
   const leadText =
     lead === null ? 'n/a' : `${Math.round(Math.abs(lead))} pts (${span(Math.round(((Math.abs(lead) / 100) * WEEK_MS) / 60_000) * 60_000)})`
+  // With PaceLine's plan the verdict, Spare / Overspent and Budget follow the part's share; Week
+  // elapsed stays on time passed.
   const rows: Rows = w
     ? [
         ['Used', pct0(w.pct), w.level],
         ['Resets', w.resetAt !== null ? clock(w.resetAt, v.meta, true) : 'n/a'],
-        ...paceRows(w.ratePerHour, w.evenPerHour, '1 h', 'watch', [['Week elapsed', even !== null ? pct0(even) : 'n/a']]),
-        [lead !== null && lead > 0 ? 'Overspent' : 'Spare', leadText, lead === null || lead <= 0 ? undefined : lead > 100 / 7 ? 'act' : 'watch'],
+        ...(p
+          ? paceRows(p.pace, p.budget, '1 h', 'watch', [['Week elapsed', even !== null ? pct0(even) : 'n/a']], 'n/a (unplanned)')
+          : paceRows(w.ratePerHour, w.evenPerHour, '1 h', 'watch', [['Week elapsed', even !== null ? pct0(even) : 'n/a']])),
+        ...(p
+          ? planRows(p, v, w.resetAt)
+          : [[lead !== null && lead > 0 ? 'Overspent' : 'Spare', leadText, lead === null || lead <= 0 ? undefined : lead > 100 / 7 ? 'act' : 'watch'] as [string, string, Tone?]]),
         ...accountRows(v.isAccountUnknown),
       ]
     : []
-  const advice = w && w.level !== 'calm' ? `${pct0(w.pct)} used: save it for work that needs it.` : null
-  const explain = ['Spare / Overspent: below or past even pace, in points and hours.', 'Pace: last 6 h. Budget: the pace that lasts to the reset.', 'Bar: used; tick: even pace now.']
-  const bar = w ? { used: Math.round(w.pct), tick: even === null ? null : Math.round(even), level: w.level } : undefined
-  return { title: 'Week', level: w?.level ?? 'calm', rows, ...noted(advice, explain), ...(bar ? { bar } : {}) }
+  const stop = p?.reserve.kind === 'held' && p.reserve.isStop ? p.reserve.pct : null
+  const advice =
+    stop !== null
+      ? `Week at ${pct0(100 - stop)}+ before the reserve opens: launches ask before each agent.`
+      : p?.isAbove && p.mode === 'limit'
+        ? "Above the plan's share: PaceLine asks before each agent launch while its data is fresh."
+        : w && w.level !== 'calm'
+          ? `${pct0(w.pct)} used: save it for work that needs it.`
+          : null
+  const explain = p
+    ? [
+        'Plan: spend in this part against its share, pro rata by time, 1 pt tolerance.',
+        "Pace: this part, last 6 h at most. Budget: what is left of the part's share over its hours left.",
+        'Bar: used; tick: where the plan expects the week now.',
+        ...(p.reserve.kind === 'held' && p.reserve.name ? [`Reserve "${p.reserve.name}": kept until its release; launches ask past ${pct0(100 - p.reserve.pct)}.`] : []),
+      ]
+    : ['Spare / Overspent: below or past even pace, in points and hours.', 'Pace: last 6 h. Budget: the pace that lasts to the reset.', 'Bar: used; tick: even pace now.']
+  const tick = p ? p.tick : even === null ? null : Math.round(even)
+  const bar = w ? { used: Math.round(w.pct), tick, level: w.cardLevel } : undefined
+  return { title: 'Week', level: w?.cardLevel ?? 'calm', rows, ...noted(advice, explain), ...(bar ? { bar } : {}) }
 }
 
 function scopedCard(v: View, b: View['scoped'][number]): Card {
@@ -505,9 +554,10 @@ export function readings(v: View): { gauges: Gauge[]; info: Card; advisor: Card 
             group: 'limits' as Group,
             label: '7d',
             pct: v.week.pct,
-            level: v.week.level,
+            level: v.week.cardLevel,
             value: pct0(v.week.pct),
-            pace: paceOf(v.week.resetAt !== null ? Math.max(0, v.week.resetAt - v.now) : null, 7 * 24 * HOUR_MS),
+            pace: v.week.plan ? v.week.plan.tick : paceOf(v.week.resetAt !== null ? Math.max(0, v.week.resetAt - v.now) : null, 7 * 24 * HOUR_MS),
+            ...(v.week.plan ? { paceName: 'plan' } : {}),
             reset: v.week.resetAt !== null ? span(Math.max(0, v.week.resetAt - v.now)) : undefined,
             card: weekCard(v),
           },

@@ -70,7 +70,8 @@ export function pieSvg(pct: number, level: Level, size = 16): Piece {
 
 // A limit as a bar with a tick where even pace would stand now: the share of the window gone.
 // Used past the tick means burning faster than the reset allows.
-export function barSvg(pct: number, level: Level, pace: number | null, width = 40): Piece {
+// `markName` is what the alt text calls the tick.
+export function barSvg(pct: number, level: Level, pace: number | null, width = 40, markName = 'even pace'): Piece {
   const p = clampPct(pct)
   const fill = (p / 100) * width
   let body = `<rect class="disc" x="0" y="4" width="${width}" height="4" rx="2"/>`
@@ -79,7 +80,7 @@ export function barSvg(pct: number, level: Level, pace: number | null, width = 4
     const x = Math.max(1, Math.min(width - 1, (clampPct(pace) / 100) * width))
     body += `<rect class="tick" x="${(x - 1).toFixed(1)}" y="1" width="2" height="10" rx="1"/>`
   }
-  return { source: doc(width, 12, body), width, height: 12, alt: pace === null ? `${p}%` : `${p}%, even pace ${clampPct(pace)}%` }
+  return { source: doc(width, 12, body), width, height: 12, alt: pace === null ? `${p}%` : `${p}%, ${markName} ${clampPct(pace)}%` }
 }
 
 // The thin rule between groups of readings; the image is wider than the line, which a surface

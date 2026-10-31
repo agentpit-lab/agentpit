@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""SessionEnd hook: release this session's pace reservations (subagent, workflow, gate, queue).
+"""SessionEnd hook: release this session's pace holds (subagent, workflow, gate, queue).
 
-Does nothing while pace is off; a reservation left when pace is turned off mid-session expires by
+Does nothing while pace is off; a hold left when pace is turned off mid-session expires by
 its lease. Claude Code gives all SessionEnd hooks 1.5 seconds together, so the hook first writes an
 end marker, <state>/ended-sessions/<session id>.json, then releases in this process. When it is cut
 off or the state lock stays busy, the next pace call sweeps the marker. Fire and forget: never blocks

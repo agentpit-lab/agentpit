@@ -6,7 +6,7 @@ This page explains where PaceLine's numbers come from and how pace turns them in
 recommendation, and the night queue's decisions. For the exact commands and keys, see the
 [reference](reference.md). To try the budget with your own numbers, open the [budget
 simulator](https://agentpit-lab.github.io/agentpit/plugins/paceline/docs/budget-simulator.html); to
-see what a spending style does to a whole week, run `paceline simulate`.
+replay a whole week through the budget, run `paceline simulate`.
 
 ## Where usage readings come from
 
@@ -29,20 +29,29 @@ the limits file as it stands, without a merge.
 
 ### Which account a reading belongs to
 
-Two accounts can share one configuration directory, so one limits file. The writers tag each reading
-with the key of the account signed in at the moment they write it. The key is the first 16 hex
-digits of a SHA-256 hash of the account and organization identifiers in Claude Code's
-`.claude.json`; it cannot be turned back into either identifier, and PaceLine stores nothing else
-from the file. The merge puts each account's readings into a partition of its own,
-`accounts[<key>]`, and mirrors the newest partition at the top level for readers that know nothing
-of accounts. Readings with no key go to the partition `unknown`.
+Two accounts can share one configuration directory, so one limits file. PaceLine's module tags each
+reading with the key of the account that the session's own credential belongs to. At session start,
+after `/login` or `/logout`, and when the stored credential changes, it asks Claude Code's profile
+endpoint for the account of the session's login and keeps only a one-way key of the account and
+organization identifiers in the answer: the first 16 hex digits of a SHA-256 hash, which cannot be
+turned back into either identifier. Until the first answer the session writes no reading. When the
+endpoint refuses the request, or three asks in a row fail, the module takes the account named in
+Claude Code's `.claude.json` instead, except in Claude Code Desktop or a process started from it,
+whose `.claude.json` names the last terminal login; such a session then writes no reading. The
+account variables that Desktop sets are never used: a `claude` started from a Desktop terminal tab
+inherits them while its own login may be another account. The merge puts each account's readings
+into a partition of its own, `accounts[<key>]`, and mirrors the newest partition at the top level
+for readers that know nothing of accounts. Readings with no key go to the partition `unknown`.
 
-Every reader resolves the signed-in account itself and uses only that account's partition. When the
-account has no partition yet, it uses `unknown` and marks the figures `account unknown`; when there
-is neither, pace says `no usage data yet for the signed-in account`. When the account cannot be
-resolved at all, the reader takes the top level and marks it the same way. The history keeps one
-line per partition that changed, with its account, and pace's forecast and calibration count only
-the signed-in account's lines.
+Every reader uses only the partition of its session's account. The module records that account for
+each session in `<state>/session-accounts/<session id>.json` and passes it to the commands it
+starts, and a `paceline` command in a session's Bash tool reads the session's entry; a command
+outside any session takes the account named in `.claude.json`. When the account has no partition
+yet, it uses `unknown` and marks the figures `account unknown`; when there is neither, pace says `no
+usage data yet for the signed-in account`. While the session's account is not known yet, or cannot
+be known (`pending`, `desktop`, `logged-out`), the reader shows no figures rather than another
+account's. The history keeps one line per partition that changed, with its account, and pace's
+forecast and calibration count only that account's lines.
 
 After `/login` or `/logout`, the module holds back a reading whose limits equal the ones it held
 before the command while the account differs from the held one: Claude Code may still carry the old
@@ -98,8 +107,8 @@ queues run, or when you want to use the whole week's limit. Find your profile by
 | Profile | Signs in PitBoard or `/usage` | What fits |
 |---|---|---|
 | A. The weekly limit always lasts, and you do not want to use more | At the reset, the `Week` card shows `Spare` of more than a day (about 14 points); `7d` stays grey; `/usage` shows the weekly limit well below 100% at the reset | pace adds little. Keep context-watch; turn on usage-watch only for exact figures in PitBoard |
-| B. The weekly limit runs out before the reset | `Overspent` in amber or red mid-week; `7d` amber from 80%, red from 95% before the reset day; `/usage` shows the weekly limit reached early | pace: a budget per hour, the throttle to routine models from 85% weekly, the reserve held to the week's end, the confirmation when the week is used up |
-| C. Bursts of many agents fill the five-hour window | The `5h limit` card shows `Runs out` or turns red; Pace above Budget | pace: the advised number of agents in the `pace:` line, the confirmation from 80% (day) or 95% (night) of the five-hour window or over the agent cap while it burns toward that threshold, reservations; usage-watch for fresh data |
+| B. The weekly limit runs out before the reset | `Overspent` in amber or red mid-week; `7d` amber from 80%, red from 95% before the reset day; `/usage` shows the weekly limit reached early | pace: a budget per hour, the weekly reserve kept until its release day, the confirmation when the week is used up |
+| C. Bursts of many agents fill the five-hour window | The `5h limit` card shows `Runs out` or turns red; Pace above Budget | pace: the `pace:` line before each launch in limit mode, the confirmation from 95% of the five-hour window, holds; usage-watch for fresh data |
 | D. You want to use the whole week's limit | `Spare` near the reset, while work waits; `/paceline:pace status` shows `forecast unused` | pace with a night queue and a leftover pool for the last night before the reset; usage-watch so night data stays fresh |
 | E. Agents should work while you are away | Any of the above, plus unattended work | A night queue with usage-watch on and the machine kept awake ([Run a night queue](how-to.md#run-a-night-queue)) |
 
@@ -113,35 +122,45 @@ first matching rule gives the recommendation:
 1. Not sure where the `Week` card stands: watch it in PitBoard for a week, or turn pace on and read
    `/paceline:pace status`; `/paceline:pace off` undoes it.
 2. Agents should work while you are away: profiles D and E, pace with a night queue and usage-watch.
-3. Overspent or run out: profile B, pace, with profile C's advice as well when many agents run.
+3. Overspent or run out: profile B, pace, with profile C's five-hour stop and `limit` mode as well
+   when many agents run.
 4. Many agents: profile C, pace and usage-watch.
 5. About even with few subagents: pace is optional; it keeps the even rate and warns before the
    limits.
 6. Spare with few subagents: profile A; pace adds little.
 
-## Day, night, and off hours
+## Working hours and off-hours
 
 Every wall-clock rule uses the profile's time zone. The weekly window ends at the reported weekly
-reset and starts 7 days earlier. pace sorts each hour of the window into one kind:
+reset and starts 7 days earlier. pace divides it into parts of two kinds, two for each day: the
+working hours (☼) and the off-hours (☾) that follow them until the next working start. Each part has
+a mark and, from it, a share of what is left:
 
 | Kind | Hours by default | Budget |
 |---|---|---|
-| night | 00:00 to 08:00 (`night_hours`) | None; the night queue has its own allowance |
-| weekday | Monday to Friday, 08:00 to 22:00 (`day_hours`) | Weight `weekday_weight` |
-| weekend | Saturday and Sunday, 08:00 to 22:00 | Weight `weekend_weight`, within `weekend_cap_pct` |
-| off | Every other hour, 22:00 to 24:00 by default | None |
+| working hours (☼) | 09:00 to 18:00 by default (`work_hours` of the plan file) | The part's share of what is left, by its mark (1 by default) |
+| off-hours (☾) | The rest of each day, from the end of the working hours to the next working start | The part's share by its mark (0 by default: no budget, and the night queue's allowance is 0) |
 
 **The hours of a week by kind**
 
 1. Each row is a day of the week and each cell an hour, from 00:00 to 24:00.
-2. Night hours (`night_hours`) get no budget; the night queue has its own allowance.
-3. Weekday day hours (`day_hours`, Monday to Friday) carry the weight `weekday_weight`.
-4. Weekend day hours (Saturday and Sunday) carry the weight `weekend_weight`, within
-   `weekend_cap_pct`.
-5. Off hours, the rest of each day, get no budget.
+2. Working hours (`work_hours`, 09:00 to 18:00 by default) carry the budget: each working part has a
+   share of the week by its mark.
+3. Off-hours, the rest of each day, have a share too, but their default mark is 0, so they get none
+   until you mark them; the night queue runs on that share.
 
-Declared plans change the weight of day hours: an `away` plan sets it to 0, and a `heavy` plan
-multiplies it by the plan's weight (2 by default). Where plans overlap, the later declaration wins.
+A mark is `off` (0), `light` (0.5), `normal` (1), `heavy` (1.5), or a number from 0 to 2 in steps of
+0.25. `paceline plan set` marks a day, and `paceline plan template set` marks a weekday of every
+week. A part's weight is its mark, scaled down when the week cuts the part short.
+
+A part's share is fixed when the part starts: what is left at that instant (100% minus the weekly
+usage and the reserve) times the part's weight over the sum of the weights of this part and every
+later part of the week. Usage after the start moves no share of the part that is running; it moves
+the shares of the parts that have not started. When every weight is 0, the part is unplanned: its
+budget is 0 and it never asks you.
+
+The five-hour stop does not follow these hours: `five_hour_stop_pct` is the same in working hours
+and in off-hours.
 
 ## The budget per hour
 
@@ -149,242 +168,268 @@ pace computes the budget in these steps:
 
 1. **Effective weekly usage.** The weekly reading, or a model-scoped weekly bucket that matches the
    current model when that is higher. Model-scoped buckets come only from usage-watch, and only
-   count when pace knows the model (`--model`, `PACELINE_MODEL`, or `ANTHROPIC_MODEL`).
+   count when pace knows the model (`--model`, `PACELINE_MODEL`, or `ANTHROPIC_MODEL`). The part's
+   share and spending below count the plain weekly reading only.
 2. **What is left.** 100% minus the effective usage.
-3. **The reserve.** `reserve_pct` (8%) is held back until the release starts, and then falls in a
-   straight line to 0 at the reset. The release starts at the last `reserve_decay_start` before the
-   reset (Friday 18:00 by default) or `reserve_release_min_hours` (54 by default) before the reset,
-   whichever is earlier. A floor of 0 leaves `reserve_decay_start` alone. The hours count back from
-   the account's own reset, so a reset on Friday 22:00 starts the release on Wednesday afternoon,
-   and a reset on Monday 00:00 starts it on Friday 18:00 either way.
-4. **Spendable.** What is left minus the reserve, never below 0.
-5. **The split.** pace spreads the spendable share over the remaining day hours up to the reset, in
-   proportion to each hour's weight. No hour gets more than its capacity, `five_hour_to_week_pct /
-   5` percent of the week (2% by default); what a capped hour cannot take goes to the others. When
-   the spendable share covers every hour's capacity, each hour gets its capacity.
-6. **The weekend cap.** The weekend day hours get at most `weekend_cap_pct` (20%) together, minus
-   what the current weekend's day hours have already spent, plus the reserve that has been released
-   since the weekend began: the reserve falls on the weekend, and those hours are the only ones left
-   to spend it. Weekend nights are not counted against the cap. The rest goes to the weekday hours.
-7. **The budget.** The share of the current hour, or of the next day hour with a weight above 0 when
-   the current hour is a night, off, or `away` hour.
+3. **The reserve.** A reserve of the week (8% by default, one per account, set with `paceline
+   reserve`) is kept whole: the plan spreads only what is left after it. It is released whole at the
+   start of working hours of its release day, by default the last day before the reset, and from
+   that instant the plan spreads the released reserve over the remaining parts of the week by their
+   weights. After the next reset it is kept again. Until the release it is also a safety stop: a
+   launch while the week's usage is at or past 100% minus the reserve asks first, in whole points as
+   Claude Code reports them.
+4. **Spendable.** What is left minus the reserve still kept, never below 0.
+5. **The share.** The current part's share, fixed when the part started: what was left after the
+   reserve then kept at its start, times the part's weight over the weights of this part and every
+   later part of the week (see [Working hours and off-hours](#working-hours-and-off-hours)). A part
+   that starts at the release instant is fixed with nothing kept, so the released reserve is shared
+   by it and every later part. A part with weight 0 has share 0. When every weight is 0 the part is
+   unplanned and its budget is 0.
+6. **The rate.** What is left of the share (the share minus what the part has spent since it
+   started, never below 0) over the hours left in the part. No hour gets more than its capacity,
+   `five_hour_to_week_pct / 5` percent of the week (2% by default).
+7. **The budget.** The rate, or 0 in an unplanned part. A part that spends in step with the clock
+   gets its share divided by its hours as its budget, which is also its norm.
 
 **Try it:** To move these steps with your own numbers at one instant, open the [budget
 simulator](https://agentpit-lab.github.io/agentpit/plugins/paceline/docs/budget-simulator.html). To
 replay a whole week, run `paceline simulate` (see [the weekly simulation](#the-weekly-simulation)).
 
-The split starts from what remains now, so a past absence creates no lag to catch up.
+The share is fixed at the start of the part, so overspending is not recovered inside the part: the
+budget falls instead, and the next parts divide what is left by their weights.
 
-The **norm** is the same split of `100 - reserve_pct` over the whole weekly window, without plans:
-the even rate for a week used from start to end. `paceline status` shows the norm for the kind of
-hour the budget belongs to, for example `budget 1.45%/h (weekday norm 1.03)`.
+The **norm** is the part's share divided by its hours, the even rate for the part, at most
+`five_hour_to_week_pct / 5`. A part with share 0 has a budget of 0, and its norm is the nominal
+hourly rate `(100 - the reserve's size) / 168`. `paceline status` shows the kind of part the budget
+belongs to, for example `budget 1.00%/h (working-hours norm 1.00)`.
 
-`paceline status` also warns when what remains of the week reaches 90% of what the remaining day
-hours can spend at the day threshold: the remaining day hours can then barely use what is left.
+`paceline status` also warns when what remains of the week reaches 90% of what the hours left in the
+current part and the later parts with a weight above 0 can spend up to the five-hour stop
+(`five_hour_stop_pct`): those hours can then barely use what is left.
 
-## The spending styles
+## The weekly reserve
 
-A spending style is nine profile keys that move together, so that one choice sets how close to the
-limits PaceLine lets work run. `careful` keeps a margin, `balanced` is the profile's defaults, and
-`full` uses the whole limit. `paceline profile style careful|balanced|full` writes all nine, and the
-settings view (`/paceline:settings pane`) offers the same as one choice. The profile stores no style
-name: a profile whose nine values equal a style's, after your overrides in
-`<state>/pace-styles.json`, shows that style, and any other combination shows `custom`. The
-[reference](reference.md#settings-and-spending-styles) lists the values.
+The weekly reserve is a safety stop outside the plan. It sets aside a share of the week, 8% by
+default, for work you decide on late in the week. Each account has its own reserve; `paceline
+reserve` sets its size, its release day and a name (see [Keep a reserve for a task at the end of the
+week](how-to.md#keep-a-reserve-for-a-task-at-the-end-of-the-week)).
 
-What each key of a style does:
+- **The stop line.** Until the release instant, a launch asks when the week's usage is at or past
+  100% minus the reserve: 92% for the default 8%. The check reads the plain weekly figure, not a
+  model's own bucket, in whole points as Claude Code reports them and with no tolerance. See [The
+  confirmation at a hard limit](#the-confirmation-at-a-hard-limit).
+- **The release instant.** The start of working hours of the release day, in the profile's time
+  zone. By default the release day is the last day before the reset whose working hours end at or
+  before the reset. It stays that day when you mark its working hours off, because the marks do not
+  move it. `--release mon` to `sun` picks a weekday instead. A weekday whose working start has
+  already passed this week means the reserve is released for this week and kept again from the next
+  reset.
+- **The spread after it.** From the release instant nothing is kept. The part that starts at the
+  release instant is fixed with the whole reserve in what is left, and that part and every later
+  part share it by their weights. A part that started earlier keeps its share. After the next reset
+  the reserve is kept again.
+- **A release day that is the reset's day.** With a release weekday equal to the weekday of the
+  reset, the hour of the reset decides. A reset at or before the start of working hours puts the
+  release at the start of the week, so the reserve is hardly kept. A reset inside working hours
+  leaves only the hours before the reset. A reset after working hours gives the same instant as the
+  default. In a week with a daylight-saving change that weekday can have no working start inside the
+  week, and then the reserve is kept until the reset. Pick an earlier day unless the reset falls
+  after working hours.
+- **What the stop does not catch.** It acts on Agent and Workflow launches only. Work the main
+  session does itself, agents that are already running, and launches you approved before the usage
+  reached the line can spend the reserve before its release. Spend outside these hooks (claude.ai,
+  other machines, sessions where pace is off) is not seen either. See [The reserve stop does not
+  catch work you do yourself](limitations.md#the-reserve-stop-does-not-catch-work-you-do-yourself).
 
-- `five_hour_threshold_day`, `five_hour_threshold_night`: the five-hour usage at which background
-  work pauses and a launch asks you first. A higher value lets a burst take the window closer to its
-  limit.
-- `five_hour_hard_stop`: the five-hour usage at which the recommendation starts nothing new.
-- `reserve_pct`, `reserve_decay_start`, `reserve_release_min_hours`: how much of the week stays held
-  back, and when it starts to be released (see [the budget per hour](#the-budget-per-hour)).
-  `careful` holds more, and has no floor, so it releases at `reserve_decay_start` alone; `full`
-  holds less, and its release starts at Thursday 18:00 or 54 hours before the reset, whichever is
-  earlier.
-- `throttle_weekly_pct`: the weekly usage from which the recommendation moves routine work to the
-  routine models.
-- `weekend_cap_pct`: the most the weekend day hours may spend together, before the released reserve
-  is added.
-- `leftover_suggest_pct`: the forecast unused share above which pace suggests a leftover pool.
+The stop asks in `inform` and `limit` mode alike, and the away marker, or a permission mode where no
+one answers (`auto`, `bypassPermissions`, `dontAsk`), turns the question into a denial. A reserve of
+0% turns the stop off. When the reserve cannot be computed, `paceline status` says `reserve unknown:
+the stop is off` and the hard limits work as before.
 
-You can override a style's values by hand in `<state>/pace-styles.json`; the file is read by
-`profile style`, `settings`, and `simulate`, and PaceLine never writes it. The budget itself never
-reads a style: it reads the nine keys that a style wrote into the profile.
+## The five-hour stop
+
+One profile key, `five_hour_stop_pct` (95% by default, 0 to 100), sets how close to its limit
+PaceLine lets the five-hour window run. From that usage an Agent or Workflow launch asks you first,
+the night queue waits, and the burn rate is projected to it. The value is the same in working hours
+and off-hours. A lower value keeps a margin; a higher one lets a burst take the window closer to its
+limit. Change it with `paceline profile set five_hour_stop_pct 90` or in the settings view
+(`/paceline:settings pane`). The [reference](reference.md#profile-keys) lists the key.
+
+The weekly reserve is a separate setting: it is kept per account (see [the weekly
+reserve](#the-weekly-reserve)).
 
 ## The weekly simulation
 
 `paceline simulate` replays one weekly window through the same budget code that `paceline status`
-runs, hour by hour, 168 steps, so you can see what a spending style does to a week before you choose
-it. The settings view shows the result for an on-track week under each style, as `≈ X % unused`.
+runs, hour by hour, 168 steps, so you can see what your profile does to a week.
 
 What the simulated operator does, each hour:
 
 - It builds an exact reading: the weekly usage so far, and a five-hour usage that is the spend of
   the last five hours over `five_hour_to_week_pct`, with the five-hour reset three hours ahead.
-- In a day hour it spends the hour's budget times the week's factor, never more than
+- In a working hour it spends the hour's budget times the week's factor, never more than
   `five_hour_to_week_pct / 5` per hour, and nothing while the recommendation blocks.
-- With a night queue it also spends the night's whole allowance over the night hours.
+- With a night queue it also spends the off-hours part's whole allowance over the hours of that
+  part. With the default off-hours mark of 0 the allowance is 0, so the queue spends nothing until
+  the plan marks the night.
 
 The four week shapes:
 
-- `on-track`: the factor is 1 in every day hour.
+- `on-track`: the factor is 1 in every working hour.
 - `heavy-start`: the factor is 2 in the window's first 72 hours, then 1. It shows how the budget
   re-plans after an early overspend.
 - `light-start`: the factor is 0.5 in the first 72 hours, then 1. It shows how the budget re-plans
   after an early underspend.
-- `away-thu-fri`: the factor is 0 in the day hours of local Thursday and Friday, then 1. It shows
-  what the weekend cap protects when weekdays go unused.
+- `away-thu-fri`: the factor is 0 in the working hours of local Thursday and Friday, then 1. It
+  shows how the budget re-plans when two working days go unused.
 
 It is a model: one reading per hour, a rolling five-hour sum instead of Claude Code's fixed windows,
-no declared plans and no reservations, free memory pinned at 64 GiB and data age at 0, a night queue
-that spends its whole allowance, and week shapes that are synthetic, not your history.
-`leftover_suggest_pct` is not exercised. The same inputs give the same figures on one Python
-version, and the last digit can differ between versions.
+no dated marks and no holds (the working hours and the weekday template come from your plan file),
+free memory pinned at 64 GiB and data age at 0, a night queue that spends its whole allowance, and
+week shapes that are synthetic, not your history. The same inputs give the same figures on one
+Python version, and the last digit can differ between versions.
 
-The reset day changes the figures. The weekend and the release floor count back from the account's
-own reset, so an account that resets on Friday evening spends its reserve and its weekend
-differently from one that resets on Monday morning. The table below shows the styles on the four
-weeks.
+The reset day changes the figures. The release day counts back from the account's own reset, and the
+week's days fall differently on it, so an account that resets on Friday evening releases its reserve
+on another day from one that resets on Monday morning. The table below shows the four weeks, each
+without and with a night queue.
 
-| Style | Week | Night queue | Unused | Weekend spend | Night spend | Hours a launch asks | Throttled hours | Peak five-hour |
-|---|---|---|---|---|---|---|---|---|
-| `careful` | on-track | no | 1.3 % | 25.0 % | 0.0 % | 0 | 4 | 66.9 % |
-| `careful` | on-track | yes | 0.7 % | 18.4 % | 30.0 % | 0 | 42 | 55.1 % |
-| `careful` | heavy-start | no | 0.7 % | 24.8 % | 0.0 % | 21 | 51 | 99.7 % |
-| `careful` | heavy-start | yes | 0.7 % | 12.9 % | 27.9 % | 11 | 70 | 94.3 % |
-| `careful` | light-start | no | 1.4 % | 25.0 % | 0.0 % | 21 | 4 | 88.7 % |
-| `careful` | light-start | yes | 0.7 % | 20.0 % | 38.1 % | 0 | 25 | 57.9 % |
-| `careful` | away-thu-fri | no | 31.2 % | 25.0 % | 0.0 % | 0 | 0 | 66.9 % |
-| `careful` | away-thu-fri | yes | 0.7 % | 23.3 % | 39.4 % | 2 | 13 | 90.0 % |
-| `balanced` | on-track | no | 0.9 % | 26.7 % | 0.0 % | 0 | 0 | 62.4 % |
-| `balanced` | on-track | yes | 0.4 % | 17.2 % | 30.0 % | 0 | 42 | 47.9 % |
-| `balanced` | heavy-start | no | 0.4 % | 22.3 % | 0.0 % | 7 | 48 | 99.1 % |
-| `balanced` | heavy-start | yes | 0.4 % | 9.8 % | 28.1 % | 11 | 79 | 92.9 % |
-| `balanced` | light-start | no | 0.9 % | 26.7 % | 0.0 % | 20 | 0 | 86.0 % |
-| `balanced` | light-start | yes | 0.4 % | 20.5 % | 37.2 % | 0 | 17 | 51.4 % |
-| `balanced` | away-thu-fri | no | 30.1 % | 26.7 % | 0.0 % | 0 | 0 | 62.4 % |
-| `balanced` | away-thu-fri | yes | 0.4 % | 23.7 % | 39.9 % | 1 | 7 | 95.0 % |
-| `full` | on-track | no | 0.2 % | 30.9 % | 0.0 % | 0 | 0 | 60.3 % |
-| `full` | on-track | yes | 0.2 % | 15.0 % | 30.0 % | 0 | 41 | 46.5 % |
-| `full` | heavy-start | no | 0.2 % | 19.0 % | 0.0 % | 6 | 55 | 95.9 % |
-| `full` | heavy-start | yes | 0.2 % | 6.0 % | 28.7 % | 1 | 78 | 90.9 % |
-| `full` | light-start | no | 0.3 % | 32.3 % | 0.0 % | 0 | 0 | 81.9 % |
-| `full` | light-start | yes | 0.2 % | 20.1 % | 36.0 % | 0 | 14 | 44.6 % |
-| `full` | away-thu-fri | no | 26.5 % | 32.3 % | 0.0 % | 0 | 0 | 62.8 % |
-| `full` | away-thu-fri | yes | 0.2 % | 24.7 % | 38.8 % | 0 | 0 | 86.1 % |
+| Week | Night queue | Unused | Off-hours spend | Hours a launch asks | Peak five-hour |
+|---|---|---|---|---|---|
+| on-track | no | 5.1 % | 0.0 % | 1 | 100.0 % |
+| on-track | yes | 5.1 % | 0.0 % | 1 | 100.0 % |
+| heavy-start | no | 5.1 % | 0.0 % | 4 | 100.0 % |
+| heavy-start | yes | 5.1 % | 0.0 % | 4 | 100.0 % |
+| light-start | no | 8.7 % | 0.0 % | 1 | 100.0 % |
+| light-start | yes | 8.7 % | 0.0 % | 1 | 100.0 % |
+| away-thu-fri | no | 28.6 % | 0.0 % | 2 | 100.0 % |
+| away-thu-fri | yes | 28.6 % | 0.0 % | 2 | 100.0 % |
 
 These figures are for the default profile with a Monday 00:00 UTC reset. An account with another
-reset day gets different figures. For your own account, run `paceline simulate`, or read the preview
-in the settings view. In the table, `Unused` is the share of the week left at the reset, `Weekend
-spend` and `Night spend` are the shares spent in those hours, `Hours a launch asks` counts the hours
-in which a launch would ask you first, `Throttled hours` the day hours of throttling, and `Peak
-five-hour` the highest five-hour usage. The docs build generates the table from `paceline simulate`;
-it is not typed by hand.
+reset day gets different figures. For your own account, run `paceline simulate`. In the table,
+`Unused` is the share of the week left at the reset, `Off-hours spend` is the share spent in
+off-hours by a night queue, `Hours a launch asks` counts the hours in which a launch would ask you
+first, and `Peak five-hour` the highest five-hour usage. The docs build generates the table from
+`paceline simulate`; it is not typed by hand.
 
 ## The recommendation
 
-pace compares the budget with the norm: `ratio = budget / norm`.
+The recommendation says whether new work is blocked. It names no model and no number of agents.
 
-- **Blocked.** No new work starts when free memory is below `min_free_commit_mb` (2048 MiB), when
-  five-hour usage reaches `five_hour_hard_stop` (95%), or when the weekly limit is used up. The
-  recommendation is then 0 agents and model `none`.
-- **Background paused.** When five-hour usage reaches the current threshold, the recommendation is 0
-  agents until the five-hour window resets. The threshold is `five_hour_threshold_night` (95%)
-  during the night hours and `five_hour_threshold_day` (80%) at every other hour.
-- **Agents.** Otherwise, `round(2 × ratio)`, at least 1 and at most `max_agents` (6). At the norm,
-  that is 2 agents.
-- **Five-hour burn.** When the five-hour window, at its recent burn rate, would reach the current
-  threshold before it resets, the agent count falls to the share of the rate that the window's
-  budget covers, down to 0. [The five-hour burn rate](#the-five-hour-burn-rate) describes the
-  measurement.
-- **Throttle.** When the ratio is below 0.7, or when weekly usage has reached `throttle_weekly_pct`
-  (85%) with more than 24 hours left to the reset, the allowed models are `routine_models`
-  (`sonnet`, `haiku`) instead of `models`.
-- **Model.** The first allowed model. A model whose model-scoped weekly bucket has reached
-  `scoped_exhausted_pct` (95%) is left out.
-- **Heavy runs.** `min(max_heavy_runs, (free memory - commit_reserve_mb) // heavy_job_mb)`, never
-  below 0: 3 at most by default.
+- **Blocked.** No new work starts when the memory guard is on and free memory is below
+  `min_free_commit_mb` (2048 MiB), when five-hour usage reaches `five_hour_stop_pct` (95%), or when
+  the weekly limit is used up. `paceline status --json` shows `recommendation.blocked` and its
+  reasons.
+- **Five-hour burn.** The recent burn rate of the five-hour window is a measured fact, shown in
+  `paceline status --json` as `five_hour.burn`. It changes no recommendation and makes no launch
+  ask. [The five-hour burn rate](#the-five-hour-burn-rate) describes the measurement.
+- **Heavy runs (not part of the recommendation).** While the memory guard is on, `paceline status
+  --json` shows under `host` the number of heavy runs the memory allows, `max_heavy_runs`:
+  `min(max_heavy_runs, (free memory - commit_reserve_mb) // heavy_job_mb)`, never below 0: 3 at most
+  by default. With the guard off the figure is not computed.
 
 **Where usage starts to change what pace allows**
 
-1. On the five-hour scale, background work pauses from `five_hour_threshold_day` by day.
-2. By night it pauses from `five_hour_threshold_night`, and `five_hour_hard_stop` blocks new work at
-   any hour.
-3. On the weekly scale, from `throttle_weekly_pct` with more than 24 hours left to the reset, only
-   the routine models are allowed.
-4. At 100% the weekly limit is used up and new work is blocked.
+1. On the five-hour scale, an Agent or Workflow launch asks first from `five_hour_stop_pct`, 95% by
+   default, in working hours and off-hours alike.
+2. On the weekly scale, before the weekly reserve is released, a launch asks from 100% less the
+   reserve: 92% for the default 8%. At 100% the weekly limit is used up.
+3. At 100% the weekly limit is used up and new work is blocked.
 
-Free memory is free commit on Windows, `kern.memorystatus_level` times physical memory on macOS, and
-`MemAvailable` on Linux. When it cannot be measured, `paceline status` says `host memory unknown`,
-and the memory checks do not apply.
+The memory guard (`memory_guard`, off by default; turn it on with `paceline profile set memory_guard
+true`) decides whether free memory counts at all. With it off, no launch, night allowance or
+`paceline auto` answer depends on memory, and memory is measured only when `paceline status` runs
+without a launch key, as it does when you run it to read it, or when `paceline doctor` runs. Free
+memory is free commit on Windows, `kern.memorystatus_level` times physical memory on macOS, and
+`MemAvailable` on Linux. When it cannot be measured while the guard is on, `paceline status` says
+`host memory unknown`, and the memory checks do not apply.
 
 ### The five-hour burn rate
 
 The budget per hour spreads the weekly limit, and the five-hour window can still fill faster than
-the time left allows. pace therefore projects the recent burn rate of the window to the current
-threshold: `five_hour_threshold_day` (80%) by day and `five_hour_threshold_night` (95%) during the
-night hours.
+the time left allows. pace therefore projects the recent burn rate of the window to the five-hour
+stop, `five_hour_stop_pct` (95% by default), in working hours and off-hours alike.
 
 - **Rate.** The rise of the five-hour percentage over the last 90 minutes, in percentage points per
   hour. The base is the reading held 90 minutes ago, or the first reading of the window when the
   window is younger. Only readings of the current window count. There is no rate until the base lies
   at least 10 minutes back, so a fresh window, or a machine with no history yet, shows no burn
   state.
-- **Budget rate.** `(threshold - used) / hours to the reset`: the even pace that reaches the
-  threshold exactly at the reset.
-- **Burn state.** The data is fresh, the reset is known, usage is below the threshold, a rate is
-  measured, and the rate is above the budget rate, so the window would reach the threshold before
-  the reset. `limited` in `five_hour.burn` is then true.
-- **Agent cap.** In the burn state the agent count becomes `floor(agents × budget_share)`, where
-  `budget_share` is the budget rate over the rate, not rounded. A mild overshoot keeps some agents,
-  and a steep one gives 0. With 1 agent, any burn state gives 0. A recommendation that is already
-  blocked or paused stays as it is.
-- **Reason.** `paceline status` and the `pace:` line before a launch add the reason, for example `5h
-  burn 42.7%/h vs budget 13.9%/h: 80% at 2026-10-16 19:40+03:00, before reset 2026-10-16
-  21:15+03:00`.
+- **Budget rate.** `(stop - used) / hours to the reset`: the even pace that reaches the five-hour
+  stop exactly at the reset.
+- **Burn state.** The data is fresh, the reset is known, usage is below the five-hour stop, a rate
+  is measured, and the rate is above the budget rate, so the window would reach the stop before the
+  reset. `limited` in `five_hour.burn` is then true.
+- **Night queue.** Only `paceline auto` acts on the burn state: it lowers `max_parallel_agents` to
+  the share of the rate that the window's budget covers, down to 0, and waits at 0. The burn never
+  makes a launch ask.
+- **Where it shows.** `paceline status --json` shows the burn under `five_hour.burn`; `paceline
+  status` text does not state it; in `limit` mode the `pace:` line gives it as the recent rate.
 
-Outside the burn state the agent count, the model, and the status line are as without the rule: with
-a safe projection, too few readings, stale data, or usage at or above the threshold. `paceline
-status --json` shows the figures as `five_hour.burn`, which is `null` while no rate is measured, and
-the cap as `recommendation.five_hour_burn_limited`. The budget simulator has no history, so it never
-shows the burn state.
+The burn is a measured fact only. `paceline status --json` shows the figures as `five_hour.burn`,
+which is `null` while no rate is measured: with too few readings, stale data, or usage at or above
+the five-hour stop. The budget simulator has no history, so it shows no burn.
 
 PaceLine publishes the same figures for other readers; see [The five-hour burn file (for
 readers)](reference.md#the-five-hour-burn-file-for-readers).
 
 ### The confirmation at a hard limit
 
-While pace is on, the hook before every Agent and Workflow launch adds the `pace:` line. It also
-asks you to confirm the launch when one of these holds:
+In `limit` mode the hook before every Agent and Workflow launch gives the model one plain `pace:`
+line: where the current part stands against its share, what the share allows per hour, and each
+safety stop within reach. In `inform` mode the model reads nothing, unless a stop holds the launch.
+The hook asks you to confirm the launch when one of these holds:
 
-- Free memory is below `min_free_commit_mb`. This is measured at every launch.
-- With fresh data only: five-hour usage is at or above the current threshold, 80% by day and 95% at
-  night, or the weekly limit is used up.
-- With fresh data only: the five-hour burn state holds (see [The five-hour burn
-  rate](#the-five-hour-burn-rate)) and the launch goes over the agent cap, that is, the active
-  reservations of all sessions are at or above `max_parallel_agents`. A cap of 0 asks for every
-  launch. Within the cap the burn is advice only. A reservation of an agent that never reported its
-  stop counts until its lease ends (240 minutes), so a crashed agent can keep the count up for that
-  long.
+- The memory guard is on and free memory is below `min_free_commit_mb`. This is measured at every
+  launch. It also holds while the session's account is not known and no weekly reading exists: the
+  free-memory floor then applies, the five-hour and weekly stops act on the highest fresh figures of
+  any account on this machine (nothing to stop on without a fresh one), and the plan gate and the
+  budget wait for data. With the guard off, memory is not measured and this limit never applies.
+- With fresh data only: five-hour usage is at or above the five-hour stop, 95% by default in all
+  hours, or the weekly limit is used up.
+- Before the reserve's release instant, in `inform` and `limit` mode alike, and on stale data too:
+  the week's usage is at or past 100% minus the reserve (92% with the default 8%; 91% passes), in
+  whole points as Claude Code reports them. The reason names the reserve, its name if it has one,
+  and when it opens, for example `weekly reserve 8 % kept until Fri 30 09:00`. A reserve of 0%, a
+  released reserve and a reserve that cannot be computed (`reserve unknown: the stop is off`) never
+  ask; the other limits do not depend on it.
+- With fresh data only, and only in `limit` mode: the current part is planned and its spending is
+  more than 1 point above the part of its share that the clock allows by now (the share times the
+  elapsed fraction of the part). An unplanned part never asks. In `inform` mode, the default, or
+  while `paceline mode inform --until-part-end` holds, the plan only shows in `paceline status` and
+  in PitBoard's Week card, which shows the deviation from the plan (see [PitBoard's
+  explanation](../../pitboard/docs/explanation.md#the-even-pace-tick-week-elapsed-spare-and-overspent)),
+  and the model reads nothing about it.
 
 The reason goes in front of the tool's description, so it shows in every permission prompt. A hard
-limit's reason starts with `pace hard limit:` and a burn's with `pace 5h burn:`; when both hold, the
-burn reason follows the hard limit's. Everything else stays advice. When pace has no usage data or
-fails, the hook adds nothing and the launch goes ahead.
+limit's reason starts with `pace hard limit:`, the reserve's with `pace reserve:` and a plan's with
+`pace plan:`; when several hold, their reasons follow in that order and the first sets the prefix.
+When a stop or the plan holds the launch, the model also reads what holds it, what that means for
+its launches and that it must not retry a declined launch; with the owner away it reads that the
+launch was refused because the owner cannot confirm it. When pace has no usage data or fails, the
+hook adds no line and the launch goes ahead, unless the memory guard is on and free memory is below
+its floor.
 
-While the away marker is set, the hook denies the launch instead of asking. See [The away
-marker](#the-away-marker).
+While the away marker is set, the hook denies the launch instead of asking. It also denies in the
+`auto`, `bypassPermissions` and `dontAsk` permission modes, where no one answers the prompt: in
+`auto` the auto-mode classifier, not you, approves the question and the launch would run past the
+stop. The reason then says which mode holds the launch and that switching the session to the
+`default` (Manual) mode lets you confirm it, and the model is told to tell you what holds the launch
+and not to retry. In `default`, `acceptEdits` and `plan` mode, or when Claude Code sends no mode,
+the hook still asks. See [The away marker](#the-away-marker).
+
+The first plan question of a part names the command that stops them until the part ends, `paceline
+mode inform --until-part-end`; later questions in the same part do not repeat it. A hard limit never
+depends on the mode or the plan.
 
 ### The away marker
 
 A permission prompt that nobody answers holds the session, and the prompt cache can expire while it
 waits. When you leave, `/paceline:away` (or `paceline away on`) sets the away marker. While it is
-set, a launch that would ask, at a hard limit or over the agent cap in the burn state, is denied
-instead. The denial names the reason and tells the agent that you are away and that it must not
-retry: after a burn it continues within the cap or waits, and after a hard limit it waits for the
-limit to clear.
+set, a launch that would ask, at a hard limit, past the weekly reserve's stop line, or over a part's
+share in `limit` mode, is denied instead. The denial names the reason and tells the agent that you
+are away and that it must not retry: after the reserve it waits for the release, and after a hard
+limit it waits for the limit to clear.
 
 - One file, `<state>/away.json`, serves every session on the machine.
 - Your next message in any session clears the marker, so you do not need to turn it off. A
@@ -392,76 +437,78 @@ limit to clear.
   prompt from a schedule, a loop, a notification, another session or a channel.
 - `paceline away off` clears it by hand, and `paceline away status` shows whether it is set, since
   when, and by which session.
-- The marker has no expiry, and it changes nothing while no hard limit holds and the burn stays
-  within the cap. See [The away marker has no expiry](limitations.md#the-away-marker-has-no-expiry)
-  and [A prompt through the Agent SDK leaves the away
+- The marker has no expiry, and it changes nothing while no hard limit holds, the week's usage is
+  short of the reserve's stop line and the plan, in `limit` mode, is not over its share. See [The
+  away marker has no expiry](limitations.md#the-away-marker-has-no-expiry) and [A prompt through the
+  Agent SDK leaves the away
   marker](limitations.md#a-prompt-through-the-agent-sdk-leaves-the-away-marker).
 
 ## The forecast
 
 The forecast is the share of the week that would be left unused at the reset if the burn rate of the
 last 24 hours continued. It needs at least two history points in the current weekly window, 3 hours
-or more apart; without them, `paceline status` shows no forecast. On Thursday and Friday, a forecast
-above `leftover_suggest_pct` (10%) adds the suggestion to propose leftover tasks.
+or more apart; without them, `paceline status` shows no forecast.
 
 ## The night allowance
 
-The night is the current night hours, or the next ones when the clock is outside them, cut at the
-weekly reset. The allowance for the night queue is the smallest of these, never below 0:
+The night is tonight's off-hours part of the week plan: the part that is running when you are in
+off-hours, else the one after today's working hours. The allowance for the night queue is the
+smallest of these, never below 0:
 
-- 5% plus the **surplus**: the spendable share minus what the norm would spend in the remaining day
-  hours.
-- The night's capacity: its hours × `five_hour_to_week_pct / 5` × `five_hour_threshold_night`.
-- 0 while free memory is below `min_free_commit_mb`; otherwise this bound does not apply.
-- The spendable share minus what the next day's day hours are allocated. On the last night before
-  the reset, nothing is kept for the next day.
+- The part's share: its fixed share minus what the part has spent while it runs, or its provisional
+  share (what the weights of the parts after it would give it now) before it starts.
+- The night's capacity: its hours × `five_hour_to_week_pct / 5` × `five_hour_stop_pct`.
+- 0 while the memory guard is on and free memory is below `min_free_commit_mb`; otherwise (including
+  with the guard off, the default) this bound does not apply.
+- Nothing else is kept back. The default off-hours mark is 0, so the allowance is 0 until you mark
+  the night, for example `paceline plan set 2026-10-29 --off-hours 0.5` (the date of tonight);
+  `paceline queue add` says so, with the command for the date, when tonight's share is 0.
 
-## Reservations
+## Holds
 
-A reservation records work that has started but whose cost has not shown in the weekly usage yet.
-While pace is on, its hooks hold one for each subagent, at `subagent_estimate_pct` (1%), and release
-it when the subagent stops. You reserve gates and other work by hand with `paceline reserve
-acquire`; `paceline queue start` reserves for a queue item.
+A hold records work that has started but whose cost has not shown in the weekly usage yet. While
+pace is on, its hooks place one for each subagent, at `subagent_estimate_pct` (1%), and release it
+when the subagent stops. You hold budget for gates and other work by hand with `paceline hold
+acquire`; `paceline queue start` places a hold for a queue item.
 
 The outstanding share is the sum of the active estimates minus the weekly usage added since the
-earliest of them was acquired, never below 0. Only the night queue subtracts it from its budget. The
-`pace:` line shows the number of active reservations; the budget per hour does not change.
+earliest of them was acquired, never below 0. Only the night queue subtracts it from its budget; the
+budget per hour does not change.
 
-A reservation ends when it is released, when its lease expires (30 minutes, or 240 minutes for a
-subagent's keyed reservation), or when its process is gone. At session end, the hook records the end
-and releases the session's reservations; when Claude Code's time for session-end hooks cuts it off,
-the next pace call releases them (see
-[limitations](limitations.md#reservations-of-a-cut-off-session-wait-for-the-next-pace-call)). The
-released reservation records its actual cost: the change in weekly usage since it was acquired.
+A hold ends when it is released, when its lease expires (30 minutes, or 240 minutes for a subagent's
+keyed hold), or when its process is gone. At session end, the hook records the end and releases the
+session's holds; when Claude Code's time for session-end hooks cuts it off, the next pace call
+releases them (see
+[limitations](limitations.md#holds-of-a-cut-off-session-wait-for-the-next-pace-call)). The released
+hold records its actual cost: the change in weekly usage since it was acquired.
 
-The Agent and Workflow hook also records a `launch` reservation for every launch it allows or asks
-about. It is recorded in the same lock hold that counts the active reservations, so the launches of
-one assistant message see each other, and the nth gate counts the n-1 launches before it, those of
-other sessions too. A `launch` reservation carries no estimate, never reaches the history that
-calibration reads, and ends after 60 seconds. The start of an agent takes over the oldest `launch`
-reservation of its session, so a started agent counts once; a Workflow holds one launch for all its
-agents, and the first start takes it over. A launch denied because you are away releases its
-reservation at once; a launch that you decline in a prompt keeps it until it ends. `paceline reserve
-list` shows it. See [Launch reservations rest on the order of Claude Code's
-hooks](limitations.md#launch-reservations-rest-on-the-order-of-claude-codes-hooks).
+The Agent and Workflow hook also records a `launch` hold for every launch it allows or asks about.
+It is recorded under the same lock that counts the active holds, so the launches of one assistant
+message see each other, and the nth gate counts the n-1 launches before it, those of other sessions
+too. A `launch` hold carries no estimate, never reaches the history that calibration reads, and ends
+after 60 seconds. The start of an agent takes over the oldest `launch` hold of its session, so a
+started agent counts once; a Workflow holds one launch for all its agents, and the first start takes
+it over. A launch denied because you are away releases its hold at once; a launch that you decline
+in a prompt keeps it until it ends. `paceline hold list` shows it. See [Launch holds rest on the
+order of Claude Code's hooks](limitations.md#launch-holds-rest-on-the-order-of-claude-codes-hooks).
 
 ## The night queue's decisions
 
-A night run starts with `paceline auto --start-run`, which fixes the night allowance and the weekly
-usage the run counts from. Before each item, the agent runs `paceline auto`. Its budget for the next
-item is the allowance minus what the run has spent minus the outstanding reservations.
+A night run starts with `paceline auto --start-run`, which fixes the night allowance, the end of the
+off-hours part and the weekly usage the run counts from. Before each item, the agent runs `paceline
+auto`. Its budget for the next item is the allowance minus what the run has spent minus the
+outstanding holds.
 
 **Decisions of paceline auto**
 
 1. `paceline auto` first asks whether the run has started; if not, it stops (exit 11).
 2. It stops when the account differs from the one at the start of the run.
-3. It stops when memory is below the floor or the night is over.
+3. It stops when the memory guard is on and memory is below the floor, or the night is over.
 4. It then looks at the next item: it stops when the queue is empty, every item is blocked or the
    budget is spent, and it waits (exit 10) while items are running or dependencies are pending.
-5. For an item that fits, it waits when the data is not fresh, the five-hour window is not below its
-   threshold, no model has headroom, or the five-hour burn would reach the night threshold before
-   the reset and caps the agents at 0; otherwise it starts the item (exit 0), with fewer agents when
-   the burn caps them.
+5. For an item that fits, it waits when the data is not fresh, the five-hour window is not below the
+   stop, or the five-hour burn would reach the stop before the reset and caps the agents at 0;
+   otherwise it starts the item (exit 0), with fewer agents when the burn caps them.
 
 To walk through the same decisions one step at a time, answer the questions below.
 
@@ -474,57 +521,59 @@ To walk through the same decisions one step at a time, answer the questions belo
          1. No: **Stop** (exit 11): `account changed during the run`. `auto` checks the account before every
             other stop.
          2. Unknown: **Wait** (exit 10): `account unknown`. The stops below still come first: the memory
-            floor, the end of the night, and the queue's own stops (empty, every remaining item needs the
-            owner's permission, or the night budget is spent with nothing running).
-         3. Yes: Is free memory at or above the floor, and is the night still on?
-            1. No: **Stop** (exit 11): free memory is below the floor, or the night is over.
+            floor (while the memory guard is on), the end of the night, and the queue's own stops (empty,
+            every remaining item needs the owner's permission, or the night budget is spent with nothing
+            running).
+         3. Yes: Is the memory guard off or free memory at or above the floor, and is the night still on?
+            1. No: **Stop** (exit 11): the memory guard is on and free memory is below the floor, or the night
+               is over.
             2. Yes: What does the queue hold?
                1. Nothing left to start: **Stop** (exit 11): the queue is empty, every remaining item is deferred
                   or blocked, or the next item does not fit the budget and nothing is running.
                2. Work in progress: **Wait** (exit 10): items are running or dependencies are pending. Run
                   `paceline auto` again later.
-               3. An item is ready: Is the data fresh, is five-hour usage below its threshold, and does an allowed
-                  model have weekly headroom?
-                  1. No: **Wait** (exit 10): the data is stale, five-hour usage is at or above its threshold (80% by
-                     day by default; `wait_until` says when the window resets), or no allowed model has headroom.
+               3. An item is ready: Is the data fresh and is five-hour usage below the stop?
+                  1. No: **Wait** (exit 10): the data is stale, or five-hour usage is at or above the stop
+                     (`five_hour_stop_pct`, 95% by default; `wait_until` says when the window resets).
                   2. Yes: Does the five-hour burn rate leave room for at least one agent?
-                     1. No: **Wait** (exit 10): at the recent rate the five-hour window would reach the night threshold
-                        (95% by default) before it resets, and the agent cap is 0. `wait_until` is the five-hour reset.
-                        Run `paceline auto` again later: a slower burn lets the queue start.
+                     1. No: **Wait** (exit 10): at the recent rate the five-hour window would reach the stop (95% by
+                        default) before it resets, and the burn leaves room for no agent (`max_parallel_agents` 0).
+                        `wait_until` is the five-hour reset. Run `paceline auto` again later: a slower burn lets the
+                        queue start.
                      2. Yes: **Start** (exit 0): run `paceline queue start <id>` for the item in the output.
                         `max_parallel_agents` is lower than without the burn when the five-hour window would still reach
-                        the night threshold before the reset.
+                        the stop before the reset.
 
 - **Start** (exit 0): the first pending item, in queue order, whose dependencies are done, that fits
   the budget, and that may run beside the running items. Only independent items run side by side.
-  `auto` advises `min(max_agents, heavy runs)` agents, or `min(max_agents, 3)` when memory is
-  unknown, and at least 1; the five-hour burn can lower it, down to 0 (see **Wait**).
+  `auto` advises `min(max_agents, heavy runs)` agents, or `min(max_agents, 3)` when the memory guard
+  is off or memory is unknown, and at least 1; the five-hour burn can lower it, down to 0 (see
+  **Wait**).
 - **Wait** (exit 10): running items or unfinished dependencies; stale data; five-hour usage at the
-  threshold or the hard stop, whichever is lower, with `wait_until` set to the five-hour reset; a
-  five-hour burn that would reach the night threshold before the window resets and leaves a cap of 0
-  agents, with `wait_until` set to the five-hour reset too; no allowed model with weekly headroom
-  for the item; no usage data at all; or the account cannot be resolved (`account unknown`).
-- **Stop** (exit 11): no run was started; free memory below the floor; the night is over; the queue
-  is empty; every remaining item is deferred or depends on a deferred item; the next item does not
-  fit the budget and nothing is running; or the signed-in account is not the one the run started
-  under (`account changed during the run`). `auto` checks the account before every other stop, and
-  stops at once, because the new account may have no readings yet. A run started with no known
-  account is not checked.
+  five-hour stop, with `wait_until` set to the five-hour reset; a five-hour burn that would reach
+  the stop before the window resets and leaves room for no agent (`max_parallel_agents` 0), with
+  `wait_until` set to the five-hour reset too; no usage data at all; or the account cannot be
+  resolved (`account unknown`).
+- **Stop** (exit 11): no run was started; free memory below the floor while the memory guard is on;
+  the off-hours part has ended; the queue is empty; every remaining item is deferred or depends on a
+  deferred item; the next item does not fit the budget and nothing is running; or the signed-in
+  account is not the one the run started under (`account changed during the run`). `auto` checks the
+  account before every other stop, and stops at once, because the new account may have no readings
+  yet. A run started with no known account is not checked.
 
-In `auto`, the throttle depends only on weekly usage: at `throttle_weekly_pct` with more than 24
-hours to the reset, the allowed models are `routine_models`. When five-hour usage is at or above 85%
-and the data is older than 125 seconds, `auto` merges the inbox first, so a window that has already
-filled is not missed.
+`auto` names no model: the orchestrator picks the model of each item, and reads the model-scoped
+weekly buckets in `weekly.scoped` of `paceline status --json`; a model whose scoped weekly limit is
+at 100% cannot run. When five-hour usage is at or above 85% and the data is older than 125 seconds,
+`auto` merges the inbox first, so a window that has already filled is not missed.
 
-In `auto`, the burn rate is projected to `five_hour_threshold_night` at any hour, because a night
-run answers to the night threshold. The agent count is capped as in [The five-hour burn
-rate](#the-five-hour-burn-rate), and the burn reason joins `reasons`. The queue calls `auto` before
-each item, so a burn that slows lets it start again before the reset.
+In `auto`, the burn rate is projected to `five_hour_stop_pct`, the same stop as in working hours.
+The burn lowers `max_parallel_agents`, and when no agent fits, `auto` waits; the burn reason joins
+`reasons`. The queue calls `auto` before each item, so a burn that slows lets it start again before
+the reset.
 
 The leftover pool runs only on the last night before the weekly reset, only when it was approved for
-the current weekly window, and only when the queue has no item to start. Its items share the night
-budget and are also limited to the surplus at the start of the run, minus what the pool has already
-started.
+the current weekly window, and only when the queue has no item to start. Its items share the run's
+budget.
 
 After the run, the agent writes a morning report from `templates/morning-report.md`, a template it
 fills from `paceline queue report` and the queue's state.

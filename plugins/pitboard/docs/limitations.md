@@ -218,3 +218,24 @@ marketplace: a plugin you install is not the organization's plugin, so the guard
 hooks. An administrator can seat PitBoard as the organization's plugin, which the guard does not
 skip: see [Seat PitBoard as your organization's
 plugin](how-to.md#seat-pitboard-as-your-organizations-plugin).
+
+### The plan rows need PaceLine's week plan file
+
+The `Plan` and `Reserve` rows, and the plan's `Spare`, `Overspent` and `Budget`, need PaceLine's
+week plan file of the signed-in account, `week-plan-<key>.json`. PaceLine writes it only while pace
+is on, once the current part has been fixed, and for the account PitBoard shows. At each boundary of
+the plan (09:00 and 18:00 by default) the part in the file ends, and the card shows the even pace
+until PaceLine writes the new part: about 40 seconds (PaceLine's module tick, a Python start and
+PitBoard's 20-second refresh), longer while another process holds PaceLine's pace lock. A weekly
+window that resets ahead of schedule, or whose reset moves later, does the same: the file's week no
+longer matches the card's, and the card shows the even pace until PaceLine's limits merge or a
+PaceLine command writes the new week, normally within the same time. A `claude` started from a
+Desktop terminal tab reads the plan of the Desktop account, as it shows that account's figures.
+
+**What you see:** with pace off, no usable file or another account's file, the Week card is the
+even-pace card, without `Plan` and `Reserve`; for about 40 seconds at each boundary, and when the
+weekly window resets ahead of schedule or its reset moves later, it falls back the same way.
+
+**What still works:** every other card and reading of the row. See [Use PitBoard with
+PaceLine](how-to.md#use-pitboard-with-paceline) and [PaceLine's week plan
+file](../../paceline/docs/reference.md#the-week-plan-file-for-readers).

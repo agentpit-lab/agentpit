@@ -18,32 +18,28 @@ In this page, `<state>` is the state directory: `$PACELINE_STATE_DIR`, else
 | `paceline off` | turn the pace hooks off (every command still runs) |
 | `paceline status` | interactive one-line recommendation |
 | `paceline auto` | autonomous parameters for the next queue item |
-| `paceline calibrate` | propose parameter corrections from history |
-| `paceline simulate` | replay a week through the budget for each spending style (a model: one reading per hour, no plans or reservations) |
 | `paceline settings` | every setting and switch with its value, default and source; read-only |
 | `paceline profile` | print, change or check the profile (creates it with the detected time zone) |
 | `paceline profile show` | print the profile (the default) |
 | `paceline profile set` | change one key, with checks |
-| `paceline profile style` | take one spending style's values for its keys together |
 | `paceline profile check` | the time zone against this machine's, with a hint |
-| `paceline doctor` | diagnose pace on this machine; read-only without --live |
-| `paceline merge` | merge the sessions' readings from the inbox into rate-limits.json |
-| `paceline plan` | declared future plan changes |
-| `paceline plan add` |  |
-| `paceline plan list` |  |
-| `paceline plan find` |  |
-| `paceline plan modify` |  |
-| `paceline plan cancel` |  |
-| `paceline plan confirm` |  |
-| `paceline plan tomorrow` |  |
-| `paceline reserve` | reservation registry |
-| `paceline reserve acquire` |  |
-| `paceline reserve renew` |  |
-| `paceline reserve release` |  |
-| `paceline reserve release-session` |  |
-| `paceline reserve prune` |  |
-| `paceline reserve list` |  |
-| `paceline reserve reconcile` |  |
+| `paceline plan` | the week plan: marks per part, shares, template (no subcommand: show the week) |
+| `paceline plan set` | mark a day's working hours and off-hours |
+| `paceline plan reset` | remove a day's marks, or every day's |
+| `paceline plan template` | the weekday marks every week starts from |
+| `paceline plan template show` | the template (the default) |
+| `paceline plan template set` | mark a weekday |
+| `paceline plan template reset` | remove a weekday's marks, or the whole template |
+| `paceline mode` | inform (no plan prompts) or limit (a launch past the part's share asks); bare: show it |
+| `paceline reserve` | the weekly reserve: show it, or set its size, release weekday and name |
+| `paceline hold` | hold registry |
+| `paceline hold acquire` |  |
+| `paceline hold renew` |  |
+| `paceline hold release` |  |
+| `paceline hold release-session` |  |
+| `paceline hold prune` |  |
+| `paceline hold list` |  |
+| `paceline hold reconcile` |  |
 | `paceline queue` | night queue and leftover pool (--pool) |
 | `paceline queue add` |  |
 | `paceline queue list` |  |
@@ -72,7 +68,8 @@ options:
 - `--json`: print the full result as JSON.
 - `--model ID`: the current model ID. It selects a model-scoped weekly bucket when the limits file
   has one. Default: `$PACELINE_MODEL`, else `$ANTHROPIC_MODEL`.
-- `--session ID`: the Claude Code session ID. Default: `$CLAUDE_SESSION_ID`.
+- `--session ID`: the Claude Code session ID. It also picks the session's account from
+  `<state>/session-accounts/`. Default: `$CLAUDE_SESSION_ID`, else `$CLAUDE_CODE_SESSION_ID`.
 - `--no-merge`: use the limits file as it is, without merging the inbox first.
 - `--now TIME`: an ISO 8601 time to use as the clock, for what-if runs and tests. Default:
   `$PACELINE_NOW`, else the real time.
@@ -83,22 +80,23 @@ options:
 - `paceline status` prints one line, for example:
 
   ```
-  7d 34% reset 2026-10-03 03:00+00:00 | budget 1.45%/h (weekday norm 1.03) | agents <=3 model opus | 5h 23%/80 | night 15.2% | data 1 min old
+  7d 34% reset 2026-10-03 03:00+00:00 | budget 1.45%/h (working-hours norm 1.03) | 5h 23%/95 | night 15.2% | data 1 min old
   ```
 
-  The fields, in order: weekly usage with any model-scoped buckets and the local reset time; the
-  budget per hour against the norm for the same kind of hour (the weekday rate is added when it
-  differs from the budget); `forecast unused`, when there is enough history; the advised parallel
-  agents and model; five-hour usage against the current threshold; the night allowance; the age of
-  the data, with `STALE` in front when it is older than 30 minutes. Further fields appear only when
-  they apply: `account unknown (<reason>)`, when the figures cannot be told to be the signed-in
-  account's (the reasons are `untagged`, `no-file`, `unreadable`, and `no-account`), `other account
-  <8 digits> active; --account <8 digits>`, one entry for each other account with a reading under 30
-  minutes old, shown only when the key came from `.claude.json` (neither the account variables nor
-  `--account` named it), `host memory unknown`, `pace hooks off (paceline on)`, a `WARNING` that the
-  rest of the week is near the day hours' capacity, the reasons for a block, pause, throttle, or
-  five-hour burn (for example `5h burn 42.7%/h vs budget 13.9%/h: 80% at <time>, before reset
-  <time>`), unconfirmed plans that start tomorrow, and the leftover-pool suggestion. The
+  The fields, in order: the plain weekly usage and the local reset time; the budget per hour against
+  the norm of the current part (`working-hours norm` or `off-hours norm`); `forecast unused`, when
+  there is enough history; five-hour usage against the five-hour stop; the night allowance; the age
+  of the data, with `STALE` in front when it is older than 30 minutes. Further fields appear only
+  when they apply: `account unknown (<reason>)`, when the figures cannot be told to be the signed-in
+  account's (the reasons are `untagged`, `no-file`, `unreadable`, `no-account`, `no-credential`, and
+  `no-state-key`; while the session's account is `pending`, or is not known for the reason `desktop`
+  or `logged-out`, `status` shows no figures and stops with `no usage data yet`), `other account <8
+  digits> active; --account <8 digits>`, one entry for each other account with a reading under 30
+  minutes old, shown only when the key came from `.claude.json`, that is, outside a session and with
+  neither `PACELINE_ACCOUNT_KEY` nor `--account`, `host memory unknown` (only while the memory guard
+  is on), `pace hooks off (paceline on)`, a `WARNING` that the rest of the week is near the capacity
+  of the hours left, and the reasons for a block. The line names no model and no number of agents;
+  the model-scoped weekly buckets are in `paceline status --json` under `weekly.scoped`. The
   [explanation](explanation.md) says how each number is computed. With `--json`, `data.account` is
   `{"state": "known" | "unknown", "key": <the signed-in account's key or null>, "reason": <code or
   null>}`; `key` is the one-way key of [the inbox](#the-inbox-for-writers), never an identifier of
@@ -108,197 +106,177 @@ options:
   matches exit with code 2 and list the candidate keys. `--account` belongs to `status` alone; the
   gates and the night queue always use the account of the session.
 - `paceline auto [--start-run]` prints the parameters for the next night-queue item, for example
-  `auto: START Q3 | budget 4.20% | agents <=3 models opus,sonnet,haiku`, and exits 0 (`start`), 10
-  (`wait`), or 11 (`stop`). `--start-run` begins tonight's run: it fixes the night allowance and the
-  weekly usage it counts from. Running it again in the same night keeps that run. With `--json`, the
-  result has `action`, `next_item`, `budget_for_next_item_pct`, `max_parallel_agents`,
-  `max_heavy_runs`, `allowed_models`, `wait_until`, and `reasons`. At any hour, `auto` projects the
-  five-hour burn rate to the night threshold and lowers `max_parallel_agents`; when the cap reaches
-  0, `auto` waits and `wait_until` is the five-hour reset. A run remembers the account it started
-  under. When another account is signed in, `auto` stops with the reason `account changed during the
-  run`, checked before every other stop; when the account cannot be resolved, it waits with `account
-  unknown`.
+  `auto: START Q3 | budget 4.20% | agents <=3`, and exits 0 (`start`), 10 (`wait`), or 11 (`stop`).
+  `--start-run` begins tonight's run: it fixes tonight's off-hours allowance, the end of that part
+  (`night_end`) and the weekly usage it counts from. Running it again in the same night keeps that
+  run. With `--json`, the result has `action`, `next_item`, `budget_for_next_item_pct`,
+  `max_parallel_agents`, `max_heavy_runs`, `wait_until`, and `reasons`. At any hour, `auto` projects
+  the five-hour burn rate to the five-hour stop and lowers `max_parallel_agents`; when the cap
+  reaches 0, `auto` waits and `wait_until` is the five-hour reset. The result names no model. A run
+  remembers the account it started under. When another account is signed in, `auto` stops with the
+  reason `account changed during the run`, checked before every other stop; when the account cannot
+  be resolved, it waits with `account unknown`.
 - `paceline on` and `paceline off` write the pace switch, `<state>/pace.json`.
-- `paceline calibrate` reads the limits history and the completed reservations and proposes new
-  values for `five_hour_to_week_pct`, `reserve_pct`, `weekend_cap_pct`, and `subagent_estimate_pct`,
-  plus a ratio of actual to estimated cost for your task estimates. The proposal to raise
-  `reserve_pct` by 2 rests on the weekly usage at the start of each past window's reserve release
-  (see `reserve_release_start`); a window without a reading at or before that instant is skipped.
-  With `--json`, `evidence.left_at_release_pct` lists, for each window, what was left at the release
-  start. It needs 14 days of history and changes nothing.
 - `paceline profile` prints the profile; `show` is the default. `paceline profile set KEY VALUE`
-  changes one key with checks (see [Profile keys](#profile-keys)). `paceline profile style
-  careful|balanced|full` sets nine keys together (see [Settings and spending
-  styles](#settings-and-spending-styles)). `paceline profile check` prints `timezone follows this
-  machine: <zone>` in machine mode, and otherwise compares the profile's fixed time zone with this
-  machine's and prints a hint when they differ; with `--json` it adds `mode` (`machine` or `fixed`)
-  and `effective`, the zone in use.
-- `paceline merge [--verbose]` merges the inbox into the limits file now. It prints nothing unless
-  you pass `--verbose` or `--json`.
-- `paceline doctor [--live] [--bundle PATH]` diagnoses PaceLine on this machine. It runs these
-  probes: `runtime`, `paths`, `switch`, `inbox`, `limits`, `account`, `process`, `memory`,
-  `timezone`, `hooks`, and `debug_log`, each `ok`, `warn`, or `fail`, with a hint for some. The
-  `timezone` probe reports the profile's zone, the mode, and the zone in use. The `account` probe
-  reports `known` or `unknown` and a reason code (`no-file`, `unreadable`, `no-account`), and
-  nothing from `.claude.json`. `--json` shows the evidence of each probe. Without `--live` it
-  changes nothing; `--live` also runs one merge. `--bundle` writes a zip with the report, the debug
-  log, the profile, the pace switch, the limits file, the last 50 history lines, and the last 20
-  reservations. The report and the bundle write your home directory as `~`. The bundle holds the
-  plan phrases you typed, reservation labels, and session IDs.
+  changes one key with checks (see [Profile keys](#profile-keys)). `paceline profile check` prints
+  `timezone follows this machine: <zone>` in machine mode, and otherwise compares the profile's
+  fixed time zone with this machine's and prints a hint when they differ; with `--json` it adds
+  `mode` (`machine` or `fixed`) and `effective`, the zone in use.
 - `paceline status --json` shows the burn rule under `five_hour.burn` (`rate_per_hour_pct`,
   `budget_per_hour_pct`, `budget_share`, `threshold_pct`, `threshold_at`, `threshold_at_local`,
-  `base_at`, `span_min`, and `limited`; `null` while no rate is measured), the cap under
-  `recommendation.five_hour_burn_limited`, and the away marker under `away` (`on`, `set_at`,
-  `session`). `reserve_release_start` and `reserve_release_start_local` give, at the top level, the
-  instant the reserve starts to fall; under `weekend`, `reserve_released_pct` is the part of the
-  reserve released since the weekend began, which the weekend cap may add to itself. `paceline
-  status --launch-key KEY` also holds a short-lived `launch` reservation under that key; the Agent
-  and Workflow hook passes the tool call ID.
+  `base_at`, `span_min`, and `limited`; `null` while no rate is measured), `recommendation`
+  (`blocked` and `reasons`), and the away marker under `away` (`on`, `set_at`, `session`). `reserve`
+  gives, at the top level and in `paceline plan --json`, the weekly reserve: `pct`, `name`,
+  `release` (the release weekday; `null` is the last day before the reset), `release_at`,
+  `release_at_local`, `release_day`, `release_text` and `reset_text` (the local weekday, day and
+  clock, for example `Fri 30 09:00`), `label` (the reserve as the texts name it, for example
+  `reserve "tests" 8 %`), `released`, `kept_to_reset` (true when no release falls inside the week,
+  so the reserve is kept to the reset), `opens_clock` (the local clock the reserve opens at, for
+  example `09:00`; `null` when it is off, released or kept to the reset), `kept_pct` (what is kept
+  now), `stop_at_pct` (100 less `pct`), `used_pct` (the plain weekly usage the stop compares),
+  `over` (true before the release while the usage is at or past the stop line), and `text`, the line
+  `status` and `plan` print. At 0 % the release fields and `stop_at_pct` are `null`. When the
+  reserve cannot be computed, the object holds only `error`, `over` (false), `kept_pct` (0) and
+  `text` (`reserve unknown: the stop is off`), and the figures around it are unaffected.
+  `budget_part` names the part the budget comes from (`kind`, `day`, `start`, `end`, `share_pct`,
+  `spent_pct`, `part_hours`, `hours_left`, `unplanned`, and `stored`, true when the part's entry is
+  in the plan file). `night` describes tonight's off-hours part: `date`, `start`, `end`, `hours`,
+  `current`, `mark`, `weight`, `share_pct`, `fixed`, `window_capacity_pct`, `host_capacity_pct`,
+  `last_before_reset`, and `allowance_pct`. `paceline status --launch-key KEY` also holds a
+  short-lived `launch` hold under that key; the Agent and Workflow hook passes the tool call ID.
 
-### Settings and spending styles
+### Settings
 
 - `paceline settings [--json]` prints every PaceLine setting and switch with its value: the four
   switches (pace, usage-watch, away, context-watch), the profile keys, context-watch's three
-  settings, cache-watch's two defaults, the time zone mode, the spending style, and the files behind
-  them. A `*` marks a value that differs from its default. It only reads: it never runs a
-  simulation. With `--json` each value has `value` and `default` (context-watch and cache-watch also
-  `range`), and the result adds `switches`; `timezone` (`mode`, `stored`, `effective`, `detected`,
-  `usable`, `hint`); `styles`, each style's nine values with `value`, `builtin`, and `source`
-  (`builtin` or `override`); `style` (`careful`, `balanced`, `full`, or `custom`); `style_warnings`;
-  `preview`, the per-style figures of `paceline simulate --preview` from a cached result for the
-  current inputs, else `null`; `preview_inputs` (`reset`, `reset_local`, `reset_source` of that
-  result, else `null`); and `files`.
-- `paceline profile style careful|balanced|full [--json]` sets the nine keys of a style together,
-  checks each value as `profile set` does, saves once, prints one `KEY: OLD -> NEW` line for each
-  key that changed, and ends with the `paceline status` line. An unknown name exits 2 and changes
-  nothing. The profile stores no style name: `paceline settings` reports the style whose nine values
-  equal the profile's, with your overrides applied, else `custom`.
+  settings, cache-watch's two defaults, the time zone mode, and the files behind them. It also
+  shows, from the week plan of the session's account, the working hours and the three reserve values
+  (`reserve_pct`, `reserve_release`, `reserve_name`), which are not profile keys. A `*` marks a
+  value that differs from its default. It only reads: it never runs a simulation. With `--json` each
+  value has `value` and `default` (context-watch and cache-watch also `range`), and the result adds
+  `switches`; `timezone` (`mode`, `stored`, `effective`, `detected`, `usable`, `hint`); `plan`, with
+  `work_hours`, `reserve_pct`, `reserve_release` and `reserve_name` (each `value`, `default`,
+  `range`, and a `note` when the account is not known or the plan file cannot be read); and `files`,
+  where `plan` is the plan file, or `null` while the session's account is not known.
 
-The built-in values of the three styles. `balanced` is the profile's defaults, so it follows a
-change of a default. [The explanation](explanation.md#the-spending-styles) says what each key does.
+### The week plan
 
-| Key | careful | balanced (the defaults) | full |
-|---|---|---|---|
-| `five_hour_threshold_day` | `70` | `80` | `90` |
-| `five_hour_threshold_night` | `90` | `95` | `97` |
-| `five_hour_hard_stop` | `90` | `95` | `97` |
-| `reserve_pct` | `12` | `8` | `4` |
-| `reserve_decay_start` | `{"hour": 18, "weekday": 4}` | `{"hour": 18, "weekday": 4}` | `{"hour": 18, "weekday": 3}` |
-| `throttle_weekly_pct` | `80` | `85` | `92` |
-| `weekend_cap_pct` | `15` | `20` | `30` |
-| `leftover_suggest_pct` | `15` | `10` | `5` |
-| `reserve_release_min_hours` | `0` | `54` | `54` |
+- `paceline plan [--json]` prints the week from the current part to the reset. A day has two parts,
+  its working hours (☼) and the off-hours after them (☾). Each day is one line with the mark of each
+  part (`off`, `light`, `normal`, `heavy`, or a number), the part's share of what is left in
+  percent, and a bar scaled to twice the even pace; `▲` marks a day above that scale. The current
+  part carries `◀ now` and `spent X of Y (pro rata Z)`, and `estimated` when its starting usage was
+  read after the start. A part the week cuts shows its hours, for example `☼ 09:00-14:00 (5 h)`.
+  Below the days come the reserve line (for example `reserve 8 % kept, opens Fri 30 09:00`, the text
+  `status` also shows; the release day's row ends with `· reserve opens 09:00` while the reserve is
+  kept), the even pace, the bar top, what is unplanned and when it expires, and `not reachable in N
+  windows` for a share the part's five-hour windows cannot deliver. The warning shows only once the
+  window ratio is calibrated: run `paceline calibrate`, then `paceline profile set
+  five_hour_to_week_pct VALUE`; while the ratio is still its default 10.0, `unreachable_windows` is
+  `null` and no warning shows. `--json` prints one object: `mode`, `effective_mode`, `inform_until`,
+  `work_hours`, `week`, `used_pct`, `reserve` (see `paceline status --json`), `left_pct`,
+  `even_pct_per_day`, `bar_scale_pct`, `unplanned_pct` and `expires_at` (both `null` unless the rest
+  of the week is unplanned), `current`, `days` (from today's date), and `week_days` (every date of
+  the week, ended parts included). Each part carries `kind`, `start`, `end`, `hours`, `cut`, `mark`,
+  `weight`, `state` (`ended`, `current`, or `later`), `share_pct`, `fixed`, `unplanned`,
+  `estimated`, `spent_pct`, `allowed_pct`, `over`, `reach_pct`, and `unreachable_windows`.
+- `paceline plan set DAY [--work V] [--off-hours V]` marks a day; give at least one option. DAY is
+  `today`, `tomorrow`, `mon` to `sun` (the next such day, today included), or `YYYY-MM-DD`, and it
+  must own a part of the current week, else the command exits 2. V is `off` (or `day-off`), `light`
+  (0.5), `normal` (1), `heavy` (1.5), or a number from 0 to 2 in steps of 0.25. A mark for a part
+  that is running, has ended, or lies outside the week is stored, and the command says it changes
+  nothing in this week's plan.
+- `paceline plan reset [DAY]` removes the marks of one day, or of every day.
+- `paceline plan template [show | set WEEKDAY [--work V] [--off-hours V] | reset [WEEKDAY]]` shows,
+  sets, or clears the marks every week starts from; a day without marks of its own takes its
+  weekday's. Without a mark, working hours are `normal` and off-hours are `off`, so a night queue
+  has no allowance until the off-hours are marked.
+- `paceline mode [inform|limit] [--until-part-end]` shows or sets the mode. `inform` is the default;
+  `limit` makes a launch ask first when the current part is planned and its spending is more than 1
+  point above its share pro rata by now (`pace plan: ...`); the first question of a part names
+  `paceline mode inform --until-part-end`. A hard limit asks in both modes, and an unplanned part
+  never asks. While the away marker is set, a question is a denial. `mode inform --until-part-end`
+  is accepted only in `limit`: it keeps `limit` stored but reads as `inform` until the current part
+  ends. In `inform` it exits 2 with `already in inform mode`.
+- `paceline profile set work_hours HH:MM-HH:MM` sets the working hours of the plan file, in the
+  profile's time zone. Minutes are multiples of 15, the start is before the end within one day, and
+  both the working hours and the rest of the day last at least an hour; a refused value exits 2. The
+  new hours apply from the end of the part that is running. `work_hours` is not a profile key.
+- `paceline status --json` carries `plan`: `mode`, `effective_mode`, `inform_until`, `part` (`kind`,
+  `day`, `start`, `end`, `end_local`, `share_pct`, `spent_pct`, `allowed_pct`, `over`, `unplanned`,
+  `estimated`), and `first_prompt`. Only `status --launch-key` can return `first_prompt` true, once
+  for each part in `limit` mode. When the plan file cannot be read, `plan` is `null` and
+  `plan_error` says why.
 
-You can override a style's values by hand in `<state>/pace-styles.json` (see [Files](#files)). An
-override applies to `profile style`, `settings`, and `simulate`; `settings` and the settings view
-show a value taken from it with the source `override`, and an ignored value as a warning.
+Every command above that reads or changes the plan first fixes the current part's share, once, at
+the part's start, from the usage at that start; a later command in the same part writes nothing.
+Setting the marks, the template, `work_hours`, the time zone, or a reserve key fixes the running
+part first, so the change applies from the next part. Exit codes: 1 for a plan file that is not
+valid JSON or a missing weekly reading, 2 for a refused value or day. The old `plan add`, `list`,
+`find`, `modify`, `cancel`, `confirm`, and `tomorrow` commands are gone, and a profile's old
+declared plans are dropped without conversion.
 
-### Simulate a week
+### The weekly reserve
 
-`paceline simulate` replays one weekly window through PaceLine's own budget code, hour by hour (168
-steps), and prints what each spending style does to it. It reads the profile and the account's
-reading, writes nothing except its cache `<state>/pace-simulate.json`, and never changes the
-profile. Options:
+- `paceline reserve [PCT] [--release DAY] [--name TEXT] [--json]` shows or sets the weekly reserve
+  of the session's account. Bare, it prints the reserve's text, for example `reserve 8 % kept, opens
+  Fri 30 09:00`, and with `--json` the `reserve` object of `paceline status --json`. Without a
+  weekly reading it prints the stored values and `release instant unknown: no usage data yet`, and
+  `release_at` is `null`. In a week with no release candidate (a daylight-saving change can leave
+  the release day without a working start) the release instant is the reset and the reserve never
+  opens that week: the text reads `reserve 8 % kept to the reset Sat 31 05:00`.
+- `PCT` is a whole number from 0 to 50; `0` turns the reserve off and keeps the release day and the
+  name for a later `reserve 8`. `--release DAY` is `mon` to `sun`, or `last` for the last day before
+  the reset; the release is a weekday kept from week to week, so `today`, `tomorrow` and dates are
+  refused. `--name TEXT` is 1 to 32 printable characters, and `--name ""` clears it. A value that
+  breaks a rule exits 2 and writes nothing.
+- A write fixes the running part first, like the plan commands, and prints the change and its
+  effect: `reserve: 8 % -> 10 %`, the new reserve text, `week used 93 % is past 90 %: launches ask
+  from now` when the new reserve is kept and the stop line is already reached, and `released for
+  this week; kept again from the reset Sat 31 05:00` when the new release day has passed. Moving the
+  release to a later weekday after the reserve was released this week holds it again at once, and
+  the answer says so. A write is refused while the session's account is not known yet, and skipped
+  for a clock ahead of the wall clock (`clock is ahead of the wall clock: nothing written`).
+- With `--json` a write prints `key` (`reserve_pct`, `reserve_release` or `reserve_name`), `old` and
+  `new` of the first change in that order, `changes` (every change as `key`, `old`, `new`; a release
+  of `null` means `last`), the `reserve` object, and `written`.
 
-- `--style careful|balanced|full|current|all`, repeatable, default `all`: the built-in styles with
-  your overrides applied, and `current`, the profile's own nine values. `all` is the three styles,
-  plus `current` when `paceline settings` reports `custom`.
-- `--week on-track|heavy-start|light-start|away-thu-fri|all`, repeatable, default `all`: the shape
-  of the week. In each day hour the simulated operator spends the hour's budget times a factor:
-  `on-track` 1 every day hour; `heavy-start` 2 in the window's first 72 hours, then 1; `light-start`
-  0.5 in the first 72 hours, then 1; `away-thu-fri` 0 in the day hours of local Thursday and Friday,
-  else 1. The spend never exceeds `five_hour_to_week_pct / 5` per hour, and stops while the
-  recommendation blocks.
-- `--night-queue no|yes|both`, default `both`: each week without and with a night queue. A night
-  queue spends the night's whole allowance over the night hours.
-- `--reset ISO`: the weekly reset that the window ends at. Default: the account's next reset from
-  the current reading, else the next Monday 00:00 in the profile's zone (`reset_source` `default`).
-- `--defaults`: the built-in defaults with the zone `UTC`, instead of your profile and your
-  overrides.
-- `--preview`: the selection the settings view uses, `--week on-track --night-queue both --style
-  all`. `--cached`: answer from `<state>/pace-simulate.json` when its key matches, else compute and
-  store the result; the file holds at most eight results, and a new reset, a changed profile or
-  override, or an update of PaceLine misses once.
+The reserve is a safety stop, not part of the plan: before its release instant a launch asks once
+the week's usage reaches 100 less the reserve. `reserve` followed by an old subcommand, such as
+`acquire`, exits 2 and names the `paceline hold` command that took over. The settings pane and
+`paceline settings` show the three values as `reserve_pct`, `reserve_release` and `reserve_name`
+under the plan.
 
-The text output is a header line with the reset in the profile's zone, the zone, the day and night
-hours, whether the profile is yours or the defaults, and the note that this is a model, then one row
-for each style, week, and queue:
+### Holds
 
-```
-Reset Mon 2026-10-19 00:00+00:00 (argument) | zone UTC | day 8-22 h, night 0-8 h | the defaults | a model: one reading per hour, no plans or reservations
+- `paceline hold acquire --kind subagent|workflow|gate|queue [--estimate PCT] [--label TEXT] [--key
+  KEY] [--pid PID] [--item ID]` places a hold. `--estimate` is the expected cost in percent of the
+  weekly limit; it is required for every kind except `subagent`, which defaults to
+  `subagent_estimate_pct`. With `--key`, a session keeps one hold per key, and a repeated acquire
+  renews it. `--pid` is the owning Claude Code process; the default is the nearest parent process
+  whose name starts with `claude`, else the live `claude` process that the `CLAUDE_PID` variable
+  Claude Code exports names, as when a shell launcher has already exited (Git Bash on Windows). With
+  neither, the hold has no owner process and ends when it is released or its lease runs out. Hold
+  IDs are `H-` and eight hex digits.
+- `paceline hold renew ID` renews a lease. It exits 4 when the hold has expired or was released.
+- `paceline hold release [ID] [--key KEY] [--actual PCT]` releases one hold, named by ID or by key.
+  The actual cost defaults to the change in weekly usage since the hold was acquired. It exits 4
+  when there is nothing to release.
+- `paceline hold release-session [--target-session ID]` releases every hold of a session, by default
+  the one in `--session`.
+- `paceline hold prune` drops holds whose lease expired or whose process is gone.
+- `paceline hold list` lists the active holds.
+- `paceline hold reconcile` summarizes completed holds by kind: count, estimated and actual sums,
+  and the median ratio of actual to estimate.
+- A hold of kind `launch` is not acquired with `hold acquire`. `paceline status --launch-key KEY`
+  holds it, under the same lock that counts the active holds. It carries no estimate, never reaches
+  the completed holds, and ends after 60 seconds. `hold acquire --kind subagent` closes the oldest
+  `launch` hold of the same session, and `hold release --key KEY --session ID` drops one by hand;
+  both the key and the session must be those of the launch. `hold list` shows it.
 
-style     week          queue   unused  weekend   night asks h throttled h  peak 5h
-balanced  on-track      no       0.9 %   26.7 %   0.0 %      0           0   62.4 %
-balanced  on-track      yes      0.4 %   17.2 %  30.0 %      0          42   47.9 %
-```
-
-`unused` is 100% less the usage at the reset; `weekend` is the spend in weekend day hours; `night`
-the spend in night hours; `asks h` the hours in which a launch would ask you first; `throttled h`
-the day hours in which the recommendation throttles; `peak 5h` the highest five-hour usage. With
-`--json`, the result has `model` (`version`, `steps`, `pins`), `inputs` (`reset`, `reset_local`,
-`reset_source` `account`, `argument`, or `default`, `profile` `own` or `defaults`, `timezone`,
-`day_hours`, `night_hours`, `styles`), `results` (one object for each row, with `unused_pct`,
-`used_pct`, `weekend_day_pct`, `night_pct`, `asks_h`, `throttled_h`, `paused_h`, `blocked_h`, and
-`peak_five_hour_pct`), `preview` (the per-style figures of an on-track week, with `--preview`, else
-`null`), `warnings`, and `cache` (`key`, `hit`).
-
-Exit code 0 on success; 2 for a usage error, such as an unknown style, week, or queue, or a
-`--reset` that is not an ISO 8601 instant; 1, with the reason, for a profile that cannot be read.
-The same inputs give the same figures on one Python version; across versions the last digit can
-differ. [The explanation](explanation.md#the-weekly-simulation) says what the model leaves out.
-
-### Plans
-
-- `paceline plan add --type away|heavy --from DATE --to DATE [--weight W] [--phrase TEXT]` declares
-  a future absence (`away`) or heavy day (`heavy`). A date is `YYYY-MM-DD`, `today`, `tomorrow`, or
-  an ISO 8601 date and time, in the profile's time zone. A bare date as `--to` includes that whole
-  day. The weight defaults to 0 for `away` and to 2 for `heavy`. `--phrase` keeps your own words, so
-  a later `find --text` can match them. Plan IDs are `P1`, `P2`, and so on.
-- `paceline plan list` lists every declared plan.
-- `paceline plan find [--text TEXT] [--on DATE] [--type away|heavy]` lists the plans whose phrase
-  contains the text, that overlap that day, or that have that type. It exits 0 for one match, 3 for
-  several, and 4 for none.
-- `paceline plan modify ID [--from DATE] [--to DATE] [--weight W] [--phrase TEXT]` changes a plan
-  and clears its confirmation.
-- `paceline plan cancel ID` removes a plan.
-- `paceline plan confirm ID` marks a plan confirmed today. The session-start reminder then stops for
-  it. The budget does not change.
-- `paceline plan tomorrow` lists the plans that start tomorrow and are not confirmed today.
-
-`add`, `modify`, and `cancel` end their line with the new budget, for example `plan P4 away
-2026-10-16 00:00+02:00 .. 2026-10-17 00:00+02:00 added; budget 1.21%/h, night 5.0%`. Plans that have
-ended are removed by the next command.
-
-### Reservations
-
-- `paceline reserve acquire --kind subagent|workflow|gate|queue [--estimate PCT] [--label TEXT]
-  [--key KEY] [--pid PID] [--item ID]` holds a reservation. `--estimate` is the expected cost in
-  percent of the weekly limit; it is required for every kind except `subagent`, which defaults to
-  `subagent_estimate_pct`. With `--key`, a session holds one reservation per key, and a repeated
-  acquire renews it. `--pid` is the owning Claude Code process; the default is the nearest parent
-  process whose name starts with `claude`. Reservation IDs are `R-` and eight hex digits.
-- `paceline reserve renew ID` renews a lease. It exits 4 when the reservation has expired or was
-  released.
-- `paceline reserve release [ID] [--key KEY] [--actual PCT]` releases one reservation, named by ID
-  or by key. The actual cost defaults to the change in weekly usage since the reservation was
-  acquired. It exits 4 when there is nothing to release.
-- `paceline reserve release-session [--target-session ID]` releases every reservation of a session,
-  by default the one in `--session`.
-- `paceline reserve prune` drops reservations whose lease expired or whose process is gone.
-- `paceline reserve list` lists the active reservations.
-- `paceline reserve reconcile` summarizes completed reservations by kind: count, estimated and
-  actual sums, and the median ratio of actual to estimate.
-- A reservation of kind `launch` is not acquired with `reserve acquire`. `paceline status
-  --launch-key KEY` holds it, in the same lock hold that counts the active reservations. It carries
-  no estimate, never reaches the completed reservations, and ends after 60 seconds. `reserve acquire
-  --kind subagent` closes the oldest `launch` reservation of the same session, and `reserve release
-  --key KEY --session ID` drops one by hand; both the key and the session must be those of the
-  launch. `reserve list` shows it.
-
-A reservation is dropped when its lease expires (30 minutes without a key, 240 minutes with one) or
-when its process is gone. A completed reservation records `overlapped` when another reservation ran
-at the same time: its measured cost is a change in account-wide weekly usage, so parallel work
-inflates it.
+A hold is dropped when its lease expires (30 minutes without a key, 240 minutes with one) or when
+its process is gone. A completed hold records `overlapped` when another hold ran at the same time:
+its measured cost is a change in account-wide weekly usage, so parallel work inflates it.
 
 ### Night queue and leftover pool
 
@@ -311,7 +289,7 @@ Queue item IDs are `Q1`, `Q2`, and so on; pool item IDs are `L1`, `L2`, and so o
 - `list` lists the items. `report` summarizes the current run: done, deferred, running, and pending
   items, with the sums of their estimates and actual costs.
 - `approve` (pool only) approves the pool for the current weekly window.
-- `start ID [--pid PID]` marks a pending item `running` and holds a `queue` reservation for it.
+- `start ID [--pid PID]` marks a pending item `running` and places a `queue` hold for it.
 - `done ID [--actual PCT]` marks it `done`; the actual cost defaults to the change in weekly usage
   since it started.
 - `fail ID [--reason TEXT]` counts one failed fix of the item's checks. At 3 failures, the item is
@@ -383,14 +361,15 @@ Defaults: on, line off, warnings at 85% and 95%, snapshots kept 14 days.
   command Claude Code names.
 
 `away` takes no common option. While the marker is set, the Agent and Workflow hook denies a launch
-that would ask. `paceline status --json` shows the marker under `away`. See [The away
+that would ask, for a hard limit, the weekly reserve's stop line, or the plan in `limit` mode.
+`paceline status --json` shows the marker under `away`. See [The away
 marker](explanation.md#the-away-marker).
 
 ### Skills
 
 Each skill runs the matching command for you:
 
-- `/paceline:pace on|off|status|doctor|profile|profile set KEY VALUE|profile style NAME|plan`
+- `/paceline:pace on|off|status|doctor|profile|profile set KEY VALUE|simulate|plan`
 - `/paceline:cache-watch on|off|status|config`
 - `/paceline:away on|off|status`
 - `/paceline:context-watch status|config`
@@ -400,14 +379,113 @@ Each skill runs the matching command for you:
 
 `/paceline:settings` shows every setting and switch. In a session where PaceLine's module runs, it
 answers before the model: a summary with the four switches, a table for each group (You and your
-day, This machine, Watchers, Spending style), a `●` before each value that differs from its default,
-and the count of Advanced settings that differ. `pane` opens an editable pane in Claude Code Desktop
-and in the terminal; it writes through the same commands as above, so `profile set`'s checks apply.
-The pane is read-only on a phone, and it has no switch element, so each switch is a button, and no
-editor for style overrides: edit `<state>/pace-styles.json` by hand. `advanced [topic]` lists the
-Advanced settings with their identifiers. Where the module does not run, the skill runs `paceline
-settings` instead. A skill that an update adds needs a new session in Claude Code Desktop before the
-command appears.
+day, This machine, Watchers), a `●` before each value that differs from its default, and the count
+of Advanced settings that differ. `pane` opens an editable pane in Claude Code Desktop and in the
+terminal; it writes through the same commands as above, so `profile set`'s checks apply. Its
+Calendar tab shows the week plan, a card per date with the ☼ and ☾ marks and shares and a bar on a
+grey track that runs up to the bar top, an ended part showing what it spent or `not recorded`, the
+ended days folded into one line that unfolds when pressed, and − and + change a part that has not
+started through `paceline plan set`; see [Plan a week](how-to.md#plan-a-week). The PaceLine button
+opens the same pane, and a second click closes it; a click on a pane that is open but not in front
+brings it to the front first. In the terminal `[ PaceLine ]` follows PitBoard's button when PitBoard
+is installed, and in Claude Code Desktop `[ PaceLine ]` is always in the footer. The pane is
+read-only on a phone, and it has no switch element, so each switch is a button. `advanced [topic]`
+lists the Advanced settings with their identifiers. Where the module does not run, the skill runs
+`paceline settings` instead. A skill that an update adds needs a new session in Claude Code Desktop
+before the command appears.
+
+## Service commands
+
+These commands calibrate, diagnose, simulate or merge by hand. Everyday use does not need them.
+
+| Command | What it does |
+|---|---|
+| `paceline calibrate` | propose parameter corrections from history |
+| `paceline simulate` | replay a week through the budget with your profile (a model: one reading per hour, no plans or holds) |
+| `paceline doctor` | diagnose pace on this machine; read-only without --live |
+| `paceline merge` | merge the sessions' readings from the inbox into rate-limits.json |
+
+`paceline calibrate` reads the limits history and the completed holds and proposes new values for
+`five_hour_to_week_pct`, the weekly reserve, and `subagent_estimate_pct`, plus a ratio of actual to
+estimated cost for your task estimates. The proposal to raise the reserve by 2 (at most to 50; none
+at 50, and none while the reserve is 0 %) rests on the weekly usage at the release instant of each
+past window, the working start of the reserve's release day (see `reserve.release_at`); a window
+without a reading at or before that instant is skipped. A proposal names its command, for example
+`reserve 8 -> 10 (...): paceline reserve 10`. With `--json`, `evidence.left_at_release_pct` lists,
+for each window, what was left at the release instant. It needs 14 days of history and changes
+nothing.
+
+`paceline merge [--verbose]` merges the inbox into the limits file now. It prints nothing unless you
+pass `--verbose` or `--json`.
+
+`paceline doctor [--live] [--bundle PATH]` diagnoses PaceLine on this machine. It runs these probes:
+`runtime`, `paths`, `switch`, `inbox`, `limits`, `account`, `process`, `memory`, `timezone`,
+`hooks`, and `debug_log`, each `ok`, `warn`, or `fail`, with a hint for some. The `timezone` probe
+reports the profile's zone, the mode, and the zone in use. The `account` probe reports `known` or
+`unknown`, a reason code, the source of the key (`env-key`, `profile`, `session`, `state-file`, or
+none), and the key each source would give (`session_key`, `variables_key`, `state_file_key`), never
+an identifier or a token; see [Status says account
+unknown](troubleshooting.md#status-says-account-unknown). `--json` shows the evidence of each probe.
+Without `--live` it changes nothing; `--live` also runs one merge. `--bundle` writes a zip with the
+report, the debug log, the profile, the pace switch, the limits file, the last 50 history lines, and
+the last 20 holds. The report and the bundle write your home directory as `~`. The bundle holds hold
+labels and session IDs.
+
+### Simulate a week
+
+`paceline simulate` replays one weekly window through PaceLine's own budget code, hour by hour (168
+steps), and prints what your profile does to it. It reads the profile and the account's reading,
+writes nothing except its cache `<state>/pace-simulate.json`, and never changes the profile.
+Options:
+
+- `--week on-track|heavy-start|light-start|away-thu-fri|all`, repeatable, default `all`: the shape
+  of the week. In each working hour the simulated operator spends the hour's budget times a factor:
+  `on-track` 1 every working hour; `heavy-start` 2 in the window's first 72 hours, then 1;
+  `light-start` 0.5 in the first 72 hours, then 1; `away-thu-fri` 0 in the working hours of local
+  Thursday and Friday, else 1. The spend never exceeds `five_hour_to_week_pct / 5` per hour, and
+  stops while the recommendation blocks.
+- `--night-queue no|yes|both`, default `both`: each week without and with a night queue. A night
+  queue spends the off-hours part's whole allowance over the hours of that part. With the default
+  off-hours mark of 0 the allowance is 0 and the queue spends nothing.
+- `--reset ISO`: the weekly reset that the window ends at. Default: the account's next reset from
+  the current reading, else the next Monday 00:00 in the profile's zone (`reset_source` `default`).
+- `--defaults`: the built-in defaults, the default plan (working hours 09:00-18:00, no marks) and
+  the zone `UTC`, instead of your profile and your plan.
+- `--cached`: answer from `<state>/pace-simulate.json` when its key matches, else compute and store
+  the result; the file holds at most eight results, and a new reset, a changed profile, or an update
+  of PaceLine misses once.
+
+The text output is a header line with the reset in the profile's zone, the zone, the working hours,
+whether the profile is yours or the defaults, and the note that this is a model, then one row for
+each week and queue:
+
+```
+Reset Mon 2026-10-19 00:00+00:00 (argument) | zone UTC | work hours 09:00-18:00 | the defaults | a model: one reading per hour, working and off-hours from the week plan, no holds
+
+week          queue   unused   night asks h  peak 5h
+on-track      no       5.1 %   0.0 %      1  100.0 %
+on-track      yes      5.1 %   0.0 %      1  100.0 %
+heavy-start   no       5.1 %   0.0 %      4  100.0 %
+heavy-start   yes      5.1 %   0.0 %      4  100.0 %
+light-start   no       8.7 %   0.0 %      1  100.0 %
+light-start   yes      8.7 %   0.0 %      1  100.0 %
+away-thu-fri  no      28.6 %   0.0 %      2  100.0 %
+away-thu-fri  yes     28.6 %   0.0 %      2  100.0 %
+```
+
+`unused` is 100% less the usage at the reset; `night` the spend in off-hours by a night queue; `asks
+h` the hours in which a launch would ask you first; `peak 5h` the highest five-hour usage. The
+working hours and the weekday template come from your plan file, and `--defaults` uses the default
+plan. With `--json`, the result has `model` (`version`, `steps`, `pins`), `inputs` (`reset`,
+`reset_local`, `reset_source` (`account`, `argument`, or `default`), `profile` (`own` or
+`defaults`), `timezone`, `work_hours`), `results` (one object for each row, with `week`,
+`night_queue`, `unused_pct`, `used_pct`, `night_pct`, `asks_h`, `blocked_h`, and
+`peak_five_hour_pct`), `warnings`, and `cache` (`key`, `hit`).
+
+Exit code 0 on success; 2 for a usage error, such as an unknown week or queue, or a `--reset` that
+is not an ISO 8601 instant; 1, with the reason, for a profile that cannot be read. The same inputs
+give the same figures on one Python version; across versions the last digit can differ. [The
+explanation](explanation.md#the-weekly-simulation) says what the model leaves out.
 
 ## Exit codes
 
@@ -423,12 +501,12 @@ command appears.
 
 - `0`: success. `paceline merge` also exits 0 when another merge holds the lock.
 - `1`: an error, with the message on stderr as `paceline: ...`. Examples: no usage data yet, an
-  unknown plan or item ID, a state file that is not valid JSON (PaceLine leaves it for you to fix),
-  or `pace.lock` busy for 20 seconds. A refused `cache-watch` or `context-watch` value also exits 1.
-- `2`: an invalid command line, or a value that `paceline profile set` refused. A refused value
-  changes nothing.
-- `3`: `plan find` found several plans. `cache-watch on` uses 3 for `not started`.
-- `4`: `plan find` found no plan, or `reserve renew` or `reserve release` found no reservation.
+  unknown item ID, a state file that is not valid JSON (PaceLine leaves it for you to fix), or
+  `pace.lock` busy for 20 seconds. A refused `cache-watch` or `context-watch` value also exits 1.
+- `2`: an invalid command line, a value that `paceline profile set` refused, or a day or mark that a
+  `plan` command or `mode` refused. A refused value changes nothing.
+- `3`: `cache-watch on` uses 3 for `not started`.
+- `4`: `hold renew` or `hold release` found no hold.
 - `10` and `11`: `auto` says wait or stop.
 
 ## Profile keys
@@ -436,30 +514,16 @@ command appears.
 | Key | Default |
 |---|---|
 | `commit_reserve_mb` | `2048` |
-| `day_hours` | `[8, 22]` |
-| `five_hour_hard_stop` | `95.0` |
-| `five_hour_threshold_day` | `80.0` |
-| `five_hour_threshold_night` | `95.0` |
+| `five_hour_stop_pct` | `95.0` |
 | `five_hour_to_week_pct` | `10.0` |
 | `heavy_job_mb` | `6000` |
-| `leftover_suggest_pct` | `10.0` |
 | `max_agents` | `6` |
 | `max_heavy_runs` | `3` |
+| `memory_guard` | `false` |
 | `min_free_commit_mb` | `2048` |
-| `models` | `["opus", "sonnet", "haiku"]` |
-| `night_hours` | `[0, 8]` |
-| `reserve_decay_start` | `{"hour": 18, "weekday": 4}` |
-| `reserve_pct` | `8.0` |
-| `reserve_release_min_hours` | `54` |
-| `routine_models` | `["sonnet", "haiku"]` |
-| `scoped_exhausted_pct` | `95.0` |
 | `subagent_estimate_pct` | `1.0` |
-| `throttle_weekly_pct` | `85.0` |
 | `timezone` | `"UTC"` |
 | `timezone_mode` | `"machine"` |
-| `weekday_weight` | `1.0` |
-| `weekend_cap_pct` | `20.0` |
-| `weekend_weight` | `1.0` |
 
 The profile is `<state>/pace-profile.json`. The first `paceline` command creates it. A new profile
 follows this machine's time zone (`timezone_mode` `machine`): when Python can use that zone here,
@@ -467,18 +531,16 @@ the profile stores it as confirmed, and every later command checks the machine's
 otherwise it keeps `UTC`, unconfirmed, and tries again on every load. A profile created by an
 earlier version has no mode and reads as `fixed`, so its zone does not move. Keys missing from the
 file are filled with their defaults when it is read, and keys that earlier versions kept but that
-are now fixed in the code are removed from it. `version`, `plans`, `next_plan_id`, and
-`timezone_confirmed` are kept by PaceLine and are not in the table.
+are now fixed in the code are removed from it. `version` and `timezone_confirmed` are kept by
+PaceLine and are not in the table.
 
 `paceline profile set KEY VALUE` reads `VALUE` as JSON when it parses, else as text. The value must
-have the key's type and range: percentages from 0 to 100, counts and sizes not negative, hours as
-`[start, end]` with `0 <= start < end <= 24`, `reserve_decay_start` as a weekday from 0 to 6 and an
-hour from 0 to 23, model lists not empty, `reserve_release_min_hours` as a whole number from 0 to
-168, `timezone_mode` as `machine` or `fixed`, and a time zone Python can use here. A refused value
-exits 2 with the reason on stderr. On success it prints `KEY: OLD -> NEW` and the `paceline status`
-line. Setting `timezone` also sets `timezone_confirmed` to true and `timezone_mode` to `fixed`, and
-says so; setting `timezone_mode` to `machine` takes the machine's zone at once. You can still edit
-the file by hand; the checks do not apply to a hand edit.
+have the key's type and range: percentages from 0 to 100, counts and sizes not negative,
+`timezone_mode` as `machine` or `fixed`, and a time zone Python can use here. A refused value exits
+2 with the reason on stderr. On success it prints `KEY: OLD -> NEW` and the `paceline status` line.
+Setting `timezone` also sets `timezone_confirmed` to true and `timezone_mode` to `fixed`, and says
+so; setting `timezone_mode` to `machine` takes the machine's zone at once. You can still edit the
+file by hand; the checks do not apply to a hand edit.
 
 What each key does:
 
@@ -488,40 +550,24 @@ What each key does:
   machine's zone has no data here, the stored zone stays in use. A profile without the key reads as
   `fixed`. `paceline profile set timezone NAME` turns the mode to `fixed`; `paceline profile set
   timezone_mode machine` turns it back.
-- `day_hours`: the day hours, start inclusive, end exclusive. Only day hours get a budget.
-- `night_hours`: the night hours, when the night queue runs. An hour in neither range is an off hour
-  and gets no budget.
-- `weekday_weight`, `weekend_weight`: the relative weight of a weekday and a weekend day hour.
-- `weekend_cap_pct`: the most of the week, in percent, that the weekend day hours may spend
-  together.
-- `reserve_pct`: the share of the week held back until the reserve starts to fall.
-- `reserve_decay_start`: when the reserve starts to fall, as `{"weekday": W, "hour": H}` in local
-  time; Monday is 0. The default is Friday 18:00. The release starts no later than
-  `reserve_release_min_hours` before the reset.
-- `reserve_release_min_hours`: the reserve starts to fall no later than this many hours before the
-  reset, from 0 to 168; 0 means no floor, so the release starts at `reserve_decay_start` alone. The
-  default is 54, and the `careful` style sets 0. The hours count back from the account's own reset,
-  so the floor works for any reset day. `paceline profile set reserve_release_min_hours 0` restores
-  the release start of earlier versions.
-- `five_hour_threshold_day`, `five_hour_threshold_night`: five-hour usage, in percent, at which
-  background work pauses and an Agent or Workflow launch asks you first. The five-hour burn rate is
-  projected to the same threshold.
-- `five_hour_hard_stop`: five-hour usage at which the recommendation starts nothing new.
+- `five_hour_stop_pct`: five-hour usage, in percent, from which an Agent or Workflow launch asks you
+  first and the night queue waits, 95 by default. It is the same in working hours and off-hours. The
+  five-hour burn rate is projected to the same stop.
 - `five_hour_to_week_pct`: the share of the week that one full five-hour window costs. It sets the
   most any hour can get: this value divided by 5, in percent of the week per hour. `paceline
   calibrate` proposes a measured value.
 - `subagent_estimate_pct`: the estimated cost of one subagent, in percent of the week.
-- `min_free_commit_mb`: free memory, in MiB, below which no new work starts.
+- `memory_guard`: `true` or `false`, `false` by default. On, a launch asks first below the free
+  memory floor and the night queue stops there. Off, memory is not measured before a launch. Only a
+  JSON boolean is accepted: `paceline profile set memory_guard true`. A profile file that exists but
+  cannot be read or parsed counts as on with the default floor, and the pre-agent hook logs the read
+  failure to the debug log; a missing file counts as off.
+- `min_free_commit_mb`: free memory, in MiB, below which no new work starts. Used only while
+  `memory_guard` is on.
 - `commit_reserve_mb`, `heavy_job_mb`, `max_heavy_runs`: the heavy runs allowed are
   `min(max_heavy_runs, (free memory - commit_reserve_mb) // heavy_job_mb)`, and never fewer than 0.
-- `max_agents`: the most parallel agents pace recommends.
-- `models`: model families in order of preference.
-- `routine_models`: the models for routine work while the recommendation throttles.
-- `throttle_weekly_pct`: weekly usage from which the recommendation throttles, while more than 24
-  hours remain to the reset.
-- `scoped_exhausted_pct`: a model-scoped weekly bucket at this level removes its model from the
-  allowed models. Model-scoped buckets come only from usage-watch.
-- `leftover_suggest_pct`: the forecast unused share above which pace suggests a leftover pool.
+  Used only while `memory_guard` is on; with it off, the figure is not computed.
+- `max_agents`: the most parallel agents `paceline auto` gives a queue item.
 
 ## Environment variables
 
@@ -529,12 +575,16 @@ What each key does:
 |---|
 | `ANTHROPIC_MODEL` |
 | `CLAUDE_CODE_ACCOUNT_UUID` |
+| `CLAUDE_CODE_ENTRYPOINT` |
 | `CLAUDE_CODE_ORGANIZATION_UUID` |
+| `CLAUDE_CODE_SESSION_ID` |
 | `CLAUDE_CONFIG_DIR` |
+| `CLAUDE_PID` |
 | `CLAUDE_PLUGIN_DATA` |
 | `CLAUDE_PROJECT_DIR` |
 | `CLAUDE_SESSION_ID` |
 | `HOME` |
+| `PACELINE_ACCOUNT_KEY` |
 | `PACELINE_DEBUG` |
 | `PACELINE_FREE_COMMIT_MB` |
 | `PACELINE_MODEL` |
@@ -558,6 +608,15 @@ What each key does:
 - `HOME`, `USERPROFILE`: the plugin's module finds `~` from them when it resolves `<state>`.
 - `CLAUDE_CONFIG_DIR`, `CLAUDE_SESSION_ID`, `CLAUDE_PLUGIN_DATA`, `CLAUDE_PROJECT_DIR`: set by
   Claude Code.
+- `PACELINE_ACCOUNT_KEY`: the account key, 16 hex digits, of the session's credential. The hooks
+  module passes it to the commands it starts; it comes before the session's entry in
+  `session-accounts`. Do not set it by hand.
+- `CLAUDE_CODE_SESSION_ID`: the default for `--session` after `CLAUDE_SESSION_ID`.
+  `CLAUDE_CODE_ENTRYPOINT`: `claude-desktop` marks Claude Code Desktop or a process started from its
+  shell, whose `.claude.json` names another login, so PaceLine never takes the account from it
+  there. `CLAUDE_CODE_ACCOUNT_UUID` and `CLAUDE_CODE_ORGANIZATION_UUID`: `paceline doctor` shows
+  their key as `variables_key`; PaceLine never files a reading by them, because a process started
+  from a Desktop shell inherits them whatever its own login.
 
 PaceLine also reads `TZ` when it detects this machine's zone, for a new profile and for a profile in
 machine mode: a zone name such as `Europe/Madrid` is the first source of the time zone. A POSIX rule
@@ -574,12 +633,15 @@ such as `CET-1CEST` is ignored.
 | `<state>/inbox.seen` | The inbox state last handed to a merge, so open sessions do not merge it twice. |
 | `<state>/limits.lock` | The lock of the merge. |
 | `<state>/pace.json` | The pace switch, `{"on": true}` or `{"on": false}`. Missing means off. |
-| `<state>/pace-profile.json` | The pace profile, with the declared plans. |
-| `<state>/pace-registry.json` | Active reservations and the last 500 completed ones. |
-| `<state>/ended-sessions/` | One marker per ended session whose reservations wait for release; the next pace call releases them and deletes the marker. |
+| `<state>/pace-profile.json` | The pace profile. |
+| `<state>/plan-<key>.json` | The week plan of one account: `work_hours`, `reserve` (`pct`, `name`, `release`), `mode`, `inform_until`, `template` (marks by weekday), `days` (marks by date), and `fixed`, the parts fixed this week with their `share_pct`, `used_at_start`, `estimated`, and `prompted`. `<key>` is the account key, or `unknown` when no account is named for the session. Entries of earlier weeks are dropped when the file is written. |
+| `<state>/pace-holds.json` | Active holds and the last 500 completed ones. |
+| `<state>/ended-sessions/` | One marker per ended session whose holds wait for release; the next pace call releases them and deletes the marker. |
+| `<state>/session-accounts/<session id>.json` | The account of one session's credential, written by the hooks module: `account` (the 16-hex-digit key, or `null`), `source` (`profile` or `state-file`), `reason` when there is no key (`desktop`, `no-credential`, `logged-out`, or `no-state-key`), and `checked_at`. A command run in the session reads it. It is removed with the session's end marker, and after 7 days. |
 | `<state>/night-queue.json` | The night queue: the current run, the last 14 runs, and the items. |
 | `<state>/leftover-pool.json` | The leftover pool: when and for which weekly window it was approved, and the items. |
 | `<state>/five-hour-burn-<key>.json` | The five-hour burn snapshot of an account, for other readers: the file with the account's key holds that account's. PaceLine writes it and never reads it back. See [The five-hour burn file (for readers)](#the-five-hour-burn-file-for-readers). |
+| `<state>/week-plan-<key>.json` | The week plan of an account, for other readers: the current part with its fixed share, the reserve and the later parts. The file with the account's key holds that account's. PaceLine writes it while pace is on and never reads a figure back from it; the limits merge reads it only to decide whether to run its plan step: when the part or week has ended, or the weekly reset of the reading differs from `week_resets_at` by 10 minutes or more. See [The week plan file (for readers)](#the-week-plan-file-for-readers). |
 | `<state>/away.json` | The away marker: `on`, `set_at`, and the `session` that set it. Missing, or `on` not true, means off. |
 | `<state>/pace.lock` | The lock of the pace files. |
 | `<state>/debug.on` | The debug flag file. |
@@ -588,25 +650,13 @@ such as `CET-1CEST` is ignored.
 | `<state>/context-watch.json` | context-watch settings: `on`, `line`, `levels`, `snapshot_days`. |
 | `<state>/usage-watch.json` | The usage-watch switch, `{"on": true}` or `{"on": false}`. Missing means off. |
 | `<state>/usage-watch.state-<key>.json` | usage-watch's `last_attempt`, `last_success` (milliseconds since 1970), and `last_error` for one account; `<key>` is the account key, or `unknown` when the session has no account. It holds no token. |
-| `<CLAUDE_CONFIG_DIR>/.claude.json`, else `~/.claude.json` | Claude Code's own state file, read and never written, to name the signed-in account. When the process has both `CLAUDE_CODE_ACCOUNT_UUID` and `CLAUDE_CODE_ORGANIZATION_UUID` and the account variable is a UUID, as in a Claude Code Desktop session, PaceLine takes the account from them and reads this file only without them. PaceLine reads only `oauthAccount.accountUuid` and `oauthAccount.organizationUuid`, and stores only a 16-hex-digit SHA-256 key of the two. `~/.claude/.claude.json` is not it. |
+| `<CLAUDE_CONFIG_DIR>/.claude.json`, else `~/.claude.json` | Claude Code's own state file, read and never written. It names the account of the last terminal `/login`. PaceLine uses it only for a command with no session, as in a plain terminal, and as the fallback when the profile endpoint refuses the session's request or fails three times in a row; never in Claude Code Desktop or in a process started from it (`CLAUDE_CODE_ENTRYPOINT` is `claude-desktop`). PaceLine reads only `oauthAccount.accountUuid` and `oauthAccount.organizationUuid`, and stores only a 16-hex-digit SHA-256 key of the two. `~/.claude/.claude.json` is not it. |
 | `${CLAUDE_PLUGIN_DATA}/cache-watch/<session id>.json` | cache-watch state of one session. |
 | `<state>/cache-watch.json` | The defaults of cache-watch, `lead_minutes` and `max_wakes`, shared by every installation of PaceLine on this machine. A value outside its range reads as the default. |
-| `<state>/pace-styles.json` | Optional, written by hand only: overrides of a spending style's nine values. PaceLine never writes it. |
 | `<state>/pace-simulate.json` | The cache of `paceline simulate --cached`: at most eight results, each under a key of the inputs. |
 | `<project>/.claude/paceline/<session id>.md` | context-watch snapshots. The folder has its own `.gitignore` (`*`), so git ignores it. |
 
 PaceLine replaces a JSON state file through a temporary file and a rename.
-
-`<state>/pace-styles.json` is an object of style names, each an object of the style's keys, for
-example:
-
-```json
-{"careful": {"reserve_pct": 10, "weekend_cap_pct": 18}, "full": {"throttle_weekly_pct": 95}}
-```
-
-A value is checked as `profile set` checks it. What fails is ignored with one warning each, and the
-built-in value stays in force: an unreadable or non-object file (the whole file), a style name other
-than `careful`, `balanced`, or `full`, a key outside the nine, or a refused value.
 
 ## The limits file (for readers)
 
@@ -675,11 +725,11 @@ account reads its own file. PitBoard reads it; any other program may. The format
   "account": "069e3589b134b882",
   "used_pct": 40,
   "resets_at": "2026-10-16T20:45:00.000Z",
-  "threshold_pct": 80,
-  "budget_per_hour_pct": 8.727,
+  "threshold_pct": 95,
+  "budget_per_hour_pct": 12.0,
   "rate_per_hour_pct": 42.7,
-  "threshold_at": "2026-10-16T17:06:12.365Z",
-  "threshold_at_local": "2026-10-16 20:06+03:00",
+  "threshold_at": "2026-10-16T17:27:16.800Z",
+  "threshold_at_local": "2026-10-16 20:27+03:00",
   "base_at": "2026-10-16T15:50:00.000Z",
   "span_min": 20.0,
   "limited": true
@@ -693,8 +743,8 @@ The fields:
 - `account` is the key of the account the window belongs to, the same key as in the limits file.
 - `used_pct` and `resets_at` are the five-hour percentage and reset time the figures were computed
   for.
-- `threshold_pct` is the threshold of the hour of `computed_at`: 80% by day and 95% at night by
-  default. `budget_per_hour_pct` is the even pace that reaches it at the reset.
+- `threshold_pct` is the five-hour stop, `five_hour_stop_pct`: 95% by default, in working hours and
+  off-hours alike. `budget_per_hour_pct` is the even pace that reaches it at the reset.
 - `rate_per_hour_pct`, `threshold_at`, `threshold_at_local`, `base_at`, and `span_min` are `null`
   while no rate is measured; `threshold_at` and `threshold_at_local` are also `null` at a rate of 0
   and at or above the threshold.
@@ -712,6 +762,101 @@ with `--now` or `PACELINE_NOW` more than 5 minutes from the real time writes not
 does `paceline status --account`. The file is replaced through a temporary file and a rename. The
 file of an account that is no longer used stays, under 1 KB, until the account's next use replaces
 it. PaceLine never reads the file back: its own history is the only input of its computation.
+
+## The week plan file (for readers)
+
+`<state>/week-plan-<key>.json` holds what a reader needs to judge the current part of the week
+without running PaceLine, for the account with that key (16 lower-case hex digits, the key of the
+limits file). With two accounts in use at once each has its own file. A reader that serves one
+account reads its own file. PitBoard reads it; any other program may. PaceLine's own
+`plan-<key>.json` stays internal and undocumented. The format is:
+
+```json
+{
+  "version": 1,
+  "computed_at": "2026-10-29T09:00:14.211Z",
+  "account": "0123456789abcdef",
+  "timezone": "Europe/Kyiv",
+  "work_hours": "09:00-18:00",
+  "mode": "limit",
+  "inform_until": null,
+  "week_resets_at": "2026-11-02T07:00:00.000Z",
+  "five_hour_to_week_pct": 10.0,
+  "reserve": {"pct": 8, "name": null, "release": null,
+              "release_at": "2026-11-01T07:00:00.000Z", "error": null},
+  "part": {"day": "2026-10-29", "kind": "work",
+           "start": "2026-10-29T07:00:00.000Z", "end": "2026-10-29T16:00:00.000Z",
+           "share_pct": 12.75, "unplanned": false, "used_at_start": 41.0,
+           "estimated": false, "fixed_at": "2026-10-29T07:00:09.870Z",
+           "weight": 1.0},
+  "later": [{"day": "2026-10-29", "kind": "off", "start": "2026-10-29T16:00:00.000Z",
+             "end": "2026-10-30T07:00:00.000Z", "weight": 0.0, "share_pct": 0.0}]
+}
+```
+
+The fields:
+
+- `version` is 1. A reader that meets a higher version ignores the file. `computed_at` is when
+  PaceLine computed the file. Every time is ISO 8601 in UTC with milliseconds. `account` is the key
+  of the account, the same key as in the limits file. `timezone` and `work_hours` are the profile's
+  time zone and the plan's working hours the parts were cut with; they are informative, and no
+  verdict needs them.
+- `mode` and `inform_until` are the stored values, not the effective mode. A reader applies the
+  effective-mode rule: `limit` reads as `inform` while now is before `inform_until`. The file
+  therefore stays right across `inform_until` without a rewrite.
+- `week_resets_at` is the weekly reset of the week the part belongs to. `five_hour_to_week_pct` is
+  the profile value that caps the part's rate at that value divided by 5, per hour.
+- `reserve` holds `pct`, `name` and `release` as stored, `release_at`, the instant the reserve opens
+  (`null` when the reserve is off or could not be computed), and `error` (`null`, or the text of the
+  failure). The file carries no `released`, `kept_pct` or `over`: they change with the clock and the
+  usage. A reader derives them: the reserve is released when now is at or after `release_at`; it
+  keeps `pct` before the release, else 0; the stop holds when `release_at` is set, now is before it
+  and the weekly usage is at or above 100 minus `pct`.
+- `part` is the part that holds `computed_at`, as PaceLine fixed it: `day`, `kind` (`work` or
+  `off`), `start`, `end`, `share_pct` (the fixed share in percent of the week, unrounded; `null`
+  when the part is unplanned), `unplanned`, `used_at_start` (the weekly usage at the start,
+  unrounded), `estimated`, `fixed_at` and `weight`. A reader that wants PaceLine's arithmetic uses
+  these numbers as they are.
+- `later` lists the parts after the current one up to the reset, oldest first: `day`, `kind`,
+  `start`, `end`, `weight` and `share_pct`, the share as spread at `computed_at`. The shares are
+  provisional: they move when a command or the merge rewrites the file, which also happens when a
+  weekly window has reset ahead of schedule or its reset has moved later. A reader uses the weights
+  to tell an unplanned week (every `weight` 0 and `share_pct` of the part `null`) and may show the
+  shares as provisional; it never uses them for the verdict.
+
+Use a file only when all of these hold: it parses and its `version` is 1; `account` is the account
+you serve and the weekly figure you show is of that account; `week_resets_at` differs from the
+weekly reset you show by less than 10 minutes; now is at or after `part.start` and before
+`part.end`; and `computed_at` is not more than 5 minutes after now. Otherwise the file does not
+describe the current part and a reader falls back to what it does without PaceLine. A part that has
+ended means the writer has not run since the boundary; never extend or re-spread it. There is no age
+limit on `computed_at`: a part's figures stay right for its whole length.
+
+The verdict: `spent` is the weekly usage minus `used_at_start`, at least 0. `allowed` is `share_pct`
+times the part of the part's length that has passed (0 to 1). The part is above its share when
+`spent` exceeds `allowed` by more than 1 point; a part with `share_pct` `null` is never above.
+
+PaceLine writes the file only while pace is on and only for a known account, on the real clock, from
+every command that computes the plan or changes it: `paceline status` (also the status the pre-agent
+hook runs), `plan`, `mode`, `reserve`, `paceline auto`, every `profile set` key, and `paceline on`.
+It writes after it fixes the current part or saves the plan. The limits merge writes it too, but
+only when the file does not hold now (missing, unreadable, of another version, its part not started
+yet or ended, its week ended, or computed more than 5 minutes ahead): it then fixes the current part
+under the pace lock, waiting at most 3 seconds, and never holds the pace lock and the limits lock
+together. A busy pace lock leaves the file alone. The merge does not wait for a reading: every 15
+seconds the hooks module of a session whose account is known, with pace on, reads the file and runs
+the merge when the file does not hold now (in the same cases). It runs at most once a minute for 10
+minutes after the part end or week end it read, and once every 5 minutes after that and for a
+missing or unreadable file, until a re-read finds a part that holds now; a file that holds now costs
+it no run. While the file cannot be written (no weekly reading, the account not known, or a plan
+that cannot be built), every merge runs the step and pays the cost of loading it. A run dated with
+`--now` or `PACELINE_NOW` more than 5 minutes from the real time writes nothing, and neither does a
+command with `--account`. A plan that cannot be built, or a plan file that cannot be read (not one
+JSON object, or a newer version), removes the account's file; so does `paceline off`, for every
+account: `off` writes the switch first and removes the files under the lock, or without it when the
+lock stays busy. A busy lock, a missing weekly reading or a failed write removes nothing. The file
+is replaced through a temporary file and a rename. PaceLine never reads a figure back from it:
+`plan-<key>.json` and the usage history are the only inputs of its computation.
 
 ## The inbox (for writers)
 
@@ -740,7 +885,10 @@ Rules:
   `paceline-account-v1:<accountUuid>:<organizationUuid>`, with both identifiers lower-cased from
   `oauthAccount` in `.claude.json` (see [Files](#files)) and `<organizationUuid>` empty when it is
   missing. Write no `account` when `accountUuid` is not a UUID. Resolve it before every write, not
-  once per process, because a `/login` in another session changes the file.
+  once per process, because a `/login` in another session changes the file. PaceLine's own module
+  takes the key from the account of the session's credential instead (see [Which account a reading
+  belongs to](explanation.md#which-account-a-reading-belongs-to)); `.claude.json` remains the way
+  for a writer that cannot ask Claude Code for it.
 - `observed_at` is required and dates both buckets. A bucket needs a numeric `used_percentage`;
   `resets_at` is ISO 8601 or `null`.
 - A reading from the future, or with a reset later than its window allows, is skipped.
@@ -786,21 +934,21 @@ background.
 | Hook | When | What it does |
 |---|---|---|
 | Module: `UserPromptSubmit`, `PostToolBatch`, `session.compact`, `SessionStart` after a compaction | Every prompt, tool batch, and compaction | context-watch. Does nothing while context-watch is off. |
-| Module: `session.measure` | Once per model turn | Writes the session's inbox reading. Always on. |
+| Module: `session.measure` | Once per model turn | Writes the session's inbox reading, tagged with the account of the session's own credential, which the module asks Claude Code's profile endpoint for at session start, after `/login` or `/logout`, and when the stored credential changes. Until the first answer it writes no reading. Always on. |
 | Module: `session.start` timer | At process start, then every 15 seconds while the session is open | Lists `<state>/inbox/`, and runs `limits_merge.py` only when the inbox changed since the last merge. Always on. |
 | Module: `session.start` timer | At session start, then every 10 seconds while the session is open | usage-watch. Reads its switch; while it is on and 125 seconds have passed, asks Claude Code for the account's usage. |
 | Module: `prompt.submit` | Every prompt | Clears the away marker when the prompt is your message: not a prompt from a schedule, a notification or another session, not a cache-watch wake, and not the `/paceline:away` command. Runs whether or not pace is on. |
 | Module: `command.run` for `paceline:settings` | When you run `/paceline:settings` | Answers before the model: the summary, or with `pane` opens the settings pane. It runs `paceline settings --json`. Any other command passes through unchanged. |
-| Module: `ui.render` for the `paceline-settings` pane | While the pane is open | Draws the pane from the last read and runs no process itself. A save, reset, switch, or Refresh runs the matching `paceline` command and then `paceline settings --json`; the style preview runs `paceline simulate --preview --cached --json`, one run at a time. Nothing is drawn until you run the command. |
+| Module: `ui.render` for the `paceline-settings` pane | While the pane is open | Draws the pane from the last read and runs no process itself. A save, reset, switch, or Refresh runs the matching `paceline` command and then `paceline settings --json`. Nothing is drawn until you run the command. The Calendar tab runs `paceline plan --json` when you choose it and on Refresh, and `paceline plan set` for each − or +. |
 | `Stop`: `cache_watch.py hook stop` | After every turn | Waits for the next wake of a watched session; returns at once for any other session. When the cache expired before the wake, turns the session off with the reason `cache expired before the wake`. |
 | `UserPromptSubmit`: `cache_watch.py hook prompt` | Every prompt | Resets the wake count of a watched session. After a cache that expired before its wake, adds a one-time notice for the agent to pass on. |
 | `PreCompact`, `SessionStart` (`compact`): `cache_watch.py hook compact` | Before and after a compaction, manual or automatic | Turns a watched session off with the reason `compacted`, which also ends its waiting `Stop` hook. |
 | `SessionEnd`: `cache_watch.py hook session-end` | Session end | Removes the session's cache-watch state. |
 | `SessionStart`: `context_watch.py hook session-start` | Session start | Removes old snapshots while context-watch is on. |
-| `PreToolUse` (`Agent`, `Workflow`): `pace_pre_agent.py` | Before each launch | Adds the `pace:` line and holds a `launch` reservation. Asks you at a hard limit, or over the agent cap in the five-hour burn state, and denies the launch instead while the away marker is set. |
-| `SubagentStart`, `SubagentStop`: `pace_subagent.py` | Subagent start and stop | Acquires and releases the subagent's reservation. The acquire closes the oldest `launch` reservation of the session. |
-| `SessionStart` (`startup`, `resume`): `pace_session_start.py` | Session start | Adds unconfirmed plans, the leftover-pool suggestion, and the time zone hint. |
-| `SessionEnd`: `pace_session_end.py` | Session end | Records the session's end in `<state>/ended-sessions/` and releases its reservations; the next pace call finishes a release that was cut off. |
+| `PreToolUse` (`Agent`, `Workflow`): `pace_pre_agent.py` | Before each launch | In `limit` mode adds the plain `pace:` line, and in either mode the hold text when a stop holds the launch; holds a `launch` hold. Asks you at a hard limit, past the weekly reserve's stop line before its release or, in `limit` mode, over the current part's share, and denies the launch instead while the away marker is set or the permission mode (`permission_mode` of the hook input) is `auto`, `bypassPermissions` or `dontAsk`, where no one answers the prompt. Prints nothing when there is nothing to say. |
+| `SubagentStart`, `SubagentStop`: `pace_subagent.py` | Subagent start and stop | Acquires and releases the subagent's hold. The acquire closes the oldest `launch` hold of the session. |
+| `SessionStart` (`startup`, `resume`): `pace_session_start.py` | Session start | Adds the time zone hint. |
+| `SessionEnd`: `pace_session_end.py` | Session end | Records the session's end in `<state>/ended-sessions/` and releases its holds; the next pace call finishes a release that was cut off. |
 
 The four pace hooks exit at once, with no output, while pace is off. While a function is off, its
 command hooks still start one Python process per matching event. The command hooks run `python3`

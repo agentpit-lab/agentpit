@@ -20,8 +20,8 @@ Requirements:
   (PowerShell 7) for weekday names in the OS locale when none of `LC_ALL`, `LC_TIME`, `LANG` gives
   one, on any OS, and `node` for a session transcript over 4 MiB.
 - Optional: [PaceLine](../paceline/README.md), for readings other sessions saw and, with its
-  usage-watch, the model-scoped limits. With PaceLine, the limits are the signed-in account's, also
-  after a `/login` to another account; see
+  usage-watch, the model-scoped limits and, with pace on, the plan's deviation in the Week card. With
+  PaceLine, the limits are the signed-in account's, also after a `/login` to another account; see
   [Use two accounts on one machine](docs/how-to.md#use-two-accounts-on-one-machine).
 
 ## First run

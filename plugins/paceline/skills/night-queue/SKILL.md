@@ -2,7 +2,7 @@
 name: night-queue
 description: >
   Work the night queue: run the items the operator queued with `paceline queue add`, one at a time,
-  obeying what `paceline auto` answers (start, wait or stop) for the budget, agents and models, then
+  obeying what `paceline auto` answers (start, wait or stop) for the budget and agents, then
   fill the morning report. Use when the operator asks to run or work the night queue, or leaves a
   queue running and goes away.
 argument-hint: "(no arguments)"
@@ -15,11 +15,14 @@ Run only when the operator has left a queue running. Start the run once with
 
 Before each item run `paceline auto --json < /dev/null` and obey its exit code and parameters
 without re-deciding them. Read `next_item.id`, `next_item.source`, `max_parallel_agents`,
-`allowed_models`, `budget_for_next_item_pct` and `wait_until` from its JSON; the text output lacks
-them.
+`budget_for_next_item_pct` and `wait_until` from its JSON; the text output lacks them.
+
+`auto` names no model. Choose the model of each item yourself. Read the model-scoped weekly buckets from
+`weekly.scoped` of `paceline status --json < /dev/null`: a model whose scoped weekly limit is at 100 %
+cannot run, so give its items to another model or defer them.
 
 - `0` start: run `paceline queue start <id> < /dev/null` for `next_item.id`, run the item with
-  `max_parallel_agents`, `allowed_models` and `budget_for_next_item_pct`, then
+  `max_parallel_agents` and `budget_for_next_item_pct`, then
   `paceline queue done <id> < /dev/null`. When `next_item.source` is `pool` (IDs `L1`, `L2`, ...),
   add `--pool` to `queue start`, `done`, `fail` and `defer`.
 - `10` wait: hold until `wait_until`, then run `paceline auto --json` again. When `wait_until` is

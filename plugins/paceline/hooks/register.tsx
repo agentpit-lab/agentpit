@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { CommandRunResult, EngineInterface, Register } from 'claude-code'
 
-import type { ContextSession, PreviewView, SettingsView } from '../types'
+import type { CalendarView, ContextSession, SettingsView } from '../types'
 import {
   addPaths,
   compactInstructions,
@@ -18,63 +18,86 @@ import {
   writtenPaths,
 } from './context'
 import type { Fill, Settings } from './context'
-import { accountFileOf, accountKeyOf, accountKeyOfIds } from './account'
+import { ACCOUNT_KEY, accountFileOf, accountKeyOf, credentialsFileOf, PROFILE_URL, profileKeyOf } from './account'
 import { AWAY_FILE, CLEARED, isAwayOn, isPersonPrompt } from './away'
 import { inboxKey, inboxPath, inboxReading, isDue, limitsKey, stateDirOf } from './inbox'
 import type { RateLimit, Sent } from './inbox'
-import { asRunError, inboxFingerprint, RUN_TIMEOUT_MS, runPythonScript, seenPath, WATCH_PERIOD_MS } from './watch'
+import {
+  asRunError,
+  inboxFingerprint,
+  planDue,
+  readingWeekReset,
+  RUN_TIMEOUT_MS,
+  runPythonScript,
+  seenPath,
+  WATCH_PERIOD_MS,
+  weekPlanPath,
+} from './watch'
 import type { Exec, Interpreter, Ran } from './watch'
 import {
   ADVANCED_COLOR,
   ADVANCED_TOPICS,
+  aboveScale,
   advancedLabel,
   advancedListing,
   advancedOf,
   allZones,
+  barColors,
+  calendarChange,
   cell,
   clockText,
+  cutText,
   DAYS_SHORT,
+  dayTitle,
   defaultText,
   detailLine,
   differs,
   entryOf,
+  endedRun,
+  endedText,
   formatValue,
+  formatWorkHours,
   fromEdit,
   MARK,
+  markLabel,
+  nowText,
+  numbersLine,
+  reserveOpensText,
+  WEEKDAY_KEYS,
   parseChange,
-  parsePreview,
+  parsePlan,
   parseSettings,
-  previewHeader,
-  previewLines,
-  queueText,
+  parseWorkHours,
+  planSetArgs,
   reasonOf,
   rejectedText,
   rowsOf,
-  safeModel,
+  shareText,
   STEP,
+  stepMark,
   stepped,
-  STYLE_KEYS,
-  STYLE_LABEL,
-  styleArgs,
-  styleDisplay,
-  styleName,
-  styleRows,
+  stepWorkHours,
   summary,
   SWITCH_NAMES,
   timeoutText,
   switchArgs,
   switchStates,
   TIERS,
+  TRACK_COLOR,
   toEdit,
   topicLabel,
+  unplannedLine,
   valueText,
+  warnText,
+  weekLine,
   wholeOnly,
+  workHoursLength,
   writeArgs,
   zoneDraft,
   zoneMatches,
   zoneWriteArgs,
 } from './settings'
-import type { Draft, Item, Kind, Parsed, Settings as ViewSettings, ZoneDraft } from './settings'
+import type { Draft, Item, Kind, Parsed, PlanDay, PlanPart, PlanView, Settings as ViewSettings, ZoneDraft } from './settings'
 import { gateOpen, inboxObservedAt, readGate, readingFrom, switchOn, tagOrDrop, USAGE_TICK_MS, USAGE_URL, usageGatePath, usageInboxPath, usageSwitchPath } from './usage'
 import type { Outcome } from './usage'
 
@@ -140,47 +163,206 @@ async function snapshotPath($: EngineInterface) {
   return snapshotPaths(await $.session.root(), await $.session.id())
 }
 
-// The key of the account a Desktop host started this session with, from the two identifier variables
-// it passes, or null when they are not both set. They belong to the process, not to the shared state
-// file, which names the account of the last terminal login.
-async function envAccountOf($: EngineInterface): Promise<string | null> {
+// The account of the session's credential, from the profile endpoint. Until its first answer no reading
+// is written; when it is refused, or three asks in a row give no key, the state file names the account
+// (never under Desktop, whose state file names the last terminal login).
+const profile = {
+  ready: false,
+  key: null as string | null,
+  fallback: false,
+  // Why a ready profile has no key and no fallback: no credential at all, or after /logout.
+  silence: null as 'no-credential' | 'logged-out' | null,
+  failures: 0,
+  asking: false,
+  // What stood at the last ask: the modification time of the credentials file, and the state file's key.
+  // A change of either asks again; a rewrite of the state file that leaves its key alone does not.
+  cred: null as string | null,
+  stateKey: null as string | null,
+  // The modification time of the state file when its key was last read, so an unchanged file is not parsed again.
+  stateMtime: null as number | null,
+  // Background re-asks while in fallback: how many were scheduled since the fallback began.
+  retries: 0,
+}
+// While in fallback the profile is asked again after 5 minutes, then every 10 minutes.
+const RETRY_FIRST_MS = 5 * 60_000
+const RETRY_NEXT_MS = 10 * 60_000
+// Numbers the pending retry timer; every ask and every new schedule invalidates the older one.
+let retryGen = 0
+// The newest ask owns the answer; an older one that returns late is dropped.
+let asked = 0
+// Set by /logout, cleared by the next answer that names an account.
+let loggedOut = false
+
+type Entry = {
+  account: string | null
+  source: 'profile' | 'state-file' | null
+  reason: 'desktop' | 'refused' | 'no-state-key' | 'no-credential' | 'logged-out' | null
+}
+// The last entry written to session-accounts, with its session.
+let noted: { session: string; entry: Entry } | null = null
+// An entry older than this is written again, so a pruned or deleted one heals.
+const ENTRY_MAX_AGE_MS = 24 * 60 * 60_000
+
+async function configOf($: EngineInterface) {
+  return { configDir: await $.env.get('CLAUDE_CONFIG_DIR'), home: (await $.env.get('USERPROFILE')) ?? (await $.env.get('HOME')) }
+}
+
+async function stateMtime($: EngineInterface): Promise<number | null> {
   try {
-    const account = await $.env.get('CLAUDE_CODE_ACCOUNT_UUID')
-    const organization = await $.env.get('CLAUDE_CODE_ORGANIZATION_UUID')
-    if (!account || !organization) return null
-    return accountKeyOfIds(account, organization).key
+    return (await $.fs.stat(accountFileOf(await configOf($)))).mtimeMs
   } catch {
     return null
   }
 }
 
-// Set by /login and /logout in a session that has the variables: they still name the old account, and
-// the file may now name another one, so the session's account is unknown until the process restarts.
-let accountLost = false
-
-// The key of the account signed in now: the session's own variables first, else Claude Code's state
-// file, or null when it cannot be told. The file is read at every use: a login in another session
-// changes it under this process. Claude Code rewrites the file often, so a read that fails or does not
-// parse is tried once more.
-async function accountOf($: EngineInterface): Promise<string | null> {
-  if (accountLost) return null
-  const own = await envAccountOf($)
-  if (own !== null) return own
+async function credStamp($: EngineInterface): Promise<string | null> {
   try {
-    const file = accountFileOf({
-      configDir: await $.env.get('CLAUDE_CONFIG_DIR'),
-      home: (await $.env.get('USERPROFILE')) ?? (await $.env.get('HOME')),
-    })
-    if (!(await $.fs.exists(file))) return null
-    for (let attempt = 0; attempt < 2; attempt++) {
-      const account = accountKeyOf(await textAt($, file))
-      if (account.reason !== 'unreadable') return account.key
-      if (attempt === 0) await new Promise<void>(resolve => $.clock.after(50, () => resolve()))
+    return JSON.stringify((await $.fs.stat(credentialsFileOf(await configOf($)))).mtimeMs)
+  } catch {
+    return null
+  }
+}
+
+// One GET of the profile endpoint through Claude Code, which adds the session's credential; the plugin
+// never sees it. Only the key of the two identifiers is kept, never the body. `reset` starts the count
+// of failed answers again; an ask that repeats a failed one, or follows a change of the state file,
+// keeps it.
+async function askProfile($: EngineInterface, reset = false) {
+  const mine = ++asked
+  retryGen++
+  profile.ready = false
+  profile.asking = true
+  if (reset) profile.failures = 0
+  try {
+    profile.cred = await credStamp($)
+    profile.stateMtime = await stateMtime($)
+    // Unreadable (undefined) is ignored; no key (null) is recorded.
+    const stateKey = await fileKeyOf($)
+    if (stateKey !== undefined) profile.stateKey = stateKey
+    const auth = await $.session.authorize()
+    if (!auth) {
+      // No first-party credential: readings go out untagged, as before accounts were told apart.
+      if (mine === asked) Object.assign(profile, { ready: true, key: null, fallback: false, silence: loggedOut ? 'logged-out' : 'no-credential' })
+      return
+    }
+    const r = await $.http.fetch(PROFILE_URL, { auth: auth.handle })
+    if (mine !== asked) return
+    const got = profileKeyOf(r.status, r.text)
+    if (got.key !== null) {
+      loggedOut = false
+      Object.assign(profile, { ready: true, key: got.key, fallback: false, silence: null, failures: 0 })
+    } else {
+      profile.failures++
+      profile.fallback = profile.failures >= 3
+      profile.ready = profile.fallback
     }
   } catch {
-    // Whatever failed, the account is unknown; nothing of the file or the error is kept.
+    // Refused by the engine (CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC), unreachable, or a failed call:
+    // nothing of the error is kept.
+    if (mine === asked) Object.assign(profile, { ready: true, key: null, fallback: true, silence: null })
+  } finally {
+    if (mine === asked) profile.asking = false
   }
-  return null
+  if (mine === asked) {
+    if (profile.fallback) scheduleRetry($)
+    else profile.retries = 0
+  }
+  // The answer is in (also a fallback one): readers get the session's entry without waiting for a reading.
+  if (mine === asked && profile.ready) await accountOf($)
+}
+
+// In fallback, asks the profile again in the background (5 minutes, then 10 minutes apart). An ask in
+// flight is never overlapped: its end schedules the next one. A success leaves the fallback through
+// the normal path, and the session's entry then names the profile's account.
+function scheduleRetry($: EngineInterface) {
+  const gen = ++retryGen
+  const delay = profile.retries === 0 ? RETRY_FIRST_MS : RETRY_NEXT_MS
+  profile.retries++
+  $.clock.after(delay, () => {
+    if (gen !== retryGen || !profile.fallback || profile.asking) return
+    void askProfile($)
+  })
+}
+
+// On each usage-watch tick: asks again when the credentials file changed or the state file names
+// another account, repeats an ask that failed, and otherwise sees that the session's entry stands.
+async function profileTick($: EngineInterface) {
+  if (profile.asking) return
+  const cred = await credStamp($)
+  // The state file is parsed only when its modification time moved.
+  const mtime = await stateMtime($)
+  let state: string | null | undefined
+  if (mtime !== profile.stateMtime) {
+    state = await fileKeyOf($)
+    if (state !== undefined) profile.stateMtime = mtime
+  }
+  if (cred !== profile.cred) void askProfile($, true)
+  else if (state !== undefined && state !== profile.stateKey) void askProfile($)
+  else if (!profile.ready) void askProfile($)
+  else void accountOf($, true)
+}
+
+// The key of the state file, for the fallback and the change check: null when it names no account,
+// undefined when it could not be read. The file is read at every use: a login in another session
+// changes it under this process. Claude Code rewrites the file often, so a read that fails or does not
+// parse is tried once more.
+async function fileKeyOf($: EngineInterface): Promise<string | null | undefined> {
+  const file = accountFileOf(await configOf($))
+  if (!(await $.fs.exists(file))) return null
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const account = accountKeyOf(await textAt($, file))
+    if (account.reason !== 'unreadable') return account.key
+    if (attempt === 0) await new Promise<void>(resolve => $.clock.after(50, () => resolve()))
+  }
+  return undefined
+}
+
+// Tells readers (pace.py) which account this session runs under. Written when the entry's content
+// changed; with `verify`, also when the file is missing or older than a day.
+async function noteSession($: EngineInterface, entry: Entry, verify = false) {
+  try {
+    const id = await $.session.id()
+    const path = `${await stateDir($)}/session-accounts/${id}.json`
+    const same = noted !== null && noted.session === id && noted.entry.account === entry.account && noted.entry.source === entry.source && noted.entry.reason === entry.reason
+    if (same) {
+      if (!verify) return
+      const now = await $.clock.now()
+      const age = await $.fs.stat(path).then(
+        s => now - s.mtimeMs,
+        () => Infinity,
+      )
+      if (age < ENTRY_MAX_AGE_MS) return
+    }
+    const at = new Date(await $.clock.now()).toISOString()
+    await $.fs.write(path, JSON.stringify({ ...entry, checked_at: at }))
+    noted = { session: id, entry }
+  } catch {
+    // The next use tries again.
+  }
+}
+
+// The account to tag a reading with: { key } (null key: untagged), or null while it is not known and
+// nothing may be written. The session's entry follows it; silence writes account null with its reason,
+// so an old key never stays there.
+async function accountOf($: EngineInterface, verify = false): Promise<{ key: string | null } | null> {
+  try {
+    if (!profile.ready) return null
+    if (!profile.fallback) {
+      const key = profile.key
+      await noteSession($, { account: key, source: key === null ? null : 'profile', reason: key === null ? profile.silence : null }, verify)
+      return { key }
+    }
+    if ((await $.env.get('CLAUDE_CODE_ENTRYPOINT')) === 'claude-desktop') {
+      await noteSession($, { account: null, source: null, reason: 'desktop' }, verify)
+      return null
+    }
+    const key = (await fileKeyOf($)) ?? null
+    await noteSession($, { account: key, source: 'state-file', reason: key === null ? 'no-state-key' : null }, verify)
+    return { key }
+  } catch {
+    // Whatever failed, the account is unknown; nothing of the file or the error is kept.
+    return null
+  }
 }
 
 // The last reading written to the inbox; limits_merge.py merges the inbox into rate-limits.json.
@@ -195,7 +377,9 @@ async function writeInbox($: EngineInterface, limits: readonly RateLimit[]) {
   const limitsOnly = limitsKey(limits)
   if (limitsOnly === null) return
   seenLimits = limitsOnly
-  const account = await accountOf($)
+  const known = await accountOf($)
+  if (!known) return
+  const account = known.key
   if (hold) {
     if (limitsOnly === hold.limits && account !== hold.account) return
     hold = null
@@ -230,7 +414,10 @@ let mergeGaveUp = false
 function execOf($: EngineInterface): Exec {
   return async (argv, stdin) => {
     try {
-      return await $.process.run(argv, { stdin, timeoutMs: RUN_TIMEOUT_MS })
+      // The child reads readings under the account this session runs under, not the state file's.
+      const known = await accountOf($)
+      const env = known?.key ? { PACELINE_ACCOUNT_KEY: known.key } : undefined
+      return await $.process.run(argv, { stdin, timeoutMs: RUN_TIMEOUT_MS, ...(env ? { env } : {}) })
     } catch (err) {
       throw asRunError(err)
     }
@@ -248,20 +435,65 @@ async function runMerge($: EngineInterface): Promise<boolean> {
   return ran !== null && ran.exitCode === 0
 }
 
-// Runs the merge only for an inbox no session has merged yet.
+// Runs the merge for an inbox no session has merged yet. True when it ran the merge.
+async function mergeInbox($: EngineInterface, dir: string): Promise<boolean> {
+  const print = inboxFingerprint(await $.fs.list(`${dir}/inbox`))
+  if (print === merged) return false
+  const seen = await $.fs.read(seenPath(dir)).catch(() => null)
+  if (seen === print) {
+    merged = print
+    return false
+  }
+  if (!(await runMerge($))) return true
+  merged = print
+  try {
+    await $.fs.write(seenPath(dir), print)
+  } catch {
+    // The merge ran; another session may merge once more, which does no harm.
+  }
+  return true
+}
+
+// The start of this process's last boundary-trigger run; none yet.
+let lastPlanRun: number | null = null
+
+// The boundary trigger: runs the merge whatever the seen file holds when the week plan file does not hold
+// now, with pace on and the session's account key known. Nothing is spent: it tries again, at the pace
+// planDue sets, until a re-read finds a part that holds now. The merge's plan step does the fixing.
+async function watchPlan($: EngineInterface, dir: string, ran: boolean) {
+  const now = await $.clock.now()
+  // A merge just run, for the inbox, fixed what it could: the trigger waits one step before it looks again.
+  if (ran) {
+    lastPlanRun = now
+    return
+  }
+  const sw = await textAt($, `${dir}/pace.json`)
+  try {
+    if ((JSON.parse(sw ?? 'null') as { on?: unknown } | null)?.on !== true) return
+  } catch {
+    return
+  }
+  const key = (await accountOf($))?.key
+  if (typeof key !== 'string' || !ACCOUNT_KEY.test(key)) return
+  if (!planDue(await textAt($, weekPlanPath(dir, key)), now, lastPlanRun, readingWeekReset(await textAt($, `${dir}/rate-limits.json`), key)).run) return
+  lastPlanRun = now
+  await runMerge($)
+}
+
 async function watchInbox($: EngineInterface) {
   if (busy) return
   busy = true
   try {
     const dir = await stateDir($)
-    const print = inboxFingerprint(await $.fs.list(`${dir}/inbox`))
-    if (print === merged) return
-    const seen = await $.fs.read(seenPath(dir)).catch(() => null)
-    if (seen !== print && !(await runMerge($))) return
-    merged = print
-    if (seen !== print) await $.fs.write(seenPath(dir), print)
+    let ran = false
+    try {
+      ran = await mergeInbox($, dir)
+    } catch {
+      // No inbox yet, or a failed call: the trigger below does not depend on it.
+    }
+    await watchPlan($, dir, ran)
   } catch {
-    // No inbox yet, or a failed call: the next period tries again.
+    // A failed call: the next period tries again.
   } finally {
     busy = false
   }
@@ -282,12 +514,20 @@ async function textAt($: EngineInterface, path: string): Promise<string | null> 
 // The request goes out through Claude Code, which adds the session's credential for this host only;
 // the plugin never sees it.
 async function usageTick($: EngineInterface) {
+  // Before the in-flight guard: a key that changes during a usage request must be asked about meanwhile.
+  try {
+    await profileTick($)
+  } catch {
+    // The next tick tries again.
+  }
   if (usageBusy) return
   usageBusy = true
   try {
     const dir = await stateDir($)
     if (!switchOn(await textAt($, usageSwitchPath(dir)))) return
-    const before = await accountOf($)
+    const known = await accountOf($)
+    if (!known) return
+    const before = known.key
     const key = before ?? 'unknown'
     const gatePath = usageGatePath(dir, key)
     const gate = readGate(await textAt($, gatePath))
@@ -307,7 +547,8 @@ async function usageTick($: EngineInterface) {
     }
     if ('reading' in outcome) {
       // A dropped reading leaves the gate as written before the request: the next try is one interval away.
-      const tagged = tagOrDrop(outcome.reading, before, await accountOf($))
+      const after = await accountOf($)
+      const tagged = after ? tagOrDrop(outcome.reading, before, after.key) : null
       if (!tagged) return
       await $.fs.write(usageInboxPath(dir, key), JSON.stringify(tagged))
       await $.fs.write(gatePath, JSON.stringify({ last_attempt: now, last_success: outcome.at, last_error: null }))
@@ -326,14 +567,25 @@ async function usageTick($: EngineInterface) {
 // the CLI holds the lock and the checks (spec, Shared design). The render hook draws from atoms only.
 
 const PANE = 'paceline-settings'
+// Whether this module placed the settings pane, kept outside the atoms: a press decides open or close
+// before its first await, and an atom read is an await. The session start seeds it again after a reload.
+let paneOpenNow = false
+// Whether a press's open is still on its way (pressPane).
+let opening = false
+const UNPLACED = 'The pane could not be placed'
 const SETTINGS_FROM_NOTHING: SettingsView = { result: null, at: null, error: null, line: null, note: null }
-const PREVIEW_FROM_NOTHING: PreviewView = { rows: null, resetLocal: null, at: null, error: null, pending: false }
 const settingsView = atom({ plugin: 'paceline', key: 'settings' } as const, SETTINGS_FROM_NOTHING)
-const previewView = atom({ plugin: 'paceline', key: 'preview' } as const, PREVIEW_FROM_NOTHING)
 const openIds = atom({ plugin: 'paceline', key: 'open' } as const, [] as string[])
 const editing = atom({ plugin: 'paceline', key: 'editing' } as const, '')
 const draft = atom({ plugin: 'paceline', key: 'draft' } as const, null as Draft | null)
 const zoneQuery = atom({ plugin: 'paceline', key: 'zoneQuery' } as const, '')
+const CALENDAR_FROM_NOTHING: CalendarView = { result: null, at: null, error: null, note: null }
+const tab = atom({ plugin: 'paceline', key: 'tab' } as const, 'settings' as 'settings' | 'calendar')
+// Whether the calendar's folded ended days are unfolded; the pane opens with them folded.
+const calendarEnded = atom({ plugin: 'paceline', key: 'calendarEnded' } as const, false)
+const calendarView = atom({ plugin: 'paceline', key: 'calendar' } as const, CALENDAR_FROM_NOTHING)
+// Whether PitBoard took this plugin's button; its own Desktop footer button then stays out.
+const inPitboard = atom({ plugin: 'paceline', key: 'inPitboard' } as const, false)
 
 const NO_PYTHON = 'Python was not found (python3 or python)'
 
@@ -364,39 +616,26 @@ async function reload($: EngineInterface): Promise<ViewSettings | null> {
   return parsed
 }
 
-// One preview run at a time; a request during a run asks for one more, and only the newest result is kept.
-let previewBusy = false
-let previewAgain = false
+// The calendar's reads are numbered the same way, apart from the settings'. A write's own answer takes a
+// number too, so an older read cannot put an old plan over it.
+let calendarStarted = 0
+let calendarDrawn = 0
 
-async function runPreview($: EngineInterface) {
-  if (previewBusy) {
-    previewAgain = true
-    return
-  }
-  previewBusy = true
-  try {
-    do {
-      previewAgain = false
-      await update($, previewView, p => ({ ...p, pending: true }))
-      let ran: Ran | null = null
-      try {
-        ran = await paceline($, ['simulate', '--preview', '--cached', '--json'])
-      } catch {
-        ran = null
-      }
-      if (previewAgain) continue
-      const at = await $.clock.now()
-      const parsed = ran && ran.exitCode === 0 ? parsePreview(ran.stdout) : null
-      const error = parsed ? null : ran && ran.exitCode === 0 ? 'the answer holds no preview' : failure(ran, false)
-      await update($, previewView, () =>
-        parsed ? { rows: parsed.rows, resetLocal: parsed.resetLocal, at, error: null, pending: false } : { rows: null, resetLocal: null, at, error, pending: false },
-      )
-    } while (previewAgain)
-  } catch {
-    await update($, previewView, p => ({ ...p, pending: false, error: 'the preview run failed' })).catch(() => undefined)
-  } finally {
-    previewBusy = false
-  }
+// `paceline plan --json` again; keeps the last good plan when the read fails. A person's own press
+// (`fresh`) clears the note of a refused change; the read that follows a refusal keeps it.
+async function readCalendar($: EngineInterface, fresh = false): Promise<{ plan: PlanView | null; error: string | null }> {
+  const mine = ++calendarStarted
+  const ran = await paceline($, ['plan', '--json'])
+  const at = await $.clock.now()
+  const parsed = ran && ran.exitCode === 0 ? parsePlan(ran.stdout) : null
+  const error = parsed ? null : ran && ran.exitCode === 0 ? 'paceline plan --json printed no plan' : failure(ran, false)
+  if (mine < calendarDrawn) return { plan: parsed, error }
+  calendarDrawn = mine
+  await update($, calendarView, v => {
+    const note = fresh ? null : v.note
+    return parsed ? { result: parsed, at, error: null, note } : { ...v, error, note }
+  })
+  return { plan: parsed, error }
 }
 
 // Writes go one after another, so two quick presses cannot race each other's re-read.
@@ -416,9 +655,63 @@ async function perform($: EngineInterface, argv: readonly string[], row: string 
   }
   // Whatever the exit, the next draw shows what is on disk.
   await reload($)
-  // Any profile key can move the preview; the cache makes an unchanged input cheap.
-  if (ok && argv[0] === 'profile') void runPreview($)
+  // The working hours move the cut parts, so a calendar that is held or shown reads again.
+  if (ok && argv[0] === 'profile' && argv[2] === 'work_hours') {
+    if ((await read($, calendarView)).result !== null || (await read($, tab)) === 'calendar') await readCalendar($)
+  }
   return ok
+}
+
+// One mark change of the calendar: `paceline plan set`, then the view its answer carries (built after the
+// change in the same lock hold), or a read when the answer holds none or the write failed. The step starts
+// from a plan read at that moment (the write chain runs one press after another, so quick presses on one
+// part add up), never from the drawn one, which may be hours old: a mark set elsewhere is not lowered.
+async function performMark($: EngineInterface, date: string, kind: 'work' | 'off', direction: 1 | -1) {
+  const { plan: held, error } = await readCalendar($)
+  if (!held) {
+    const reason = error ?? 'the week plan could not be read'
+    $.ui.toast(reason)
+    await update($, calendarView, v => ({ ...v, note: `Nothing changed: ${reason}` }))
+    return
+  }
+  const day = held.week_days.find(d => d.date === date)
+  const part = kind === 'work' ? day?.work : day?.off
+  if (part && part.state !== 'later') {
+    // The part started (or ended) since the plan was drawn: nothing is written, and an older note goes.
+    $.ui.toast(`${date} ${kind === 'work' ? '☼' : '☾'} has started; nothing changed`)
+    await update($, calendarView, v => ({ ...v, note: null }))
+    return
+  }
+  if (!part) return
+  const mark = stepMark(part.mark, direction)
+  if (mark === null) return
+  const ran = await paceline($, planSetArgs(date, kind, mark), true)
+  if (ran && ran.exitCode === 0) {
+    const change = calendarChange(ran.stdout, date, kind, mark)
+    if (change.text) $.ui.toast(change.text)
+    if (change.plan) {
+      const at = await $.clock.now()
+      calendarDrawn = ++calendarStarted
+      const plan = change.plan
+      await update($, calendarView, () => ({ result: plan, at, error: null, note: null }))
+      return
+    }
+    await update($, calendarView, v => ({ ...v, note: null }))
+  } else {
+    const reason = failure(ran, true)
+    $.ui.toast(reason)
+    await update($, calendarView, v => ({ ...v, note: reason }))
+  }
+  await readCalendar($)
+}
+
+function changeMark($: EngineInterface, date: string, kind: 'work' | 'off', direction: 1 | -1): Promise<void> {
+  const next = writeChain.then(
+    () => performMark($, date, kind, direction),
+    () => performMark($, date, kind, direction),
+  )
+  writeChain = next.catch(() => undefined)
+  return next
 }
 
 function write($: EngineInterface, argv: readonly string[], row: string | null): Promise<boolean> {
@@ -453,12 +746,6 @@ async function closeRow($: EngineInterface, only?: string) {
 
 // The value a draft stands for: the applied value, or the text typed since, parsed.
 function effective(kind: Kind, d: Draft): Parsed {
-  if (kind === 'models') {
-    const list = Array.isArray(d.value) ? (d.value as string[]) : []
-    const typed = (d.text ?? '').trim().toLowerCase()
-    if (typed !== '' && safeModel(typed) === null) return { ok: false }
-    return { ok: true, value: typed && !list.includes(typed) ? [...list, typed] : list }
-  }
   return d.text !== null ? fromEdit(kind, d.text) : { ok: true, value: d.value }
 }
 
@@ -471,11 +758,12 @@ const hourOptions = (from: number, to: number) => Array.from({ length: to - from
 async function drawSettings($: EngineInterface, els: Els, surface: string) {
   const { Box, Text, Button, Input, Select } = els
   const view = await read($, settingsView)
-  const pv = await read($, previewView)
   const opened = await read($, openIds)
   const edit = await read($, editing)
   const work = await read($, draft)
   const query = await read($, zoneQuery)
+  const shown = await read($, tab)
+  const cal = await read($, calendarView)
   const s = view.result as ViewSettings | null
 
   // Mobile draws neither Input nor Select: it shows values only. Claude Code 2.1.310 still lists both in
@@ -487,20 +775,45 @@ async function drawSettings($: EngineInterface, els: Els, surface: string) {
   const setDraft = (value: unknown) => void update($, draft, () => ({ value, text: null }))
   const setText = (text: string) => void update($, draft, d => (d ? { ...d, text } : d))
 
+  const readAt = shown === 'calendar' ? cal.at : view.at
   const header = (
-    <Box flexDirection="row" gap={1} alignItems="center">
-      <Text bold>PaceLine settings</Text>
-      <Button
-        key="refresh"
-        label="Refresh"
-        onPress={() => {
-          void reload($)
-          void runPreview($)
-        }}
-      />
-      {view.at !== null && <Text dimColor>read {clockText(view.at)}</Text>}
+    <Box flexDirection="row" flexWrap="wrap" justifyContent="space-between" alignItems="center">
+      <Box flexDirection="row" gap={1} alignItems="center">
+        <Text bold>PaceLine</Text>
+        <Box key="tabs" flexDirection="row" gap={0} borderStyle="round">
+          <Button key="tab-settings" label="Settings" variant={shown === 'settings' ? 'primary' : 'secondary'} dimColor={shown !== 'settings'} onPress={() => void update($, tab, () => 'settings')} />
+          <Button
+            key="tab-calendar"
+            label="Calendar"
+            variant={shown === 'calendar' ? 'primary' : 'secondary'}
+            dimColor={shown !== 'calendar'}
+            onPress={() => {
+              void update($, tab, () => 'calendar')
+              void readCalendar($, true)
+            }}
+          />
+        </Box>
+      </Box>
+      <Box flexDirection="row" gap={1} alignItems="center">
+        {readAt !== null && <Text dimColor>read {clockText(readAt as number)}</Text>}
+        <Button
+          key="refresh"
+          label="↻ Refresh"
+          dimColor
+          onPress={() => {
+            if (shown === 'calendar') {
+              void readCalendar($, true)
+              return
+            }
+            void reload($)
+          }}
+        />
+      </Box>
     </Box>
   )
+
+  // The calendar draws from its own atom and never waits on the settings.
+  if (shown === 'calendar') return drawCalendar($, els, canEdit, header, cal, await read($, calendarEnded))
 
   if (!s) {
     return (
@@ -572,55 +885,35 @@ async function drawSettings($: EngineInterface, els: Els, surface: string) {
           </Box>
         )
       }
-      case 'dayhour': {
-        const dh = (v ?? { weekday: 0, hour: 0 }) as { weekday: number; hour: number }
+      case 'weekday':
         return (
-          <Box flexDirection="row" gap={1}>
-            <Select
-              key={`${kp}-day`}
-              value={String(dh.weekday)}
-              options={DAYS_SHORT.map((name, i) => ({ value: String(i), label: name }))}
-              onSelect={(x: string) => setDraft({ ...dh, weekday: Number(x) })}
-            />
-            <Select key={`${kp}-hour`} value={String(dh.hour)} options={hourOptions(0, 23)} onSelect={(x: string) => setDraft({ ...dh, hour: Number(x) })} />
-          </Box>
+          <Select
+            key={`${kp}-weekday`}
+            value={typeof v === 'string' ? v : 'last'}
+            options={[{ value: 'last', label: 'last day before the reset' }, ...WEEKDAY_KEYS.map((value, i) => ({ value, label: DAYS_SHORT[i] ?? value }))]}
+            onSelect={(x: string) => setDraft(x === 'last' ? null : x)}
+          />
         )
-      }
-      case 'models': {
-        const list = Array.isArray(v) ? (v as string[]) : []
-        const move = (i: number, by: number) => {
-          const next = [...list]
-          const j = i + by
-          if (j < 0 || j >= next.length) return
-          const held = next[i] as string
-          next[i] = next[j] as string
-          next[j] = held
-          setDraft(next)
+      case 'workhours': {
+        const text = typeof v === 'string' ? v : ''
+        const parsed = parseWorkHours(text)
+        if (!parsed) return null
+        const [from, to] = formatWorkHours(parsed[0], parsed[1]).split('-')
+        const step = (end: 'start' | 'end', direction: 1 | -1) => {
+          const next = stepWorkHours(text, end, direction)
+          return next === null ? null : (
+            <Button key={`${kp}-${end}-${direction < 0 ? 'minus' : 'plus'}`} label={direction < 0 ? '−' : '+'} onPress={() => setDraft(next)} />
+          )
         }
         return (
-          <Box flexDirection="column">
-            {list.map((m, i) => (
-              <Box key={`${kp}-m-${m}`} flexDirection="row" gap={1} alignItems="center">
-                <Text>
-                  {i + 1}. {m}
-                </Text>
-                <Button key={`${kp}-up-${m}`} label="↑" onPress={() => move(i, -1)} />
-                <Button key={`${kp}-down-${m}`} label="↓" onPress={() => move(i, 1)} />
-                <Button key={`${kp}-rm-${m}`} label="×" onPress={() => setDraft(list.filter(x => x !== m))} />
-              </Box>
-            ))}
-            <Input
-              key={`${kp}-add`}
-              label="Add"
-              placeholder="a model name"
-              value={d.text ?? ''}
-              submitLabel="add"
-              onInput={(t: string) => setText(t)}
-              onSubmit={(t: string) => {
-                const name = safeModel(t.trim().toLowerCase())
-                if (name && !list.includes(name)) setDraft([...list, name])
-              }}
-            />
+          <Box flexDirection="row" flexWrap="wrap" gap={1} alignItems="center">
+            {step('start', -1)}
+            <Text>{`start ${from}`}</Text>
+            {step('start', 1)}
+            {step('end', -1)}
+            <Text>{`end ${to}`}</Text>
+            {step('end', 1)}
+            <Text dimColor>{`= ${formatWorkHours(parsed[0], parsed[1])} (${workHoursLength(text)} h)`}</Text>
           </Box>
         )
       }
@@ -688,6 +981,8 @@ async function drawSettings($: EngineInterface, els: Els, surface: string) {
     const entry = entryOf(s, item)
     const zoneRow = item.id === 'timezone'
     const canReset = zoneRow ? s.timezone.mode !== 'machine' : changed && entry !== undefined && formatValue(item.kind, entry.default).valid
+    // A plan-file row cannot be written without a value to start from: no entry, or one that holds a reason instead.
+    const editable = item.source !== 'plan' || (entry !== undefined && !(entry.value === null && typeof entry.note === 'string' && entry.note !== ''))
     return (
       <Box key={`${where}-${item.id}`} flexDirection="column">
         <Box flexDirection="row" gap={1} alignItems="center">
@@ -706,9 +1001,9 @@ async function drawSettings($: EngineInterface, els: Els, surface: string) {
         {isOpen && (
           <Box flexDirection="column" paddingLeft={2} paddingY={1} gap={1} borderStyle="round" borderDimColor>
             <Text>{item.meaning}</Text>
-            {canEdit && d && editorOf(item, where, d)}
+            {canEdit && editable && d && editorOf(item, where, d)}
             {note && <Text color="error">{note}</Text>}
-            {canEdit && d && (
+            {canEdit && editable && d && (
               <Box flexDirection="row" gap={1}>
                 <Button key={`${where}-${item.id}-save`} variant="primary" label="Save" onPress={() => void save(item, where, d)} />
                 <Button key={`${where}-${item.id}-cancel`} label="Cancel" onPress={() => void closeRow($)} />
@@ -730,11 +1025,6 @@ async function drawSettings($: EngineInterface, els: Els, surface: string) {
     )
   }
 
-  const selectStyle = (name: string) => {
-    if (name === styleName(s) || !(name in STYLE_LABEL) || name === 'custom') return
-    void write($, styleArgs(name), null)
-  }
-
   const flip = async (name: (typeof SWITCH_NAMES)[number], on: boolean) => {
     await write($, switchArgs(name, !on, await $.session.id()), null)
   }
@@ -748,38 +1038,6 @@ async function drawSettings($: EngineInterface, els: Els, surface: string) {
       {children}
     </Box>
   )
-
-  const previewRows = pv.rows ?? s.preview
-  const previewReset = pv.rows ? pv.resetLocal : s.preview_inputs?.reset_local
-  const whyOpen = opened.includes('preview-why')
-  const styleKey = styleName(s) === 'custom' ? 'current' : styleName(s)
-  const queue = queueText(previewRows?.[styleKey])
-  const styleOpen = opened.includes('style')
-  const styleOptions = (['careful', 'balanced', 'full'] as const).map(name => ({ value: name, label: STYLE_LABEL[name] as string }))
-
-  const preview = pv.pending ? (
-    <Box flexDirection="column">
-      <Text dimColor>{previewHeader(previewReset)}</Text>
-      <Text dimColor>estimating…</Text>
-    </Box>
-  ) : pv.error ? (
-    <Box flexDirection="column">
-      <Box flexDirection="row" gap={1} alignItems="center">
-        <Text dimColor>preview not available</Text>
-        <Button key="preview-why" label={whyOpen ? '▾ why' : '▸ why'} onPress={() => toggle('preview-why')} />
-      </Box>
-      {whyOpen && <Text dimColor>{pv.error}</Text>}
-    </Box>
-  ) : previewLines(previewRows).length > 0 ? (
-    <Box flexDirection="column">
-      <Text dimColor>{previewHeader(previewReset)}</Text>
-      {previewLines(previewRows).map(line => (
-        <Text key={`preview-${line}`} dimColor>
-          {line}
-        </Text>
-      ))}
-    </Box>
-  ) : null
 
   return (
     <Box flexDirection="column" gap={1}>
@@ -798,35 +1056,7 @@ async function drawSettings($: EngineInterface, els: Els, surface: string) {
         </Box>
         {view.line && <Text dimColor>{view.line}</Text>}
       </Box>
-      {TIERS.filter(t => t.tier !== 'style').map(t => section(t.name, t.color, rowsOf(t.tier).map(item => row(item, t.tier))))}
-      {section(
-        'Spending style',
-        TIERS.find(t => t.tier === 'style')?.color ?? ADVANCED_COLOR,
-        <Box flexDirection="column">
-          {canEdit && Select ? (
-            <Select
-              key="style-select"
-              value={styleName(s)}
-              options={[...styleOptions, ...(styleName(s) === 'custom' ? [{ value: 'custom', label: STYLE_LABEL.custom as string }] : [])]}
-              onSelect={selectStyle}
-            />
-          ) : (
-            <Text>{styleDisplay(s)}</Text>
-          )}
-          {preview}
-          <Button key="style-detail" label={`${styleOpen ? '▾' : '▸'} What it sets (${STYLE_KEYS.length})`} onPress={() => toggle('style')} />
-          {styleOpen && (
-            <Box flexDirection="column" paddingLeft={2}>
-              {styleRows(s).map(r => row(r.item, 'style', `${r.line}`))}
-              {queue && <Text dimColor>{queue}</Text>}
-              {s.files.styles && <Text dimColor>{`overrides: ${s.files.styles}`}</Text>}
-              {s.style_warnings.map(w => (
-                <Text key={`warn-${w}`} color="warning">{`Style override ignored: ${w}`}</Text>
-              ))}
-            </Box>
-          )}
-        </Box>,
-      )}
+      {TIERS.map(t => section(t.name, t.color, rowsOf(t.tier).map(item => row(item, t.tier))))}
       {section(
         'Advanced',
         ADVANCED_COLOR,
@@ -849,18 +1079,174 @@ async function drawSettings($: EngineInterface, els: Els, surface: string) {
   )
 }
 
+// The cell widths of a calendar day, fixed so that every column sits in the same place whatever the pane's
+// width. The button cell holds `[ − ] [ + ]` (11 cells in the terminal, one gap between the buttons) and a
+// blank; a desktop draws its native buttons within it. The mark and the day share keep a trailing blank.
+const CAL = { mark: 12, buttons: 12, share: 13, dayShare: 12 } as const
+// One button slot of the button cell: `[ − ]` is 5 cells in the terminal; two slots and their gap fill 11.
+const SLOT = 5
+
+// The calendar tab: the week from one reset to the next, a card per day: its title, then three lines. The days
+// that have ended fold into one line that unfolds when pressed. Every change goes through `paceline plan set`;
+// without `canEdit` no button that changes a mark is drawn.
+function drawCalendar($: EngineInterface, els: Els, canEdit: boolean, header: unknown, cal: CalendarView, unfolded: boolean) {
+  const { Box, Text, Button } = els
+  const view = cal.result as PlanView | null
+  if (!view) {
+    return (
+      <Box flexDirection="column" gap={1}>
+        {header}
+        {cal.error ? <Text color="error">{`Could not read the week plan: ${cal.error}`}</Text> : <Text dimColor>Reading the week plan…</Text>}
+      </Box>
+    )
+  }
+
+  const { ended, rows } = endedRun(view)
+  const anyWarn = rows.some(d => warnText(d) !== '')
+
+  // One − / + pair of a part that has not started; a part's bound has no button.
+  const marks = (day: PlanDay, kind: 'work' | 'off', part: PlanPart | null) => {
+    const id = `cal-${day.date}-${kind}`
+    const down = part && part.state === 'later' ? stepMark(part.mark, -1) : null
+    const up = part && part.state === 'later' ? stepMark(part.mark, 1) : null
+    if (down === null && up === null) return null
+    // − and + each keep their own slot, so a part at a bound leaves the other button where it always is.
+    return (
+      <Box key={`${id}-buttons`} flexDirection="row" gap={1}>
+        <Box key={`${id}-minus-slot`} width={SLOT} flexShrink={0}>
+          {down !== null && <Button key={`${id}-minus`} label="−" onPress={() => void changeMark($, day.date, kind, -1)} />}
+        </Box>
+        <Box key={`${id}-plus-slot`} width={SLOT} flexShrink={0}>
+          {up !== null && <Button key={`${id}-plus`} label="+" onPress={() => void changeMark($, day.date, kind, 1)} />}
+        </Box>
+      </Box>
+    )
+  }
+
+  // The ☼ or ☾ line of a day: mark, the button cell (empty when the part has no button), share, cut hours.
+  const partLine = (day: PlanDay, kind: 'work' | 'off') => {
+    const part = kind === 'work' ? day.work : day.off
+    const glyph = kind === 'work' ? '☼' : '☾'
+    const id = `cal-${day.date}-${kind}`
+    const share = part ? shareText(part) : ''
+    const cut = cutText(part)
+    return (
+      <Box key={id} flexDirection="row">
+        <Box key={`${id}-mark-cell`} width={CAL.mark} flexShrink={0}>
+          {part ? (
+            <Text key={`${id}-mark`} bold color={kind === 'work' ? 'suggestion' : 'merged'}>{`${glyph} ${markLabel(part.mark)}`}</Text>
+          ) : (
+            <Text key={`${id}-mark`} dimColor>{`${glyph} —`}</Text>
+          )}
+        </Box>
+        <Box key={`${id}-buttons-cell`} width={CAL.buttons} flexShrink={0}>
+          {canEdit ? marks(day, kind, part) : null}
+        </Box>
+        <Box key={`${id}-share-cell`} width={CAL.share} flexShrink={0}>
+          {share !== '' && (
+            <Text key={`${id}-share`} dimColor={part?.state === 'ended'}>
+              {share}
+            </Text>
+          )}
+        </Box>
+        {cut !== '' && (
+          <Text key={`${id}-cut`} dimColor>
+            {cut}
+          </Text>
+        )}
+      </Box>
+    )
+  }
+
+  // A day is a card: the title line, the head line (bar and day share), then the ☼ line and the ☾ line. The
+  // engine's Box has no border title, so the title is the card's first line.
+  const row = (day: PlanDay) => {
+    const colours = barColors(day, view)
+    const warn = warnText(day)
+    const live = [day.work, day.off].some(p => p !== null && p.state !== 'ended')
+    const today = day.date === view.current.day
+    const opens = reserveOpensText(view, day)
+    return (
+      <Box key={`cal-day-${day.date}`} flexDirection="column" borderStyle="round" borderColor={today ? 'warning' : undefined} paddingX={1}>
+        <Box key={`cal-${day.date}-title`} flexDirection="row">
+          <Text bold>{dayTitle(day)}</Text>
+          {today && <Text color="warning">{' · today'}</Text>}
+          {opens !== '' && <Text dimColor>{opens}</Text>}
+        </Box>
+        <Box key={`cal-${day.date}-head`} flexDirection="row">
+          <Box key={`cal-${day.date}-bar`} flexDirection="row" flexShrink={0}>
+            {colours.map((colour, i) => (
+              <Box key={`cal-${day.date}-bar-${i + 1}`} width={1} height={1} backgroundColor={colour ?? TRACK_COLOR}>
+                <Text> </Text>
+              </Box>
+            ))}
+            <Text key={`cal-${day.date}-above`} color="error">
+              {aboveScale(day, view) ? '▲' : ' '}
+            </Text>
+          </Box>
+          <Box key={`cal-${day.date}-share-cell`} width={CAL.dayShare} flexShrink={0}>
+            {live && (
+              <Text key={`cal-${day.date}-share`} dimColor>
+                {`day ${day.share_pct.toFixed(1)} %`}
+              </Text>
+            )}
+          </Box>
+          {warn !== '' && (
+            <Text key={`cal-${day.date}-warn`} color="warning">
+              {warn}
+            </Text>
+          )}
+        </Box>
+        {partLine(day, 'work')}
+        {partLine(day, 'off')}
+      </Box>
+    )
+  }
+
+  const legend =
+    '☼ working hours, ☾ off-hours. A mark is a multiple of the part’s share: off 0, light 0.5, normal 1, heavy 1.5, in steps of 0.25 up to 2. The bar runs to the bar top; grey is the room left, ▲ above the bar top. − / + change a part that has not started (paceline plan set).' +
+    (anyWarn ? ' ⚠ N win: N five-hour windows cannot let the share through.' : '')
+
+  const unplanned = unplannedLine(view)
+  return (
+    <Box flexDirection="column" gap={1}>
+      {header}
+      {cal.error && <Text color="error">{`The last read failed, this plan may be old: ${cal.error}`}</Text>}
+      {cal.note && <Text color="error">{cal.note}</Text>}
+      <Box flexDirection="column">
+        <Text bold>{weekLine(view)}</Text>
+        <Text dimColor>{numbersLine(view)}</Text>
+        <Text color={view.current.over === true ? 'warning' : undefined}>{nowText(view)}</Text>
+        {unplanned && <Text color="warning">{unplanned}</Text>}
+      </Box>
+      <Box flexDirection="column" gap={1}>
+        {ended.length > 0 && (
+          <Button key="cal-ended" plain dimColor label={`${unfolded ? '▾' : '▸'} ${endedText(ended)}`} onPress={() => void update($, calendarEnded, v => !v)} />
+        )}
+        {unfolded && ended.map(row)}
+        {rows.map(row)}
+      </Box>
+      <Text dimColor>{legend}</Text>
+    </Box>
+  )
+}
+
 // What /paceline:settings answers; null means the module cannot answer and the skill's text runs.
 async function answer($: EngineInterface, args: string): Promise<CommandRunResult | null> {
   const [word = '', ...rest] = args.trim().split(/\s+/).filter(Boolean)
   if (word === 'pane') {
-    await update($, editing, () => '')
-    // Opened first: the pane draws "Reading the settings…" while the read runs.
+    // Opened first, before any await: the engine places a pane at any width only while the person's
+    // command or press is behind the call. The pane draws "Reading the settings…" while the read runs.
     const opened = await $.ui.open({ id: PANE, title: 'PaceLine settings' })
-    // Not awaited: the pane never waits on a simulation.
-    void runPreview($)
+    paneOpenNow = opened.isPlaced
+    // The pane is placed or refused: a press may close it now, while the read below runs.
+    opening = false
+    await update($, editing, () => '')
+    await update($, tab, () => 'settings')
+    await update($, calendarEnded, () => false)
     const parsed = await reload($)
     if (opened.isPlaced) return { text: 'PaceLine settings opened in a pane.' }
-    const text = `${parsed ? summary(parsed, $.plugin.name) : ''}\n\nThe pane could not be placed: ${opened.reason}`.trim()
+    const text = `${parsed ? summary(parsed, $.plugin.name) : ''}\n\n${UNPLACED}: ${opened.reason}`.trim()
     return { text, context: [text] }
   }
   const parsed = await reload($)
@@ -871,6 +1257,51 @@ async function answer($: EngineInterface, args: string): Promise<CommandRunResul
   }
   const text = word ? `Usage: /${$.plugin.name}:settings [pane | advanced [topic]]\n\n${summary(parsed, $.plugin.name)}` : summary(parsed, $.plugin.name)
   return { text, context: [text] }
+}
+
+// A press toggles the pane without waiting for it: the hook returns at once. A press on the open pane
+// closes it, and one on a pane hidden behind another tab brings it back, as PitBoard's button does.
+// A failure, and a pane that could not be placed, go to the log. A press while an open is still on its
+// way does nothing, so a quick double press neither opens twice nor closes a pane not yet placed.
+function pressPane($: EngineInterface): void {
+  if (opening) return
+  if (paneOpenNow) {
+    void closeOrRaise($)
+    return
+  }
+  openPaneFromPress($)
+}
+
+async function closeOrRaise($: EngineInterface) {
+  try {
+    const pane = (await $.ui.panes()).find(p => p.id === PANE)
+    if (pane) {
+      await $.ui.close({ id: PANE })
+      paneOpenNow = false
+      if (pane.isShown) return
+    }
+    paneOpenNow = false
+    // No call brings a tab to the front, so a hidden pane is closed and opened again. That open comes
+    // after awaits, no longer behind the press, so a terminal under 110 columns may not place it; the
+    // log says so, and the next press, which is behind its open, places it at any width (as PitBoard's).
+    openPaneFromPress($)
+  } catch (error) {
+    $.ui.log(`PaceLine settings pane could not close or raise: ${error instanceof Error ? error.message : String(error)}`)
+  }
+}
+
+function openPaneFromPress($: EngineInterface): void {
+  opening = true
+  answer($, 'pane')
+    .then(result => {
+      if (result?.text?.includes(UNPLACED)) $.ui.log(result.text)
+    })
+    .catch(error => {
+      $.ui.log(`PaceLine settings pane failed: ${error instanceof Error ? error.message : String(error)}`)
+    })
+    .finally(() => {
+      opening = false
+    })
 }
 
 // The person's own prompt in any session clears the away marker. Done before the turn starts, so a
@@ -981,23 +1412,42 @@ export const register: Register = on => {
     return next(e)
   })
 
-  // The account in .claude.json has already changed when next(e) returns, so the hold starts before it.
+  // The account has already changed when next(e) returns, so the hold starts before it, and no reading
+  // is written until the profile endpoint has answered for the new login.
   for (const command of ['login', 'logout']) {
     on('command.run', { command }, async ($, e, next) => {
       try {
-        hold = { limits: seenLimits, account: await accountOf($) }
-        if ((await envAccountOf($)) !== null) accountLost = true
+        hold = { limits: seenLimits, account: (await accountOf($))?.key ?? null }
+        profile.ready = false
       } catch {
         hold = null
       }
-      return next(e)
+      try {
+        return await next(e)
+      } finally {
+        if (command === 'logout') {
+          // The old key leaves the entry now, not when the answer comes.
+          loggedOut = true
+          await noteSession($, { account: null, source: null, reason: 'logged-out' })
+        }
+        void askProfile($, true)
+      }
     })
   }
 
   on('session.start', async ($, e, next) => {
     const result = await next(e)
+    // A module reload keeps the engine's panes but starts paneOpenNow over. A host that cannot list
+    // panes must not stop the session start.
+    try {
+      paneOpenNow = (await $.ui.panes()).some(p => p.id === PANE && p.isPlaced)
+    } catch {
+      // paneOpenNow keeps its value: closed, unless this module placed the pane.
+    }
     if (!watching) {
       watching = true
+      // The first ask of the process, not awaited: a session start never waits on the network.
+      void askProfile($)
       $.clock.every(WATCH_PERIOD_MS, () => {
         void watchInbox($)
       })
@@ -1007,9 +1457,49 @@ export const register: Register = on => {
         void usageTick($)
       })
     }
+    // A session after /clear or a resume has its own session-accounts entry.
+    void accountOf($)
     // The inbox is taken in when the process starts, not one period later; the timer covers turn ends.
     void watchInbox($)
+    // PitBoard offers the noun $.pitboard; where it is missing or denies the button, the call throws
+    // and this plugin draws its own Desktop button. The call is written out at the site: a noun of $
+    // read as a value fails `claude plugin validate`.
+    try {
+      await ($ as unknown as { pitboard: { addButton: (button: { key: string; label: string }) => Promise<void> } }).pitboard.addButton({ key: 'paceline', label: 'PaceLine' })
+      await update($, inPitboard, () => true)
+    } catch {
+      await update($, inPitboard, () => false)
+    }
     return result
+  })
+
+  // A press on this plugin's button in PitBoard's row toggles the settings pane, as /paceline:settings pane
+  // opens it. Matched by the element alone: PitBoard keys an added button `button-<key>`, and naming
+  // PitBoard here would miss a renamed development copy of it (.ci/dev_copy.py).
+  on('ui.press', { element: 'button-paceline' }, async ($, e, next) => {
+    pressPane($)
+    return next(e)
+  })
+
+  // The person's close mark or Escape, or a plugin's close.
+  on('ui.close', async ($, e, next) => {
+    const result = await next(e)
+    if (e.id === PANE) paneOpenNow = false
+    return result
+  })
+
+  // The Desktop footer: this plugin's own button, unless PitBoard's row carries it.
+  on('ui.render', { component: 'SessionMode' }, async ($, e, next) => {
+    if (e.surface !== 'desktop') return next(e)
+    const [engine, added] = await Promise.all([next(e), read($, inPitboard)])
+    const { Box, Button } = $.ui.resolve(e) as Partial<Els>
+    if (!Box || !Button || added) return engine
+    return (
+      <Box flexDirection="row" alignItems="center" columnGap={1}>
+        {engine}
+        <Button key="settings" label="[ PaceLine ]" dimColor onPress={() => pressPane($)} />
+      </Box>
+    )
   })
 
   on('classic.SessionStart', async ($, e, next) => {

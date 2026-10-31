@@ -12,13 +12,18 @@ first.
 
 ## Pace looks inactive
 
-No `pace:` line appears before an Agent or Workflow launch, and no launch ever asks you first.
+In `limit` mode no `pace:` line appears before an Agent or Workflow launch, or no launch ever asks
+you first. In `inform` mode the model reads nothing before a launch unless a stop holds it, so that
+is not a fault.
 
 **Cause:** one of these:
 
 - pace is off. It is off after install until you turn it on.
 - pace has no usage data yet. The limits file fills after the first answer in a session with
-  PaceLine loaded. Until then, `paceline status` fails, and the hook adds nothing.
+  PaceLine loaded. Until then, `paceline status` fails, `paceline status --json` answers with the
+  host's free memory and `data.stale` set to true, and the hook adds no line. While the memory guard
+  is on, the hook applies the free-memory floor. From the highest fresh figures of any account on
+  this machine, it also applies the five-hour and weekly stops.
 - The hooks cannot run Python. See [A hook reports a Python
   problem](#a-hook-reports-a-python-problem).
 - `PACELINE_STATE_DIR` is set in your shell but not where Claude Code starts, so the hooks and your
@@ -42,15 +47,17 @@ status` again. Set `PACELINE_STATE_DIR` where Claude Code starts, or nowhere.
 
 The budget per hour is much higher or lower than you expect, or it is 0.
 
-**Cause:** the budget follows the profile and the plans. The usual reasons:
+**Cause:** the budget follows the profile and the week plan. The usual reasons:
 
-- The profile's time zone or day hours do not match your day, so the clock falls in a night or off
-  hour, and the budget shown is that of the next day hour.
-- A declared `away` plan gives its day hours no budget; a `heavy` plan raises their share.
-- The reserve holds back `reserve_pct` until its release starts, which is no later than
-  `reserve_release_min_hours` before the reset.
-- On a weekend, the weekend day hours share at most `weekend_cap_pct` of the week, plus the reserve
-  released since the weekend began.
+- The profile's time zone or the plan's `work_hours` do not match your day, so the clock falls in
+  off-hours, whose default mark is 0 and whose budget is 0 in that case.
+- A day or weekday marked `off` or `light` with `paceline plan set` or the template, or a `heavy`
+  mark, changes the shares of the parts that follow.
+- The reserve is kept whole until the start of working hours of its release day, by default the last
+  day before the reset, and only then enters the plan; `reserve` in the JSON names the instant
+  (`release_at`). Until then a launch asks once the week's usage reaches 100% less the reserve.
+- A part with share 0, such as off-hours with the default mark 0, or a part after which nothing is
+  marked, has a budget of 0; an unplanned part never asks.
 - With `--model`, `PACELINE_MODEL`, or `ANTHROPIC_MODEL` set, a model-scoped weekly bucket counts
   when it is higher than the weekly reading.
 - No hour can get more than `five_hour_to_week_pct / 5` percent of the week.
@@ -59,25 +66,27 @@ The budget per hour is much higher or lower than you expect, or it is 0.
 
 ```
 paceline status --json
-paceline plan list
+paceline plan --json
 ```
 
-In the JSON, `now_local` is the clock in the profile's zone, `in_day_hours` says whether it is a day
-hour, `current_plan` is the plan in force, `reserve_pct` and `spendable_pct` show the reserve,
-`weekend` shows the weekend cap, and `weekly.matched_scoped` names a model-scoped bucket that
-counts.
+In the JSON, `now_local` is the clock in the profile's zone, `in_day_hours` says whether it is
+working hours, `budget_part` is the part the budget comes from (its share, spending and hours left),
+`plan.part` is the same part as the plan shows it, `reserve` and `spendable_pct` show the reserve,
+and `weekly.matched_scoped` names a model-scoped bucket that counts.
 
 **Fix:** correct the profile with `paceline profile set` (see [Change a profile
-setting](how-to.md#change-a-profile-setting)), or cancel a plan that no longer holds.
+setting](how-to.md#change-a-profile-setting)), or change a mark with `paceline plan set`.
 `/paceline:settings` shows every value and marks the ones that differ from the defaults; `paceline
-simulate` shows what a spending style does to a week. The [budget
+simulate` replays a week through the budget with your profile. The [budget
 simulator](https://agentpit-lab.github.io/agentpit/plugins/paceline/docs/budget-simulator.html)
 shows how each input moves the budget, and the [explanation](explanation.md#the-budget-per-hour)
 gives the rules.
 
 ## Data is `STALE`
 
-`paceline status` shows `STALE data N min old`, and the `pace:` line shows `STALE data`.
+`paceline status` shows `STALE data N min old`, and in `limit` mode the `pace:` line says the usage
+figures are N min old and that launches are checked only against the weekly reserve while one is
+kept, and against the memory floor with the guard on.
 
 **Cause:** the newest reading is older than 30 minutes. Without usage-watch, readings refresh only
 when a session on this machine takes a model turn, so the data ages while no session works. While
@@ -100,8 +109,8 @@ idle (see [Keep usage current while idle](how-to.md#keep-usage-current-while-idl
 
 ## The time zone is wrong
 
-Day and night hours are shifted, or a session start says the profile counts in UTC while this
-machine is in another zone.
+Working hours and off-hours are shifted, or a session start says the profile counts in UTC while
+this machine is in another zone.
 
 **Cause:** a new profile follows this machine's zone (machine mode): on every command PaceLine
 detects the machine's zone and, when Python here has data for it, counts in that zone, so the
@@ -172,13 +181,12 @@ new session.
 
 - The usage data is stale. If the agent only waits between calls, no session takes a turn, and
   without usage-watch the data does not refresh.
-- Five-hour usage is at the night threshold (95%) or the hard stop.
-- The five-hour burn rate would reach the night threshold (95%) before the window resets, and the
-  agent cap is 0. `reasons` then holds the burn reason, for example `5h burn 42.7%/h vs budget
-  13.9%/h: 95% at <time>, before reset <time>`.
+- Five-hour usage is at the five-hour stop (95% by default).
+- The five-hour burn rate would reach the five-hour stop (95% by default) before the window resets,
+  and the burn leaves room for no agent (`max_parallel_agents` is 0). `reasons` then holds the burn
+  reason, for example `5h burn 42.7%/h vs budget 13.9%/h: 95% at <time>, before reset <time>`.
 - An item is still `running`, or the next item's dependencies are not done. An item that was started
   and never marked done keeps the queue waiting.
-- No allowed model has weekly headroom for the item.
 - There is no usage data at all.
 
 **Check:**
@@ -194,13 +202,35 @@ burning too fast. `paceline queue list` shows items stuck in `running`.
 **Fix:** for stale data, turn on usage-watch before the night. For an item stuck in `running`, run
 `paceline queue done <id>`, `paceline queue fail <id>`, or `paceline queue defer <id>`. For a full
 five-hour window, the queue resumes after `wait_until`. For a burn, run `paceline auto` again later:
-the queue starts as soon as the rate falls. For no model with headroom, add a model to
-`routine_models` or `models`, or lower the item's estimate when it was set too high.
+the queue starts as soon as the rate falls.
+
+## The night queue stops at once
+
+`paceline auto` exits 11 (`stop`) with `night budget exhausted` before any item starts.
+
+**Cause:** the night queue spends tonight's off-hours share, and off-hours are marked 0 until you
+mark them, so the share and the allowance are 0. A mark set while tonight's off-hours are already
+running changes nothing until the next night, because a part's share is fixed when it starts.
+
+**Check:**
+
+```
+paceline plan
+paceline auto --json
+```
+
+`paceline plan` shows tonight's ☾ part with `off` and 0 %; in `paceline status --json`,
+`night.allowance_pct` is 0.
+
+**Fix:** mark the night before it starts, for example `paceline plan set today --off-hours 0.5`, or
+every Monday night with `paceline plan template set mon --off-hours 0.5`. `paceline queue add`
+prints the command when tonight's share is 0.
 
 ## Status says account unknown
 
-`paceline status` ends with `account unknown (<reason>)`, the `pace:` line before a launch says
-`account unknown`, and PitBoard's `5h limit` and `Week` cards show an `Account` row with `unknown`.
+`paceline status` ends with `account unknown (<reason>)`, and PitBoard's `5h limit` and `Week` cards
+show an `Account` row with `unknown`. The `pace:` line before a launch does not mention it; while no
+figures show, the hook adds no line.
 
 **Cause:** PaceLine cannot tell the figures to be the signed-in account's. The reason says why:
 
@@ -211,9 +241,20 @@ the queue starts as soon as the rate falls. For no model with headroom, add a mo
 - `unreadable`: `.claude.json` does not parse, or could not be read twice in a row.
 - `no-account`: `.claude.json` has no `oauthAccount.accountUuid`, as when no account is signed in.
 
-With `no-file`, `unreadable`, or `no-account`, PaceLine reads the top level of the limits file,
-which mirrors the newest partition. The night queue waits with `account unknown` while a running
-night cannot name its account.
+Three more reasons mean the session's own account is not known, and PaceLine then shows no figures
+at all rather than another account's: `pending`, while PaceLine asks Claude Code's profile endpoint
+for the account of the session's login (at session start and after `/login`), and until the answer
+arrives it writes no reading for the session; `desktop`, when the session runs in the Claude desktop
+app and the profile request is refused or fails, for example under
+`CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC`, because the app's `.claude.json` names the last terminal
+login, not the session's account, so PaceLine does not use that file; and `logged-out`, after
+`/logout` with no credential left. `pending` goes by itself with the answer; for the others, sign in
+again or allow the request. `no-credential` is a different case: the session has an API-key login or
+no first-party credential, and its readings are untagged. `no-state-key` means the profile request
+failed outside the desktop app and `.claude.json` names no account either; PaceLine then writes
+readings with no account, as for `no-account`. With `no-file`, `unreadable`, or `no-account`,
+PaceLine reads the top level of the limits file, which mirrors the newest partition. The night queue
+waits with `account unknown` while a running night cannot name its account.
 
 **Check:**
 
@@ -222,19 +263,30 @@ paceline doctor
 paceline status --json
 ```
 
-The `account` probe of `paceline doctor` gives a state and a reason code, never the account.
-`data.account` in `status --json` has the same state and reason, and the account's key.
+The `account` probe of `paceline doctor` gives a state, a reason code, and `source` (`env-key`,
+`profile`, `session`, `state-file`, or none), plus the one-way key each source would give:
+`session_key` (the session's entry in `session-accounts`), `variables_key` (the account variables
+`CLAUDE_CODE_ACCOUNT_UUID` and `CLAUDE_CODE_ORGANIZATION_UUID`, which PaceLine never uses for a
+reading) and `state_file_key` (`.claude.json`). Each is 16 hex digits or null; the probe never gives
+an identifier or a token. When `variables_key` and `session_key` differ, the session was started
+from a shell of another account. `data.account` in `status --json` has the same state and reason,
+and the account's key.
 
 **Fix:** for `untagged`, take one turn in a session with PaceLine loaded; its reading carries the
 account and starts the account's own partition, and the mark goes. For `no-file`, `unreadable`, and
 `no-account`, sign in to Claude Code; with `CLAUDE_CONFIG_DIR` set,
 `<CLAUDE_CONFIG_DIR>/.claude.json` is the file, else `~/.claude.json`. Do not copy the file or edit
-it by hand.
+it by hand. In a Desktop terminal tab, which has no session, only the commands that write refuse
+with `account not known yet (desktop)`: `plan set`, `plan reset`, `plan template set` and `reset`,
+`mode inform` and `mode limit`, and `profile set work_hours`. A bare `plan` says `no usage data
+yet`, and a bare `mode` prints the stored mode. Run the writing commands from a session's Bash, or
+set `PACELINE_ACCOUNT_KEY` to the account's key, which `paceline status --json` shows as
+`data.account.key` when run in a session's Bash (not in the Desktop tab).
 
 ## usage-watch shows nothing
 
-`paceline status` shows no model-scoped buckets, and the data ages while sessions are idle, although
-usage-watch is on.
+`paceline status --json` has no `weekly.scoped` buckets, and the data ages while sessions are idle,
+although usage-watch is on.
 
 **Cause:** usage-watch needs a claude.ai login and an open session with PaceLine. Without a
 claude.ai login, it sends nothing. While `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC` is set, Claude
@@ -272,5 +324,4 @@ When none of the above explains the problem, record a trace and bundle it:
 
 While the flag exists, PaceLine and its hooks append one JSON line per step to `<state>/debug.log`.
 `PACELINE_DEBUG=1` traces a single command the same way. The log and the bundle write your home
-directory as `~`. The bundle holds the plan phrases you typed, reservation labels, and session IDs,
-so read it before you share it.
+directory as `~`. The bundle holds hold labels and session IDs, so read it before you share it.

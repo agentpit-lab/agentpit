@@ -1,4 +1,4 @@
-import type { StatusBurn, StatusCache, StatusLimit, StatusMeasure, StatusMeta, StatusSample, StatusScoped } from '../types'
+import type { StatusBurn, StatusCache, StatusLimit, StatusMeasure, StatusMeta, StatusSample, StatusScoped, StatusWeekPlan } from '../types'
 
 // calm: nothing to do; watch: worth a glance; act: changes what to do next.
 export type Level = 'calm' | 'watch' | 'act'
@@ -56,7 +56,55 @@ export type WeekView = {
   isExact: boolean
   ratePerHour: number | null
   evenPerHour: number | null
+  // The percentage rule (weekLevel): the Used row and today's weekly advice.
   level: Level
+  // The level of the card and the band's week gauge: the highest of level and what the plan adds.
+  cardLevel: Level
+  // PaceLine's week plan measured at this moment, null when its file is missing or not usable.
+  plan: PlanView | null
+}
+
+// The reserve of the plan file as the Week card reads it. none: no reserve (0%); unknown: the release
+// cannot be told, so the stop is off; held: before the release, isStop when the week reached 100 - pct;
+// released: from the release instant on. isToReset: no release candidate this week, kept to the reset.
+export type ReserveView =
+  | { kind: 'none' }
+  | { kind: 'unknown' }
+  | { kind: 'held'; pct: number; name: string | null; releaseAt: number; isToReset: boolean; isStop: boolean }
+  | { kind: 'released'; pct: number; name: string | null; releaseAt: number }
+
+// The part of PaceLine's week plan that holds now, measured against the week's usage. Percentages are
+// points of the week, times are epoch milliseconds, spans are hours.
+export type PlanView = {
+  // The effective mode: inform_until is applied.
+  mode: 'inform' | 'limit'
+  start: number
+  end: number
+  // The part's fixed share, null for an unplanned part or week.
+  share: number | null
+  usedAtStart: number
+  // Weekly usage since the part began, at least 0.
+  spent: number
+  // What the share allows by now, pro rata by time; null without a share.
+  allowed: number | null
+  // spent > allowed + PLAN_TOLERANCE_PCT, compared unrounded; false without a share.
+  isAbove: boolean
+  // spent - allowed (positive: overspent); null without a share.
+  lead: number | null
+  // |lead| in hours of the part's own rate; null without a share or with a share of 0.
+  leadHours: number | null
+  // A part with no share while later parts carry weight.
+  isUnplannedPart: boolean
+  // Nothing to spread: no share and no later weight. unplannedPct is what is left, or null otherwise.
+  isUnplannedWeek: boolean
+  unplannedPct: number | null
+  // The part's rate in %/h (PaceLine's budget_per_hour_pct); null without a share.
+  budget: number | null
+  // The weekly rate within the part in %/h, null while the part is under an hour old or without samples.
+  pace: number | null
+  // Where the plan expects the week's usage now, whole percent in 0-100; null without a share.
+  tick: number | null
+  reserve: ReserveView
 }
 
 export type View = {
@@ -80,6 +128,12 @@ const HOUR = 3600_000
 // A weekly window, all models or one model's, warns from 80% and acts from 95%.
 const weekLevel = (pct: number): Level => (pct >= 95 ? 'act' : pct >= 80 ? 'watch' : 'calm')
 
+// paceline's week.TOLERANCE_PCT: a part is above its share only past this many points. The generated
+// fixtures (tests/fixtures/week-plan.ts) pin it.
+export const PLAN_TOLERANCE_PCT = 1
+// paceline's SAME_WEEK_TOLERANCE_SEC: the file's week is this week when the resets differ by less.
+const PLAN_WEEK_TOLERANCE_MS = 600_000
+
 export type ViewInput = {
   now: number
   measure: StatusMeasure | null
@@ -95,6 +149,8 @@ export type ViewInput = {
   // paceline's five-hour burn snapshot and the key of the signed-in account it must belong to.
   burn?: StatusBurn | null
   accountKey?: string | null
+  // paceline's week plan file, read for accountKey; used only when planOf finds it usable.
+  weekPlan?: StatusWeekPlan | null
 }
 
 const TTL_MARGIN_MS = 5000
@@ -127,6 +183,60 @@ export function parseBurn(text: string): StatusBurn | null {
     isTextOrNull(r.threshold_at) &&
     typeof r.limited === 'boolean'
   return ok ? (raw as StatusBurn) : null
+}
+
+// An instant as paceline writes it: ISO 8601 with a zone designator (Z or +HH:MM), never a local time.
+const INSTANT = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(\.\d+)?(Z|[+-](\d{2}):(\d{2}))$/
+// Date.parse rolls 2026-02-30 over to March and reads T24:00:00, which paceline refuses: the date's own
+// parts must survive a round trip, and the hour, minute, second and offset must be in range.
+const isInstant = (value: unknown): value is string => {
+  const m = typeof value === 'string' ? INSTANT.exec(value) : null
+  if (!m) return false
+  const [year = 0, month = 0, day = 0, hour = 0, minute = 0, second = 0] = m.slice(1, 7).map(Number)
+  if (hour > 23 || minute > 59 || second > 59 || Number(m[9] ?? 0) > 23 || Number(m[10] ?? 0) > 59) return false
+  const date = new Date(Date.UTC(2000, month - 1, day))
+  date.setUTCFullYear(year)
+  if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) return false
+  return Number.isFinite(Date.parse(value as string))
+}
+const isInstantOrNull = (value: unknown): value is string | null => value === null || isInstant(value)
+
+// paceline's week-plan-<key>.json, or null when the text is not a version-1 plan with every field in its place.
+export function parseWeekPlan(text: string): StatusWeekPlan | null {
+  let raw: unknown
+  try {
+    raw = JSON.parse(text)
+  } catch {
+    return null
+  }
+  if (!isObject(raw) || raw.version !== 1) return null
+  const { reserve, part, later } = raw
+  if (
+    !isInstant(raw.computed_at) ||
+    typeof raw.account !== 'string' ||
+    !isInstant(raw.week_resets_at) ||
+    (raw.mode !== 'inform' && raw.mode !== 'limit') ||
+    !isInstantOrNull(raw.inform_until) ||
+    !isNumber(raw.five_hour_to_week_pct) ||
+    !isObject(reserve) ||
+    !isNumber(reserve.pct) ||
+    !isInstantOrNull(reserve.release_at) ||
+    !(reserve.name === undefined || isTextOrNull(reserve.name)) ||
+    !(reserve.error === undefined || isTextOrNull(reserve.error)) ||
+    !isObject(part) ||
+    !isInstant(part.start) ||
+    !isInstant(part.end) ||
+    !(Date.parse(part.start) < Date.parse(part.end)) ||
+    !isNumberOrNull(part.share_pct) ||
+    !isNumber(part.used_at_start) ||
+    typeof part.unplanned !== 'boolean' ||
+    typeof part.estimated !== 'boolean' ||
+    !Array.isArray(later) ||
+    !later.every(l => isObject(l) && isNumber(l.weight))
+  ) {
+    return null
+  }
+  return raw as unknown as StatusWeekPlan
 }
 
 const windowKey = (resetsAt: string | null | undefined) => (resetsAt ? Math.round(Date.parse(resetsAt) / 60000) : null)
@@ -394,6 +504,109 @@ function weekPace(pct: number, resetsAt: string | undefined, samples: StatusSamp
 
 const WINDOW_MS: Record<string, number> = { seven_day: 7 * 24 * HOUR }
 
+export type PlanInput = {
+  now: number
+  // The key of the signed-in account, null when it is not known.
+  accountKey: string | null
+  // The weekly figure comes from limits readings whose account cannot be told to be this one's.
+  isWeekAccountUnknown: boolean
+  // The week card's figure and its reset, as buildView resolved them.
+  pct: number
+  resetsAt: string | undefined
+  // The week's own samples, empty where the figure is of an unknown account.
+  samples: StatusSample[]
+}
+
+// The week plan measured now, by paceline's rule (spent, allowed and the 1-point tolerance of its plan
+// figures) on the file's part. null unless the file is usable, by PaceLine's own rule for a file that holds now
+// (limits_merge.plan_holds, which the shared cases pin): it is this account's and this week's, was
+// not computed in the future, and its part holds now. A part that has ended means the writer has not run
+// since the boundary; it is never extended or re-spread here.
+export function planOf(file: StatusWeekPlan | null | undefined, i: PlanInput): PlanView | null {
+  if (!file) return null
+  const { now } = i
+  const resetAt = i.resetsAt ? Date.parse(i.resetsAt) : NaN
+  const start = Date.parse(file.part.start)
+  const end = Date.parse(file.part.end)
+  const weekEnd = Date.parse(file.week_resets_at)
+  // PaceLine's rule (limits_merge.plan_holds): the file's week is the reading's unless the reading's reset is known,
+  // after now and 600 s or more from the file's.
+  const isOffSchedule = Number.isFinite(resetAt) && resetAt > now && !(Math.abs(weekEnd - resetAt) < PLAN_WEEK_TOLERANCE_MS)
+  if (
+    i.accountKey === null ||
+    file.account !== i.accountKey ||
+    i.isWeekAccountUnknown ||
+    isOffSchedule ||
+    !(weekEnd > now) ||
+    !(Date.parse(file.computed_at) <= now + FUTURE_SLACK_MS) ||
+    !(start <= now && now < end)
+  ) {
+    return null
+  }
+  const informUntil = file.inform_until ? Date.parse(file.inform_until) : NaN
+  const mode = file.mode === 'limit' && !(Number.isFinite(informUntil) && now < informUntil) ? 'limit' : 'inform'
+  const usedAtStart = file.part.used_at_start
+  const spent = Math.max(0, i.pct - usedAtStart)
+  const share = file.part.share_pct
+  const partHours = (end - start) / HOUR
+  const allowed = share === null ? null : share * Math.min(1, Math.max(0, (now - start) / (end - start)))
+  const lead = allowed === null ? null : spent - allowed
+  const hasLaterWeight = file.later.reduce((sum, l) => sum + l.weight, 0) > 0
+  const isUnplannedWeek = share === null && !hasLaterWeight
+  const reserve = reserveOf(file, i.pct, now)
+  const kept = reserve.kind === 'held' ? reserve.pct : 0
+  return {
+    mode,
+    start,
+    end,
+    share,
+    usedAtStart,
+    spent,
+    allowed,
+    isAbove: allowed !== null && spent > allowed + PLAN_TOLERANCE_PCT,
+    lead,
+    leadHours: lead === null || !share ? null : Math.abs(lead) / (share / partHours),
+    isUnplannedPart: share === null && hasLaterWeight,
+    isUnplannedWeek,
+    unplannedPct: isUnplannedWeek ? Math.max(0, 100 - i.pct - kept) : null,
+    budget:
+      share === null ? null : Math.min(Math.max(0, share - spent) / Math.max((end - now) / HOUR, 1e-9), file.five_hour_to_week_pct / 5),
+    // The look-back is the part's own age, up to 6 hours; in the part's first hour there is no rate.
+    pace: now - start < HOUR ? null : burnRate(i.pct, i.resetsAt, i.samples, now, Math.min(6 * HOUR, now - start), HOUR),
+    tick: allowed === null ? null : Math.round(Math.min(100, Math.max(0, usedAtStart + allowed))),
+    reserve,
+  }
+}
+
+const LEVEL_RANK: Record<Level, number> = { calm: 0, watch: 1, act: 2 }
+const higher = (a: Level, b: Level): Level => (LEVEL_RANK[b] > LEVEL_RANK[a] ? b : a)
+
+// The Plan row's level: above the share is watch in inform mode and act in limit mode; within, an
+// unplanned part and an unplanned week have none.
+export const planLevel = (p: PlanView): Level => (p.isAbove ? (p.mode === 'limit' ? 'act' : 'watch') : 'calm')
+// The Reserve row's level: act once the week is at 100 - reserve before the release.
+export const reserveLevel = (p: PlanView): Level => (p.reserve.kind === 'held' && p.reserve.isStop ? 'act' : 'calm')
+
+// The week's plan and the level of its card and gauge: the highest of the percentage rule, the Plan
+// row and the Reserve row. Without a plan the card's level is the percentage rule's.
+const withPlan = (level: Level, plan: PlanView | null): { cardLevel: Level; plan: PlanView | null } => ({
+  cardLevel: plan ? higher(higher(level, planLevel(plan)), reserveLevel(plan)) : level,
+  plan,
+})
+
+function reserveOf(file: StatusWeekPlan, used: number, now: number): ReserveView {
+  const r = file.reserve
+  if (r.error) return { kind: 'unknown' }
+  if (r.pct <= 0) return { kind: 'none' }
+  if (r.release_at === null) return { kind: 'unknown' }
+  const releaseAt = Date.parse(r.release_at)
+  const name = r.name ?? null
+  if (now >= releaseAt) return { kind: 'released', pct: r.pct, name, releaseAt }
+  // No release candidate this week: PaceLine puts the release at the reset.
+  const isToReset = Math.abs(Date.parse(file.week_resets_at) - releaseAt) < 60_000
+  return { kind: 'held', pct: r.pct, name, releaseAt, isToReset, isStop: used >= 100 - r.pct }
+}
+
 // A window whose reset has passed holds no usage: the next one starts at 0%. A weekly window
 // follows its predecessor, so its reset rolls forward; a five-hour one opens at the first request
 // after the reset, so its reset is unknown until a reading from it arrives.
@@ -424,6 +637,7 @@ export function buildView(i: ViewInput): View {
   // Samples are kept only for the account's own readings, so a figure of a file whose account is
   // unknown has none to compute a burn from.
   const isUnknown = !!i.isFileAccountUnknown
+  const weekSamples = week.isFromFile && isUnknown ? [] : i.weekSamples
   return {
     now: i.now,
     context: contextView(i.measure, i.ctxSamples, i.cache.regime),
@@ -436,8 +650,16 @@ export function buildView(i: ViewInput): View {
             pct: weekPct,
             resetAt: week.merged?.resetsAt ? Date.parse(week.merged.resetsAt) : null,
             isExact: week.isExact,
-            ...weekPace(weekPct, week.merged?.resetsAt, week.isFromFile && isUnknown ? [] : i.weekSamples, i.now),
+            ...weekPace(weekPct, week.merged?.resetsAt, weekSamples, i.now),
             level: weekLevel(weekPct),
+            ...withPlan(weekLevel(weekPct), planOf(i.weekPlan, {
+              now: i.now,
+              accountKey: i.accountKey ?? null,
+              isWeekAccountUnknown: week.isFromFile && isUnknown,
+              pct: weekPct,
+              resetsAt: week.merged?.resetsAt,
+              samples: weekSamples,
+            })),
           },
     scoped: i.scoped.map(b => ({ ...b, level: weekLevel(b.percentUsed) })),
     costUsd: i.measure?.costUsd ?? null,

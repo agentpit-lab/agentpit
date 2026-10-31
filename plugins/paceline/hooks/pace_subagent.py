@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""SubagentStart / SubagentStop hook: hold a pace reservation for the life of each subagent.
+"""SubagentStart / SubagentStop hook: keep a pace hold for the life of each subagent.
 
 Does nothing while pace is off (`paceline on` turns it on).
 
-SubagentStart acquires a `subagent` reservation keyed by the payload's agent_id, with the profile
+SubagentStart acquires a `subagent` hold keyed by the payload's agent_id, with the profile
 estimate (`subagent_estimate_pct`). SubagentStop releases it, and pace.py records the measured cost.
-A repeated start for the same agent (a resume) keeps the one reservation. Events without an
+A repeated start for the same agent (a resume) keeps the one hold. Events without an
 agent_type come from Claude Code's internal agents and are ignored. Leftovers after a crash go to
 the SessionEnd hook and to pace.py's own pruning.
 
@@ -67,9 +67,9 @@ def main():
     if not (agent_id and agent_type and session):
         return 0
     if event == "SubagentStart":
-        argv = ["reserve", "acquire", "--kind", "subagent", "--key", agent_id, "--label", agent_type]
+        argv = ["hold", "acquire", "--kind", "subagent", "--key", agent_id, "--label", agent_type]
     elif event == "SubagentStop":
-        argv = ["reserve", "release", "--key", agent_id]
+        argv = ["hold", "release", "--key", agent_id]
     else:
         return 0
     if too_old():
@@ -81,7 +81,7 @@ def main():
     except (OSError, subprocess.TimeoutExpired) as error:
         note_failure("hook.subagent", hook_event=event, error=error)
         return 0
-    # Exit 4 is a release that found no reservation, which a stop after a pruned start expects.
+    # Exit 4 is a release that found no hold, which a stop after a pruned start expects.
     if out.returncode not in (0, 4):
         note_failure("hook.subagent", hook_event=event, exit_code=out.returncode, stderr=out.stderr.strip()[-300:])
     return 0

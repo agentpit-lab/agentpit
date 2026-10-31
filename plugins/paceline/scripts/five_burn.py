@@ -135,17 +135,6 @@ def fmt_local(d, tz):
     return d.astimezone(tz).isoformat(sep=" ", timespec="minutes")
 
 
-def classify(local, profile):
-    h = local.hour
-    n0, n1 = profile["night_hours"]
-    d0, d1 = profile["day_hours"]
-    if n0 <= h < n1:
-        return "night"
-    if d0 <= h < d1:
-        return "weekend" if local.weekday() >= 5 else "work"
-    return "off"
-
-
 # The same lookback and minimum span as pitboard's burnRate().
 LOOKBACK = dt.timedelta(minutes=90)
 MIN_SPAN = dt.timedelta(minutes=10)
@@ -221,8 +210,7 @@ def reason(burn, reset_local):
 
 
 # The profile keys the merge needs, with the defaults of pace.PROFILE_DEFAULTS (a test keeps them equal).
-PROFILE_KEYS = {"timezone": "UTC", "timezone_mode": "machine", "day_hours": [8, 22], "night_hours": [0, 8],
-                "five_hour_threshold_day": 80.0, "five_hour_threshold_night": 95.0}
+PROFILE_KEYS = {"timezone": "UTC", "timezone_mode": "machine", "five_hour_stop_pct": 95.0}
 # Limit data older than this many minutes is stale (pace.py reads it from here).
 STALE_THRESHOLD_MIN = 30
 
@@ -267,7 +255,7 @@ def after_merge(sd, now, record):
         return
     # The file carries computed_at in milliseconds, so a reader can rerun the computation from it.
     now = now.replace(microsecond=now.microsecond // 1000 * 1000)
-    key, _ = limits_file.resolve_account()
+    key, _ = limits_file.resolve_account(sd=sd)
     if not key:
         return
     partition, account = limits_file.pick_partition(record, key, None)
@@ -282,8 +270,7 @@ def after_merge(sd, now, record):
     profile = {name: (stored or {}).get(name, default) for name, default in PROFILE_KEYS.items()}
     # The mode comes from effective_zone, never from the default above: an old profile reads as fixed.
     tz = load_zone(effective_zone(stored)[1])
-    night = classify(now.astimezone(tz), profile) == "night"
-    threshold = float(profile["five_hour_threshold_night" if night else "five_hour_threshold_day"])
+    threshold = float(profile["five_hour_stop_pct"])
     used = float(held["used_percentage"])
     stale = (now - dated["_at"]).total_seconds() / 60.0 > STALE_THRESHOLD_MIN
     window = limits_file.window_of(held)

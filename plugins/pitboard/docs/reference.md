@@ -31,6 +31,8 @@ them.
 - Model
 - Overspent
 - Pace
+- Plan
+- Reserve
 - Resets
 - Resets in
 - Running
@@ -54,20 +56,22 @@ account and is not in the list.
 ### The row
 
 The row has three groups of readings, context, cache, and limits, parted by `│` in the CLI and by a
-thin rule in Desktop. Readings of one group are parted by a dot. `ⓘ` closes the row; in the CLI a
-`pitboard` button follows it.
+thin rule in Desktop. Readings of one group are parted by a dot. `ⓘ` closes the row; in the CLI a `[
+PitBoard ]` button follows it, and after that the buttons other plugins add, parted by `|`. In
+Desktop the buttons are not in the row; they sit in the footer.
 
 | Reading | CLI | Desktop |
 |---|---|---|
 | `Ctx` | Two-cell gauge; `↻` after it while auto-compact is on, then `ᶻ` while idle compaction is expected; the percentage once it leaves calm | Pie; a drawn circular double arrow while auto-compact is on, then a drawn pair of z letters (the sleep sign) while idle compaction is expected; the percentage once it leaves calm |
 | `Cache` | Two-cell gauge that fills as the cache's time to live (TTL) runs out; a flame while a reply runs; a snowflake once the cache has expired; the countdown once it leaves calm | Pie, flame, or snowflake, as in the CLI; the countdown once it leaves calm |
 | `Hit` | The last turn's hit rate, without a gauge | The same |
-| `5h`, `7d` | Two-cell gauge; the percentage once it leaves calm | Bar with an even-pace tick, the percentage and the time to reset at every level; see [Desktop limit styles](#desktop-limit-styles) |
+| `5h`, `7d` | Two-cell gauge; the percentage once it leaves calm | Bar with a tick (the even pace, or the plan's with PaceLine's week plan), the percentage and the time to reset at every level; see [Desktop limit styles](#desktop-limit-styles) |
 | Model-scoped limit (`Fable`, ...) | Two-cell gauge; the percentage once it leaves calm | Pie; the percentage once it leaves calm |
 | Advisor | Its own group between `Ctx` and `Cache`, only while an advisor is set; a click opens its line; also in the `ⓘ` line | Its own group between `Ctx` and `Cache`, only while an advisor is set |
 | Branch | In the `ⓘ` line | In the session card |
 | `ⓘ` | Opens the session line | Shows the session card |
-| `pitboard` | A button, `[ pitboard ]`, beside `ⓘ`; opens the `/pitboard` pane and closes it on the next click | A button in the footer under the prompt, between the mode and the model name, outside the row; opens the `/pitboard` pane and closes it on the next click |
+| `PitBoard` | A button, `[ PitBoard ]`, beside `ⓘ`; opens the `/pitboard` pane and closes it on the next click | A button, `[ PitBoard ]`, in the footer under the prompt, between the mode and the model name, outside the row; opens the `/pitboard` pane and closes it on the next click |
+| Another plugin's button, for example `PaceLine` (`[ PaceLine ]` in the CLI, `[ PaceLine ]` in Desktop) | After `[ PitBoard ]`, parted from it by `\|`; added by that plugin, see [Buttons of other plugins](#buttons-of-other-plugins) | In the footer after the `[ PitBoard ]` button, as its own `[ <label> ]` button with no `\|` between them; not in the row |
 
 A CLI gauge is two cells of a block that rises in eighths over a grey track, in the level's colour
 once the reading leaves calm. A Desktop pie or bar fills in the same colours.
@@ -75,6 +79,27 @@ once the reading leaves calm. A Desktop pie or bar fills in the same colours.
 In the CLI, a click on a reading's name, or Enter while the name has focus, opens its card as one
 line under the row, with `▲` under the opened name and a line of advice when the reading needs a
 decision. A second click closes it. In Desktop, pointing at a reading shades it and shows its card.
+
+### Buttons of other plugins
+
+Another plugin can add its own button after PitBoard's, in the CLI row and in the Desktop footer.
+Its hooks module calls `$.pitboard.addButton({ key, label })`, typically at session start, and
+answers the press itself: PitBoard draws the button keyed `button-<key>`, and a press reaches the
+adding plugin's `ui.press` hook that matches `{ plugin: 'pitboard', element: 'button-<key>' }`.
+PaceLine adds its `PaceLine` button this way: `[ PaceLine ]` in the CLI, `[ PaceLine ]` in Desktop.
+
+```
+await $.pitboard.addButton({ key: 'paceline', label: 'PaceLine' })
+on('ui.press', { plugin: 'pitboard', element: 'button-paceline' }, async ($, e, next) => { /* ... */ return next(e) })
+```
+
+In the CLI row PitBoard draws `|` between buttons and nowhere else; in Desktop each button is its
+own chip in the footer, read `[ <label> ]`, with no `|`. Buttons come in the order they were added.
+A key is a lowercase letter followed by up to 31 lowercase letters, digits or hyphens; a label is 1
+to 16 printable ASCII characters after trimming. Adding a key again replaces its label. PitBoard
+takes at most two buttons; a third key, a bad key or a bad label is refused and the call rejects.
+Where PitBoard is not installed, `$.pitboard` is missing and the call throws, so a plugin makes the
+call in a `try`.
 
 ### Desktop limit styles
 
@@ -95,7 +120,7 @@ and picks the fullest style that fits the window:
 | Cache | Countdown, TTL, If cold |
 | Cache hits | Last turn, Session |
 | 5h limit | Used, Resets in, Pace, Budget, At reset, Runs out or Threshold, Account |
-| Week | Used, Resets, Pace, Budget, Week elapsed, Spare or Overspent, Account |
+| Week | Used, Resets, Pace, Budget, Week elapsed, Plan, Spare or Overspent, Reserve, Account |
 | A model-scoped limit, titled by the model's name | Used, Resets, Account |
 | Advisor | Model, Main, State |
 | `ⓘ`, titled by the main model's name | Effort, Advisor, Claude Code, Started in, Branch, Running, Turns, API cost |
@@ -122,10 +147,20 @@ and picks the fullest style that fits the window:
 - 5h limit: `At reset` gives the projected percentage at the reset. `Runs out` replaces it with the
   clock time the limit reaches 100% when that comes before the reset. With PaceLine's projection,
   `Threshold` takes the place of `Runs out`: it gives the threshold and the clock time the limit
-  reaches it, for example `80% at 19:40` (the threshold is 80% by day and 95% at night by default),
-  and `Budget` is the pace that reaches that threshold at the reset. See [Budget, At reset, Runs
-  out](explanation.md#budget-at-reset-runs-out).
+  reaches it, for example `95% at 19:40` (the threshold is 95% by default, in working hours and
+  off-hours alike), and `Budget` is the pace that reaches that threshold at the reset. See [Budget,
+  At reset, Runs out](explanation.md#budget-at-reset-runs-out).
 - Week: `Spare` or `Overspent` gives the distance from even pace in points and in hours of budget.
+  With PaceLine's week plan, it gives the distance from the current part's share instead, in points
+  and in hours of that part's rate.
+- With PaceLine's week plan, the Week card adds `Plan`, which reads `within` or `above` and the
+  mode, `inform` or `limit`, and `Budget` is the current part's rate. A part with no share reads
+  `unplanned part` and has no `Spare` or `Overspent`; a week with nothing to spread reads the
+  percent left unplanned and when it expires. `Reserve` reads the kept percent and its release (`8%
+  until Fri 09:00`, `8% to the reset`, `8% released Fri 09:00`), or `unknown: the stop is off` when
+  the release cannot be told, and is left out when the reserve is 0. The bar's tick stands where the
+  plan expects the week now. Without PaceLine's week plan file, the card has none of these rows.
+  [Colours](explanation.md#colours) gives the rule.
 - `ⓘ`: `Branch` shows only when the branch could be read; see [The Branch row is
   missing](troubleshooting.md#the-branch-row-is-missing). `API cost` is the session at API prices; a
   subscription is not charged per token.
@@ -133,7 +168,7 @@ and picks the fullest style that fits the window:
 
 The Desktop card shows the rows, the bar of a limit, and advice when the reading needs a decision.
 While the `/pitboard` pane is open, the Desktop row shows no cards. The `/pitboard` pane, which
-either `pitboard` button also opens, shows every card in the row's order with its explanations; see
+either `PitBoard` button also opens, shows every card in the row's order with its explanations; see
 [Open every card with `/pitboard`](how-to.md#open-every-card-with-pitboard), and the pane itself in
 the CLI and in Desktop in [Getting started, step
 3](https://agentpit-lab.github.io/agentpit/plugins/pitboard/docs/getting-started.html#install).
@@ -166,6 +201,8 @@ one-hour and a five-minute TTL.
   out before the reset. With PaceLine's projection, it turns act when PaceLine reports that the
   window would reach its threshold before the reset. See [Colours](explanation.md#colours).
 - The weekly limit and each model-scoped limit use the same levels, from the percentage used only.
+  With PaceLine's week plan, the week's gauge on the row and the Week card's title take the highest
+  level of `Used`, `Plan` and `Reserve`; `Used` keeps the percentage rule.
 - The cache levels follow from the TTL: watch below the lesser of 15 minutes and half the TTL, act
   below the lesser of 5 minutes and a fifth of the TTL. The countdown ends 5 seconds before the TTL.
 - An expired cache is blue in Desktop and teal in the terminal, apart from the levels.
@@ -179,10 +216,12 @@ Inside the cards, some rows have colours of their own:
 | 5h `At reset` at 80% or more | Amber |
 | 5h `Runs out` | Red |
 | 5h `Threshold` | Red |
-| Week `Pace` above `Budget` | Amber |
-| Week `Overspent` | Amber; red past a day of budget (100/7, about 14.3 points) |
+| Week `Pace` above `Budget` (with PaceLine's week plan, within the current part and against the part's `Budget`) | Amber |
+| Week `Overspent` by even pace | Amber; red past a day of budget (100/7, about 14.3 points) |
 | Advisor `State` `inactive`, `ⓘ` `Advisor` when inactive | Amber |
 | Context `Auto-compact` `on` | Green |
+| Week `Plan` `above`, and `Overspent` while it is above | Amber in `inform` mode, red in `limit` mode |
+| Week `Reserve`, from 100 minus the reserve until the release | Red |
 
 ## Environment variables
 
@@ -210,6 +249,7 @@ set and not empty, else `<config>/state/paceline`, the rule PaceLine uses.
 | `<state>/rate-limits.history.jsonl` and its rotated `.1` | Earlier readings of the signed-in account, for Pace | At session start |
 | `<config>/.claude.json`, else `~/.claude.json` | The signed-in account, as a 16-hex-digit SHA-256 key of `oauthAccount.accountUuid` and `organizationUuid`; nothing else in the file | With the limits file |
 | `<state>/five-hour-burn-<key>.json` | PaceLine's projection of the five-hour limit to its threshold: the account, window and percentage it was computed for, the rate, the budget rate, the threshold and the time it is reached, and whether the burn is limited | With the limits file |
+| `<state>/week-plan-<key>.json` | PaceLine's week plan: the current part with its share, the mode, the reserve and the later parts | With the limits file, for the signed-in account's key only |
 | `<config>/projects/<start directory>/<session id>.jsonl` | Cache reads and writes since the last compaction; the TTL; the last request's time | At session start, after each turn, and after `/clear` or a resume |
 
 - The limits file and its history are PaceLine's; [PaceLine's
@@ -232,7 +272,12 @@ set and not empty, else `<config>/state/paceline`, the rule PaceLine uses.
   format](../../paceline/docs/reference.md#the-five-hour-burn-file-for-readers) is the contract.
   PitBoard uses a file for the `5h limit` card only while it is at most 3 minutes old and matches
   the signed-in account, the window and the percentage on the row. A missing or unreadable file
-  draws the row from PitBoard's own readings.
+  draws the row from PitBoard's own readings. The week plan file, `week-plan-<key>.json`, is read
+  the same way, except that a read that fails for a moment keeps the last plan, and a file that
+  cannot be parsed drops it: PitBoard reads it for the signed-in account's key only, and [its
+  format](../../paceline/docs/reference.md#the-week-plan-file-for-readers) is the contract. The Week
+  card uses it only while the file belongs to the signed-in account and the week on the card, and
+  its current part holds the present time; otherwise the card is the even-pace card.
 
 PitBoard runs these processes, in the CLI and in Desktop:
 

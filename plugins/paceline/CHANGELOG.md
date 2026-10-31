@@ -1,5 +1,173 @@
 # Changelog
 
+## 0.6.0 - 2026-10-31
+
+### Added
+
+- A week plan. Each day has two parts, its working hours (☼) and the off-hours after them (☾), and each
+  part has a mark from 0 to 2 in steps of 0.25: `off` 0, `light` 0.5, `normal` 1, `heavy` 1.5. What is left
+  of the week after the reserve is shared among the remaining parts by their marks, and a part's share is
+  fixed when the part starts. By default working hours are `normal` and off-hours `off`.
+- `paceline plan [--json]` shows the week to the reset: each day's marks, shares and a bar against the even
+  pace, the current part with its spend against its share, cut parts with their hours, what is unplanned,
+  and, once `paceline calibrate` has led you to set `five_hour_to_week_pct` to a measured value, a warning
+  when a share is more than the part's five-hour windows can deliver (with the default 10.0 no warning shows).
+- `paceline plan set DAY [--work V] [--off-hours V]` marks a day, `paceline plan reset [DAY]` removes marks,
+  and `paceline plan template [show | set WEEKDAY [--work V] [--off-hours V] | reset [WEEKDAY]]` sets the marks every week starts from.
+- `paceline mode [inform | limit] [--until-part-end]`. `inform`, the default, only shows the plan; `limit`
+  makes an Agent or Workflow launch ask first when the current part has spent more than 1 point above its
+  share by now. The first question of a part names `paceline mode inform --until-part-end`, which stops the
+  questions until the part ends. While the away marker is set, the question is a denial.
+- `paceline profile set work_hours HH:MM-HH:MM` sets the working hours (09:00-18:00 by default), in steps of
+  15 minutes; the new hours apply from the end of the running part. The working hours belong to the week plan
+  of each account, not to the profile.
+- The settings pane has a Calendar tab: a card per date with its ☼ and ☾ marks, shares and a bar on a grey track, where −
+  and + change a part that has not started; an ended part shows its spend, or `not recorded`; the days that have ended fold into one line that unfolds when pressed. The tabs
+  sit in the pane header, with Refresh apart on the right. The pane and `paceline settings` show the working hours.
+- `paceline status --json` has `plan` (the mode and the current part's share, spend and state) and
+  `budget_part`; in `limit` mode the `pace:` line before a launch says whether the part is on plan, over its share or unplanned.
+- `paceline queue add` says when tonight's off-hours share is 0, with the command that plans some.
+- The budget simulator takes a week plan and the working hours.
+- The weekly reserve is a safety stop outside the plan. Until its release instant, an Agent or Workflow
+  launch asks when the week's usage is at or past 100% minus the reserve (92% with the default 8%), in
+  `inform` and `limit` mode alike; with the away marker on, the launch is denied. The reserve is 8% by
+  default, one per account, kept in the plan file.
+- `paceline reserve [PCT] [--release DAY] [--name TEXT] [--json]` shows or sets the reserve: its size (0 to
+  50, 0 turns it off), the weekday it is released on (`mon` to `sun`, or `last`, the last day before the
+  reset, the default) and a name.
+- `paceline hold acquire`, `renew`, `release`, `release-session`, `list`, `prune` and `reconcile` manage
+  holds, the budget bookings that were called reservations.
+- The settings pane and `paceline settings` show and set `reserve_pct`, `reserve_release` and `reserve_name`
+  beside the working hours.
+- A `reserve` object in `paceline status --json` and `paceline plan --json`: `pct`, `name`, `release`,
+  `release_at`, `release_text`, `release_at_local`, `release_day`, `reset_text`, `released`, `kept_pct`,
+  `stop_at_pct`, `used_pct`, `over` and `text`, with an error form when the reserve cannot be computed. `paceline status` and `paceline plan` print it as
+  `reserve 8 % kept, opens Fri 30 09:00`.
+- A `PaceLine` button opens the settings pane, as `/paceline:settings pane` does, and a second click
+  closes it. It reads `[ PaceLine ]` in the Desktop footer. With PitBoard it
+  follows PitBoard's button in the CLI row and in the Desktop footer; without PitBoard it sits alone in
+  the Desktop footer, and the CLI has none.
+- The week plan file, `week-plan-<key>.json`, for readers such as PitBoard: the current part, its fixed
+  share, the reserve and the later parts. It is written while pace is on, by the commands that fix or
+  change the plan and by the limits merge when the file no longer holds the current part or its week (also when the
+  weekly window resets ahead of schedule or its reset moves later), and documented in the reference.
+
+### Changed
+
+- A launch that would ask at a stop (hard limit, weekly reserve, plan in `limit` mode) is denied instead when
+  the session's permission mode is `auto`, `bypassPermissions` or `dontAsk`, as it already is while the away
+  marker is set: no one answers the prompt, and in `auto` the classifier approved it, so the launch ran past
+  the stop. The reason tells the owner that switching the session to the default mode lets them confirm it.
+- The budget per hour follows the week plan: it is the current part's share less what the part has spent,
+  over the hours left in the part. The day and night hours, the weekday and weekend weights and the weekend
+  cap are gone. The `paceline status` line names the norm of the part, `working-hours norm` or `off-hours
+  norm`.
+- The night queue's allowance is tonight's off-hours share. Off-hours are marked 0 by default, so a night
+  queue has no allowance until you mark the night, for example `paceline plan set today --off-hours 0.5`; the
+  fixed 5% night base is gone. A night run ends when the off-hours end, at the next working start (09:00 by
+  default, was 08:00).
+- With the default plan the budget runs in the working hours, 09:00-18:00 on every day of the week,
+  Saturday and Sunday included; it was 08:00-22:00 with the weekend capped at 20% of the week. Outside the
+  working hours the budget is 0 until you mark the off-hours, for example
+  `paceline plan set today --off-hours 0.5`.
+- The reserve is released whole at the start of working hours of its release day, in the profile's time
+  zone, and kept again after the next reset; it was released gradually. The plan shares what is left after
+  the reserve, and from the release instant the released reserve is spread over the remaining parts by
+  their weights. The reserve is set per account, no longer by the profile or a spending style.
+- "Reservation" is "hold" in commands, texts, ids and JSON keys: `paceline hold` replaces the subcommands of
+  `paceline reserve`, and `active_reservations`, `launch_reservation` and `outstanding_reservations_pct` are
+  `active_holds`, `launch_hold` and `outstanding_holds_pct`. A queue item's `reservation_id` is `hold_id`,
+  `reservation` in the `--json` output of `paceline hold acquire` and `renew` is `hold`, ids start with `H-`
+  instead of `R-`, and the `parameter` of a `paceline calibrate` proposal is `reserve`, not `reserve_pct`.
+- Holds live in the new `pace-holds.json`. The old `pace-registry.json` is no longer read and may be
+  deleted, so `paceline calibrate`'s subagent and task evidence starts again. Restart sessions started
+  before the update.
+- `paceline calibrate` proposes a new reserve with a `paceline reserve` command, judged by the usage at the
+  reserve's release instant.
+- `paceline simulate` replays the week through the week plan: the operator spends in working hours, a night
+  queue spends the off-hours share, and the working hours and weekday template come from your plan file.
+- A profile from 0.5.0 loses `day_hours`, `night_hours`, `weekday_weight`, `weekend_weight`,
+  `weekend_cap_pct` and its declared plans when it is read; nothing is converted. `paceline profile set` of one
+  of those keys exits 2.
+- `paceline doctor` shows the account each source would give: the session's, the variables' and the state
+  file's.
+- One five-hour stop, `five_hour_stop_pct`, 95% by default, in working hours and off-hours alike, replaces
+  `five_hour_threshold_day` (80%), `five_hour_threshold_night` (95%) and `five_hour_hard_stop` (95%). From it
+  every Agent or Workflow launch asks first, the night queue waits and the burn rate is projected. In working
+  hours the stop moves from 80% to 95%, so the day capacity and the reach of a part change; PitBoard's `5h limit`
+  card shows the threshold 95 in working hours too. A profile with `five_hour_hard_stop: 97` loads with the stop
+  at 95; nothing is converted.
+- The `pace:` line before a launch is plain words and goes to the model only in `limit` mode. In `inform` mode
+  the model reads nothing, except a short text when a safety stop holds the launch. When a stop or the plan gate
+  holds a launch, the text says what holds it, what happens to the model's launches and that a declined launch
+  is not to be retried. It names no model and no agent count, and states a stop only when usage is within reach
+  of it. With no weekly reading the hook says nothing.
+- Host-memory protection is the profile switch `memory_guard`, off by default. While it is off, memory is
+  measured only where a person reads it (`paceline status` without a launch key, `paceline doctor`), and no
+  launch, night allowance or `paceline auto` answer depends on it; `min_free_commit_mb`, `commit_reserve_mb`,
+  `heavy_job_mb` and `max_heavy_runs` apply only while it is on, and `host` in `paceline status --json` shows
+  `guard`, `free_commit_mb`, `min_free_commit_mb` and `max_heavy_runs`. To keep the free-memory floor of
+  earlier versions, turn it on with `paceline profile set memory_guard true` right after installing.
+- `paceline calibrate`, `paceline merge`, `paceline doctor` and `paceline simulate` are listed under Service
+  commands in the reference. `paceline simulate` replays the current profile, or the defaults, for each week
+  shape and queue choice; its rows lose `style`, `throttled_h` and `paused_h`.
+- `paceline status --json` shows `five_hour_to_week_pct`, the share of the weekly limit one five-hour window
+  uses, at the top level; the `five_hour` object no longer holds `hard_stop_pct`, and `threshold_pct` is the
+  one stop.
+- The budget simulator page no longer shows agents or a model; it shows what the model reads in `limit` mode.
+- The recommendation in `paceline status --json` is `{blocked, reasons}`. `paceline auto` keeps
+  `max_parallel_agents` and no longer names a model; the night-queue skill leaves the model of an item to the
+  orchestrator and reads the model-scoped buckets from `weekly.scoped`.
+- `paceline off` writes the switch first, loads no usage and removes the week plan files under the pace lock,
+  or without it when the lock stays busy; `paceline on` now takes the pace lock to publish the plan.
+- With pace on, the hooks module fixes the current part within about 15 s of each boundary while a session
+  is open; a part no longer waits for the first PaceLine command.
+
+### Removed
+
+- `paceline plan add`, `list`, `find`, `modify`, `cancel`, `confirm` and `tomorrow`, and the session-start
+  reminder of unconfirmed plans. Use `paceline plan set` and the template.
+- The `weekend` object and `current_plan` in `paceline status --json`.
+- The profile keys `reserve_pct`, `reserve_decay_start` and `reserve_release_min_hours`, and the gradual
+  release of the reserve. A profile that holds them loses them when it is read; nothing is converted, and
+  `paceline profile set` of one of them exits 2.
+- `paceline reserve acquire`, `renew`, `release`, `release-session`, `list`, `prune` and `reconcile`: they
+  exit 2 and name `paceline hold`.
+- `reserve_pct`, `reserve_release_start` and `reserve_release_start_local` in `paceline status --json`, and
+  `reserve_pct` in `paceline plan --json`; read the `reserve` object instead.
+- The spending styles (`careful`, `balanced`, `full`): `paceline profile style`, the pane's Spending style
+  tier, `pace-styles.json` (a leftover file is never read) and the week preview in `paceline settings` and
+  the pane; `paceline simulate --style` and `--preview`.
+- The throttle and the choice of models: the profile keys `models`, `routine_models`, `throttle_weekly_pct` and
+  `scoped_exhausted_pct`, `allowed_models` and `recommendation.model`. PaceLine names no model in the line, in
+  `paceline status` or in `paceline auto`; the model-scoped buckets left the `paceline status` text and stay in
+  `paceline status --json` under `weekly.scoped`.
+- The Spending style block of `paceline settings`; the pane's tier of that name went with the styles.
+- The Thursday-Friday leftover suggestion at session start (`leftover_suggest_pct`, `suggest_leftover_tasks`).
+  The leftover pool (`paceline queue --pool`) stays.
+- The five-hour burn ask and the agent count in the line and in `paceline status`
+  (`max_parallel_agents`, `background_paused` and `five_hour_burn_limited` of the recommendation).
+- The profile keys `five_hour_threshold_day`, `five_hour_threshold_night`, `five_hour_hard_stop`, `models`,
+  `routine_models`, `throttle_weekly_pct`, `scoped_exhausted_pct` and `leftover_suggest_pct`: a profile that
+  holds them loses them when it is read; nothing is converted, and `paceline profile set` of one of them
+  exits 2.
+
+### Fixed
+
+- Limit readings are filed under the account of the session's own credential, which PaceLine asks Claude
+  Code's profile endpoint for. A `claude` started from a Claude Code Desktop terminal tab or a session's
+  shell inherited the Desktop account's variables and filed its readings, and its usage-watch readings, under
+  the Desktop account, so the two accounts' weekly figures took turns in one partition. Until the session's
+  account is known, no reading is written and pace shows no figures; when the profile request is refused or
+  fails, a terminal session takes the account from `.claude.json` and a Desktop session writes nothing.
+  Readings already in the history stay where they are.
+- A hold taken with `paceline hold acquire` or `paceline queue start` from Claude Code's Bash
+  tool on Windows was dropped at the next pace call: the Git Bash launcher had already exited, so the
+  owner fell back to that short-lived shell. The owner is now the Claude Code process that `CLAUDE_PID`
+  names when the parent chain breaks, and a hold with no owner to find lives until it is released
+  or its lease ends. `paceline doctor` shows the owner and its source: `doctor --json`'s process probe has `claude_pid_env`,
+  `owner_pid` and `owner_source` in place of `fallback_pid` (#117).
+
 ## 0.5.0 - 2026-10-26
 
 ### Added

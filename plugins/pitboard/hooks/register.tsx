@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import type { StatusBurn, StatusCache, StatusLimit, StatusMeasure, StatusSample, StatusScoped } from '../types'
+import type { PitboardButton, StatusBurn, StatusCache, StatusLimit, StatusMeasure, StatusSample, StatusScoped, StatusWeekPlan } from '../types'
 import { accountFileOf, accountKeyOf, accountKeyOfIds } from './account'
 import { desktopKey } from './cards'
 import { drawDesktop, drawPane, drawTerminal } from './draw'
@@ -15,6 +15,7 @@ import {
   historyForAccount,
   mergeLimit,
   parseBurn,
+  parseWeekPlan,
   pickPartition,
   settingsEffort,
   stateDirOf,
@@ -42,6 +43,7 @@ const nowMs = atom({ plugin: 'pitboard', key: 'nowMs' } as const, 0)
 const desktopNow = atom({ plugin: 'pitboard', key: 'desktopNow' } as const, 0)
 const fiveSamples = atom({ plugin: 'pitboard', key: 'fiveSamples' } as const, [] as StatusSample[])
 const fiveBurn = atom({ plugin: 'pitboard', key: 'fiveBurn' } as const, null as StatusBurn | null)
+const weekPlan = atom({ plugin: 'pitboard', key: 'weekPlan' } as const, null as StatusWeekPlan | null)
 const weekSamples = atom({ plugin: 'pitboard', key: 'weekSamples' } as const, [] as StatusSample[])
 const ctxSamples = atom({ plugin: 'pitboard', key: 'ctxSamples' } as const, [] as number[])
 const detail = atom({ plugin: 'pitboard', key: 'detail' } as const, null as string | null)
@@ -50,10 +52,17 @@ const advisorPick = atom({ plugin: 'pitboard', key: 'advisorPick' } as const, nu
 // the file come from readings of unknown account.
 const account = atom({ plugin: 'pitboard', key: 'account' } as const, null)
 const paneOpen = atom({ plugin: 'pitboard', key: 'paneOpen' } as const, false)
+// The buttons other plugins added through $.pitboard.addButton, in the order added.
+const buttons = atom({ plugin: 'pitboard', key: 'buttons' } as const, [] as PitboardButton[])
+const BUTTON_KEY = /^[a-z][a-z0-9-]{0,31}$/
+const BUTTON_MAX = 2
+const BUTTON_LABEL = /^[ -~]{1,16}$/
 // paneOpen as of the last write, for a press to read without an await. A drawing's onPress holds what
 // that drawing read, and live on 2.1.302 a press soon after the first open still took the closed branch.
 // The module lives in one session's process, and its session start seeds this again after a reload.
 let paneOpenNow = false
+// Whether this module's session start has started its timers.
+let timersStarted = false
 
 async function setPaneOpen($: EngineInterface, value: boolean) {
   paneOpenNow = value
@@ -260,7 +269,8 @@ let sharedRound = 0
 async function refreshShared($: EngineInterface) {
   const round = ++sharedRound
   const key = await accountOf($)
-  const path = `${await stateDir($)}/rate-limits.json`
+  const dir = await stateDir($)
+  const path = `${dir}/rate-limits.json`
   let file: unknown = null
   let isUnreadable = false
   try {
@@ -278,9 +288,20 @@ async function refreshShared($: EngineInterface) {
   let burn: StatusBurn | null = null
   if (held !== null) {
     try {
-      burn = parseBurn(await $.fs.read(`${await stateDir($)}/five-hour-burn-${held}.json`))
+      burn = parseBurn(await $.fs.read(`${dir}/five-hour-burn-${held}.json`))
     } catch {
       // Absent or mid-rename: the row projects to 100% from its own samples.
+    }
+  }
+  // The week plan file is that of the same key. A read that fails while the file exists (a writer's
+  // rename) keeps the last value; a file that does not exist drops it.
+  let plan: StatusWeekPlan | null | undefined = null
+  if (held !== null) {
+    const planPath = `${dir}/week-plan-${held}.json`
+    try {
+      plan = parseWeekPlan(await $.fs.read(planPath))
+    } catch {
+      plan = (await $.fs.exists(planPath)) ? undefined : null
     }
   }
   const now = await $.clock.now()
@@ -296,9 +317,13 @@ async function refreshShared($: EngineInterface) {
     await update($, fileLimits, () => [])
     await update($, scoped, () => [])
     await update($, fiveBurn, () => null)
+    await update($, weekPlan, () => null)
     await update($, measure, m => (m ? { ...m, limits: [] } : m))
     if (changed) await restoreSamples($, key)
   }
+  // The plan read needs only the held key, so an unreadable limits file does not freeze it.
+  // undefined: the read failed and the file exists, so the last plan of the same key stands.
+  if (plan !== undefined) await update($, weekPlan, () => plan)
   if (isUnreadable) {
     await update($, account, prev => ({ key: held, isFileUnknown: prev?.key === held && prev.isFileUnknown }))
     return
@@ -588,7 +613,7 @@ const PANE = 'pitboard'
 // The engine places a pane at any width only while the person's command or press is behind the
 // call, so in a press this must run first, before any await; the atom follows the result.
 async function openPane($: EngineInterface) {
-  const opened = await $.ui.open({ id: PANE, title: 'pitboard', closeOnEscape: true })
+  const opened = await $.ui.open({ id: PANE, title: 'PitBoard', closeOnEscape: true })
   if (opened.isPlaced) await setPaneOpen($, true)
   return opened
 }
@@ -616,7 +641,7 @@ async function togglePane($: EngineInterface) {
 
 // A given time keeps the caller off nowMs, so it is not redrawn every second.
 async function currentView($: EngineInterface, at?: number) {
-  const [m, c, mt, tick, sc, fl, fs, cs, ws, who, burn] = await Promise.all([
+  const [m, c, mt, tick, sc, fl, fs, cs, ws, who, burn, plan] = await Promise.all([
     read($, measure),
     read($, cache),
     read($, meta),
@@ -628,6 +653,7 @@ async function currentView($: EngineInterface, at?: number) {
     read($, weekSamples),
     read($, account),
     read($, fiveBurn),
+    read($, weekPlan),
   ])
   const now = tick || (await $.clock.now())
   return buildView({
@@ -643,10 +669,33 @@ async function currentView($: EngineInterface, at?: number) {
     isFileAccountUnknown: who?.isFileUnknown ?? false,
     burn,
     accountKey: who?.key ?? null,
+    weekPlan: plan,
   })
 }
 
 export const register: Register = on => {
+  // The noun other plugins call; the work is in the pitboard.addButton hook below, which has its own $.
+  on('engine.create', async ($, e, next) => ({ ...(await next(e)), pitboard: { addButton: async () => undefined } }))
+
+  on('pitboard.addButton', async ($, e) => {
+    const { key, label: raw } = (e ?? {}) as Partial<PitboardButton>
+    const label = typeof raw === 'string' ? raw.trim() : ''
+    if (typeof key !== 'string' || !BUTTON_KEY.test(key)) return { deny: 'A button key is 1 to 32 characters: a lowercase letter, then lowercase letters, digits or hyphens.' }
+    if (!BUTTON_LABEL.test(label)) return { deny: 'A button label is 1 to 16 printable ASCII characters.' }
+    // The limit is checked inside the update, which runs one call at a time, so calls made together cannot pass it.
+    let isFull = false
+    await update($, buttons, current => {
+      const i = current.findIndex(b => b.key === key)
+      if (i < 0 && current.length >= BUTTON_MAX) {
+        isFull = true
+        return current
+      }
+      return i < 0 ? [...current, { key, label }] : current.map((b, j) => (j === i ? { key, label } : b))
+    })
+    if (isFull) return { deny: `At most ${BUTTON_MAX} buttons can be added.` }
+    return { value: undefined }
+  })
+
   on('session.start', async ($, e, next) => {
     const result = await next(e)
     await $.command.register({ name: 'pitboard', description: 'Open every status reading, with what it means, in a pane' })
@@ -668,6 +717,10 @@ export const register: Register = on => {
     await refreshThreshold($)
     await refreshTranscript($)
     await recordContext($)
+    // The timers start once per module: a second session start in the process (a resume) must not add a second pair.
+    // A reload makes a new module, with the flag false, and the engine cancelled the old timers with the old module.
+    if (timersStarted) return result
+    timersStarted = true
     let shown = ''
     $.clock.every(1000, () => {
       void $.clock.now().then(async t => {
@@ -741,7 +794,7 @@ export const register: Register = on => {
 
   on('command.run', { command: 'pitboard' }, async $ => {
     await openPane($)
-    return { text: 'pitboard pane opened.' }
+    return { text: 'PitBoard pane opened.' }
   })
 
   on('session.measure', async ($, e, next) => {
@@ -870,7 +923,7 @@ export const register: Register = on => {
   // Terminal: the row under the engine's own mode and hint line, which the terminal keeps above it.
   on('ui.render', { component: 'PromptHint' }, async ($, e, next) => {
     if (e.surface !== 'terminal') return next(e)
-    const [engine, view, open] = await Promise.all([next(e), currentView($), read($, detail)])
+    const [engine, view, open, added] = await Promise.all([next(e), currentView($), read($, detail), read($, buttons)])
     const els = $.ui.resolve(e) as Els
     const { Box } = els
     return (
@@ -885,6 +938,7 @@ export const register: Register = on => {
           () => {
             void togglePane($)
           },
+          added,
         )}
         {engine}
       </Box>
@@ -895,7 +949,7 @@ export const register: Register = on => {
   // model, is the one site there a plugin can reach; the row itself stays above the input.
   on('ui.render', { component: 'SessionMode' }, async ($, e, next) => {
     if (e.surface !== 'desktop') return next(e)
-    const engine = await next(e)
+    const [engine, added] = await Promise.all([next(e), read($, buttons)])
     const { Box, Button } = $.ui.resolve(e) as Els
     if (!Button) return engine
     return (
@@ -903,12 +957,16 @@ export const register: Register = on => {
         {engine}
         <Button
           key="pane"
-          label="pitboard"
+          label="[ PitBoard ]"
           dimColor
           onPress={() => {
             void togglePane($)
           }}
         />
+        {/* No bar between: the desktop footer draws buttons only, each its own chip, and drops text. */}
+        {added.map(b => (
+          <Button key={`button-${b.key}`} label={`[ ${b.label} ]`} dimColor onPress={() => {}} />
+        ))}
       </Box>
     )
   })

@@ -1,7 +1,7 @@
 # Night queue report template
 
 One report per night run. Fill it from `paceline queue report` plus the queue and pool state; do
-not hand-wave a section — every line traces to a queue item, a reservation, or a status
+not hand-wave a section — every line traces to a queue item, a hold, or a status
 timestamp. Keep every section; when one has nothing to report, say so in one line.
 
 ## Done
@@ -36,6 +36,6 @@ the run's end). For each: `<item id>`, last known timestamp, what the queue did 
 
 ## Night budget
 
-- Allowance: `<run.allowance_pct>` % · Surplus: `<run.surplus_pct>` % · Pool spent:
+- Allowance: `<run.allowance_pct>` % (the off-hours share of `<run.night_date>`) · Pool spent:
   `<run.pool_spent_pct>` % (only if the leftover pool was approved for this window)
 - Stopped because: `<the reasons from the last paceline auto call, verbatim: the last | segment of its STOP line, or reasons with --json>`

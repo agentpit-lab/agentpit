@@ -28,6 +28,7 @@ PitBoard adds what PaceLine's limits file and the session's transcript hold.
 | Model, effort, Claude Code version, turns, session time | Claude Code. Until a request reports the effort, it comes from `modelSettings` or `effortLevel` in the settings. `/effort` in this session shows at once. |
 | Advisor | `advisorModel` in `settings.json`. `/advisor` in this session shows at once. |
 | Branch | `git branch --show-current` in the start directory. |
+| Plan, Reserve | PaceLine's week plan file, `week-plan-<key>.json`, for the signed-in account's key only, while pace is on: the current part with its share, the mode and the reserve. Without a usable file the Week card measures the week against an even pace. |
 
 `/clear`, and a resume inside a running session, drop the previous conversation's context, cache,
 and session readings at once. The limits stay, because they belong to the account. Subagents'
@@ -37,13 +38,13 @@ requests and compactions leave the row alone; it describes the main conversation
 
 The row sits where each surface lets a plugin draw:
 
-- In the CLI, under the prompt input, below Claude Code's own mode and hint line. `ⓘ` and a
-  `pitboard` button end it.
+- In the CLI, under the prompt input, below Claude Code's own mode and hint line. `ⓘ` and a `[
+  PitBoard ]` button end it.
 - In Desktop, above the prompt input. Desktop offers a plugin no place under the input: it does not
   draw the hint line that holds the CLI row. Its footer under the input, between the mode selector
-  and the model name, has room for a short label only, and holds a `pitboard` button.
+  and the model name, has room for a short label only, and holds a `[ PitBoard ]` button.
 
-Either `pitboard` button opens the same pane as `/pitboard`. Claude Code counts the click as your
+Either `PitBoard` button opens the same pane as `/pitboard`. Claude Code counts the click as your
 request, so the pane opens in a terminal of any width; a pane a plugin opens on its own waits for
 144 columns. The next click on the button closes the pane. A pane hidden behind another pane's tab
 is brought to the front by closing and reopening it, and that reopen is not counted as your request,
@@ -129,8 +130,8 @@ Runs out = now + (100 - used %) / Pace hours
 - At reset is where the current Pace leaves the five-hour window at its reset.
 - Runs out replaces At reset when the limit reaches 100% before the reset.
 - Threshold replaces Runs out when PaceLine supplies its projection: it is the clock time the
-  five-hour limit reaches PaceLine's threshold, 80% by day and 95% at night by default, at the
-  current Pace.
+  five-hour limit reaches PaceLine's threshold, 95% by default, in working hours and off-hours
+  alike, at the current Pace.
 
 PitBoard takes the projection from PaceLine's five-hour burn file of the signed-in account,
 `five-hour-burn-<key>.json` (see [the file's
@@ -153,6 +154,36 @@ in hours of budget          = |points| / 100 x 168 h
 
 Below even pace, the card says Spare; past it, Overspent. A week spends 100% over 168 hours, so a
 day of budget is 100/7, about 14.3 points.
+
+With PaceLine's plan, the Week card measures the week against the plan instead of an even pace.
+PitBoard uses PaceLine's week plan file only when all four hold: the file is readable and its
+version is one PitBoard knows; it is the signed-in account's and its week is the card's week (the
+reset within 10 minutes); PaceLine did not write it more than 5 minutes ahead of the clock; and its
+current part holds the present time. Otherwise the card is the even-pace card above, and so it is
+with pace off, with no file, or for about 40 seconds after a part ends, or after a weekly window
+that resets ahead of schedule or whose reset moves later, until PaceLine writes the next (see the
+limitation).
+
+Spare, Overspent, the `Plan` row and the tick follow PaceLine's own rule, on the part the file
+holds. `used` is the week's percentage, `share` the part's share of the week and `used at start` the
+week's usage when the part began:
+
+```
+spent   = max(0, used - used at start)
+allowed = share x (time gone in the part / length of the part)
+above   = spent > allowed + 1
+Spare or Overspent (points) = |spent - allowed|, Overspent when spent > allowed
+```
+
+The tick stands at `used at start + allowed`, where the plan expects the week now; Week elapsed
+stays on the time passed, as above. A part with no share has no `Spare`, `Overspent` or tick, and
+`Plan` reads `unplanned part`. `Plan` is `above` only past the 1-point tolerance, so an overspend of
+up to 1 point reads `within`.
+
+`Pace` is measured within the current part, looking back at most 6 hours, and reads `n/a (needs 1
+h)` in the part's first hour. `Budget` is what is left of the part's share over the hours left in
+the part, at most what the five-hour limit can spend in an hour in weekly points. The effective mode
+is `limit` unless PaceLine's `inform_until` is still ahead, when it is `inform`.
 
 ### Try the formulas
 
@@ -290,8 +321,15 @@ PaceLine reports that the window would reach its threshold before the reset, and
 alone does not colour it.
 
 The weekly limit and the model-scoped limits take their colour on the row from the percentage used
-only: amber from 80%, red from 95%. Inside the Week card, Pace above Budget is amber, and Overspent
-is amber, red past a day of budget.
+only: amber from 80%, red from 95%. Inside the Week card without a plan, Pace above Budget is amber,
+and Overspent is amber, red past a day of budget.
+
+With PaceLine's week plan the card is coloured by the plan instead. `Plan` reads `above` in amber in
+`inform` mode and in red in `limit` mode, and `Overspent` takes the `Plan` row's colour only when
+the plan is above its share; a day of budget no longer matters. `Reserve` turns red when the week's
+usage reaches 100% minus the reserve before the release. The week's gauge on the row and the card's
+title take the highest level of `Used`, `Plan` and `Reserve`, while `Used` keeps the percentage rule
+above, so a red plan shows on the row without opening the card.
 
 Where each reading turns amber (watch) and red (act). The [reference](reference.md#levels) lists the
 same values with the rules that add to them.

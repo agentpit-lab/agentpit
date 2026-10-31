@@ -21,14 +21,14 @@ export type SettingsView = {
   note: { row: string; text: string } | null
 }
 
-// The style preview: the last `paceline simulate --preview --cached --json` result, its reset text,
-// when it finished, why it failed, and whether a run is going.
-export type PreviewView = {
-  rows: Record<string, { unused_pct: number; unused_with_queue_pct?: number; asks_h?: number }> | null
-  resetLocal: string | null
+// The calendar tab's data: the last `paceline plan --json` view, when it was read, why the last read
+// failed, and why the last mark change was refused.
+export type CalendarView = {
+  // The parsed plan view (hooks/settings.ts, PlanView); a contract holds no import.
+  result: unknown
   at: number | null
   error: string | null
-  pending: boolean
+  note: string | null
 }
 
 declare module 'claude-code' {
@@ -36,8 +36,7 @@ declare module 'claude-code' {
     paceline: {
       session: ContextSession
       settings: SettingsView
-      preview: PreviewView
-      // The ids of the open Advanced sections and style rows.
+      // The ids of the open Advanced sections.
       open: string[]
       // The row being edited, "<where>:<id>", or "".
       editing: string
@@ -45,6 +44,13 @@ declare module 'claude-code' {
       draft: { value: unknown; text: string | null } | null
       // The time zone search text.
       zoneQuery: string
+      // The pane's shown tab.
+      tab: 'settings' | 'calendar'
+      calendar: CalendarView
+      // Whether the calendar's ended days are unfolded.
+      calendarEnded: boolean
+      // True once PitBoard took this plugin's button into its row; its Desktop footer then draws it.
+      inPitboard: boolean
     }
   }
 }

@@ -20,6 +20,8 @@ what the week can spare.
    switch it is a dry run that prints what it would change. Run it with `-Enable` before the night
    and with `-Disable` after it, in an elevated PowerShell. The previous values are saved in
    `<state>/night-power-state.json`. `-NightStart` and `-NightEnd` set the hours (default 0 and 8).
+   A night run now ends at the working start (09:00 by default), so pass the hours that match your
+   plan, for example `-NightStart 18 -NightEnd 9`.
 
    **macOS**
 
@@ -43,6 +45,10 @@ what the week can spare.
 
    Items get the IDs `Q1`, `Q2`, and so on. Add `--independent` to an item that may run beside other
    independent items.
+
+   The queue runs on tonight's off-hours share, and the default off-hours mark is 0: with no mark,
+   `auto` has no allowance and stops. `paceline queue add` prints the command when tonight's share
+   is 0. Mark the night first, for example `paceline plan set today --off-hours 0.5`.
 4. Tell the agent to run the queue. It starts the run once:
 
    ```
@@ -68,42 +74,82 @@ The leftover pool works the same way with `--pool` (item IDs `L1`, `L2`, and so 
 `paceline queue --pool approve`; it runs only on the last night before the weekly reset. The
 [explanation](explanation.md#the-night-queues-decisions) says how `auto` decides.
 
-## Declare, move, or cancel a plan
+## Plan a week
 
-**When you need it:** you know a day ahead that you will be away, or that a day will be heavy, and
-you want the budget to follow.
+**When you need it:** you want the budget to follow how heavy each day will be: a day off, a light
+day, a long one.
 
-1. Declare the plan. Dates are in the profile's time zone, and a bare `--to` date includes that day:
-
-   ```
-   paceline plan add --type away --from 2026-10-16 --to 2026-10-16 --phrase "off on Friday"
-   paceline plan add --type heavy --from tomorrow --to tomorrow --weight 1.5
-   ```
-
-   An `away` plan gives its day hours no budget; a `heavy` plan multiplies their weight by
-   `--weight`, 2 by default.
-2. To move or cancel a plan, find it first:
+1. See the week. Each day has two parts, its working hours (☼) and the off-hours after them (☾);
+   each has a mark and a share of what is left:
 
    ```
-   paceline plan find --text "friday"
+   paceline plan
    ```
 
-   Exit code 0 means one match: use its ID. 3 means several: narrow the search with `--on DATE` or
-   `--type`. 4 means none.
-3. Move it, or cancel it:
+   A mark is `off`, `light`, `normal`, `heavy`, or a number from 0 to 2 in steps of 0.25. Working
+   hours are `normal` and off-hours `off` until you mark them. `◀ now` shows the part that is
+   running and what it has spent against its share.
+2. Mark a day. A day is `today`, `tomorrow`, `mon` to `sun`, or a date; it must be a day of the
+   current week:
 
    ```
-   paceline plan modify P3 --from 2026-10-17 --to 2026-10-17
-   paceline plan cancel P3
+   paceline plan set fri --work off
+   paceline plan set tomorrow --work heavy --off-hours light
    ```
 
-4. While pace is on, a session start the day before reminds the agent of a plan that is not
-   confirmed. After you say it still holds, the agent runs `paceline plan confirm P3`. Confirming
-   stops the reminder and leaves the budget as it is.
+   A part's share is fixed when the part starts. A mark for the part that is running, or for one
+   that has ended, is stored but changes nothing this week; the parts after it follow the new marks
+   at once. In a terminal tab of Claude Code Desktop, which has no session, the commands that write
+   (`plan set`, `plan reset`, `mode inform`, `mode limit`) refuse with `account not known yet
+   (desktop)`: run them from a session's Bash, or set `PACELINE_ACCOUNT_KEY` to the key that
+   `paceline status --json` shows as `data.account.key` there.
 
-**How to tell it worked:** `add`, `modify`, and `cancel` end with the new budget, for example `plan
-P3 cancelled; budget 1.21%/h, night 5.0%`. `paceline plan list` shows every plan with its local
-start and end.
+   In Claude Code Desktop, open `/paceline:settings pane` and choose Calendar: a card per day of the
+   week with its title, its ☼ and ☾ marks and their shares, and a bar on a grey track: the bar runs
+   to the bar top and the grey is the room left. A part that has ended shows what it spent, or `not
+   recorded` when the plan holds no spend for it. The days that have ended fold into one line that
+   unfolds when pressed. − and + change the mark of a part that has not started, through `paceline
+   plan set`; the part that is running and the ended ones show their marks without buttons. On a
+   phone the tab is read-only.
+3. Mark a weekday for every week with the template, and remove a day's marks:
+
+   ```
+   paceline plan template set mon --work heavy
+   paceline plan reset fri
+   ```
+
+4. To change the working hours, run `paceline profile set work_hours 08:00-17:00`, or use the
+   Working hours row of `/paceline:settings pane` (− and + move each end by 15 minutes). The new
+   hours apply from the end of the part that is running.
+5. To choose what a plan does, run `paceline mode limit` (a launch asks first when the current part
+   is more than 1 point over its share pro rata) or `paceline mode inform` (the default: it only
+   shows). In `limit`, `paceline mode inform --until-part-end` stops the questions until the current
+   part ends.
+
+**How to tell it worked:** On Tuesday at 09:00, 79% is left after the reserve. Tuesday is `heavy`
+(1.5), and the marks from Tuesday on add up to 5, so Tuesday's working hours get 79 × 1.5 / 5 =
+23.7%. `paceline plan` at 11:30 shows that share with `spent 2.0 of 23.7`.
+
+## Keep a reserve for a task at the end of the week
+
+**When you need it:** a task such as a test run must still fit on Friday, and you do not want the
+week's other work to use up the allowance first.
+
+1. Set the size, the weekday it opens on, and a name. The reserve keeps 10% of the week out of the
+   plan and out of launches until Friday's working hours begin:
+
+   ```
+   paceline reserve 10 --release fri --name tests
+   ```
+
+   The answer prints the change and the reserve's text, for example `reserve "tests" 10 % kept,
+   opens Fri 30 09:00`. Until then a launch asks once the week's usage reaches 90%; from the release
+   the 10% is spread over the rest of the week like the rest. Check it at any time with `paceline
+   reserve`, `paceline status` or `paceline plan`.
+2. To change it later, give only what changes: `paceline reserve 12`, `paceline reserve --release
+   last` (the last day before the reset, the default), or `paceline reserve --name ""` to clear the
+   name. `paceline reserve 0` turns the reserve off and keeps the day and name. The settings pane
+   has the same three rows under Weekly reserve.
 
 ## Hold the cache while away
 
@@ -248,8 +294,8 @@ setting](limitations.md#claude_code_disable_nonessential_traffic-blocks-usage-wa
    `PACELINE_MODEL`.
 
 **How to tell it worked:** `/paceline:usage-watch status` shows a recent `last success` and `last
-error: none`. `/paceline:pace status` shows a data age of a few minutes at most, and lists the
-model-scoped buckets after the weekly figure, for example `7d 34% (Fable 7%)`. If nothing shows, see
+error: none`. `/paceline:pace status` shows a data age of a few minutes at most, and `paceline
+status --json` lists the model-scoped buckets under `weekly.scoped`. If nothing shows, see
 [usage-watch shows nothing](troubleshooting.md#usage-watch-shows-nothing).
 
 ## Use two accounts on one machine
@@ -258,15 +304,17 @@ model-scoped buckets after the weekly figure, for example `7d 34% (Fable 7%)`. I
 show the limits of the account you use now.
 
 **Which setup:** use one configuration directory and `/login` when you use one account at a time.
-The same holds when Claude Code Desktop is on one account and a terminal on the other: a Desktop
-session takes its account from the variables its host passes, so each session shows its own figures.
-In a plain terminal, `paceline status` ends with `other account <8 digits> active; --account <8
-digits>` while the other account has a fresh reading, and `paceline status --account <8 digits>`
-shows its figures. PaceLine keeps each account's readings in a partition of its own, and pace reads
-the partition of the account signed in now. Use a configuration directory per account
-(`CLAUDE_CONFIG_DIR`) when two terminal sessions on different accounts run at the same time, or when
-each needs its own profile, plans, and night queue. See [Each configuration directory keeps its own
-state](limitations.md#each-configuration-directory-keeps-its-own-state).
+The same holds when Claude Code Desktop is on one account and a terminal on the other: each session
+files its readings under the account of its own credential, which PaceLine asks Claude Code for, so
+each session shows its own figures; so does a `claude` started from a Desktop terminal tab. A
+`paceline` command outside any session takes the account of the last terminal `/login`, and
+`paceline status` then ends with `other account <8 digits> active; --account <8 digits>` while
+another account has a fresh reading; `paceline status --account <8 digits>` shows its figures.
+PaceLine keeps each account's readings in a partition of its own, and pace reads the partition of
+the account signed in now. Use a configuration directory per account (`CLAUDE_CONFIG_DIR`) when two
+terminal sessions on different accounts run at the same time, or when each needs its own profile and
+night queue (each account already has its own week plan). See [Each configuration directory keeps
+its own state](limitations.md#each-configuration-directory-keeps-its-own-state).
 
 1. Update with `/plugin marketplace update agentpit` and restart every open session. A session still
    on PaceLine 0.2.5 does not tag its readings and mixes the accounts until it restarts.
@@ -285,24 +333,60 @@ figures at once.
 
 - `no usage data yet for the signed-in account`: the signed-in account has no readings yet. It fills
   after the first reply in a session with PaceLine loaded.
-- `account unknown (<reason>)`: PaceLine cannot tell that the figures belong to the signed-in
-  account. The reason is `untagged`, `no-file`, `unreadable`, or `no-account`. See [Status says
-  account unknown](troubleshooting.md#status-says-account-unknown).
+- `account unknown (<reason>)`: PaceLine cannot tell that the figures belong to the session's
+  account. The reason is `untagged`, `no-file`, `unreadable`, `no-account`, `no-credential`, or
+  `no-state-key`. While the account is `pending` (the first seconds of a session), or not known for
+  the reason `desktop` or `logged-out`, pace shows no figures. See [Status says account
+  unknown](troubleshooting.md#status-says-account-unknown).
 - After an update from 0.2.5, the figures show `account unknown (untagged)` until the account's
   first tagged reading arrives.
 
+## Turn on the memory guard
+
+**When you need it:** a heavy process on this machine, such as a test run, a container or a large
+build, can use up free memory and crash the host, and you want PaceLine to ask before a launch and
+to stop the night queue while free memory is low.
+
+1. Turn the guard on. It is off by default: while it is off, PaceLine does not measure memory before
+   a launch and no memory floor applies.
+
+   ```
+   paceline profile set memory_guard true
+   ```
+
+2. Set the floor and the heavy-run keys to fit the machine. They are used only while the guard is
+   on; the defaults are 2048, 2048, 6000 and 3. For example, a 4 GiB floor and at most two heavy
+   runs:
+
+   ```
+   paceline profile set min_free_commit_mb 4096
+   paceline profile set max_heavy_runs 2
+   ```
+
+   The [profile keys](reference.md#profile-keys) say what each key does.
+
+**How to tell it worked:** With free memory below `min_free_commit_mb`, an Agent or Workflow launch
+asks first and `paceline auto` stops the night queue. `paceline status` says `host memory unknown`
+when memory cannot be measured while the guard is on. `paceline profile set memory_guard false`
+turns the guard off again. To check it, run `paceline status --json`: `"guard": true` under `host`
+means the guard is on.
+
 ## Change a profile setting
 
-**When you need it:** the budget counts in the wrong time zone, your working day is longer or
-shorter than 08:00 to 22:00, or a limit in the profile does not fit your machine.
+**When you need it:** the budget counts in the wrong time zone, or a limit in the profile does not
+fit your machine. Your working hours are part of the week plan; see [Plan a week](#plan-a-week).
 
 1. Look at the current values. `/paceline:settings` shows every setting and switch: a summary with
    the four switches, a table for each group, a `●` before each value that differs from its default,
    and the count of Advanced settings that differ, and `/paceline:settings pane` opens a pane where
-   you edit a value and save it with the same checks as `paceline profile set`. In a session where
-   PaceLine's hooks module does not run, or in a plain terminal, `paceline settings` prints the same
-   list as text. The pane is read-only on a phone. A new skill needs a new session in Claude Code
-   Desktop, so start one after you update PaceLine:
+   you edit a value and save it with the same checks as `paceline profile set`; its Calendar tab
+   plans the week (see [Plan a week](#plan-a-week)). The PaceLine button opens the same pane, and a
+   second click closes it: in the CLI `[ PaceLine ]` follows PitBoard's button at the end of
+   PitBoard's row, and in Desktop `[ PaceLine ]` sits in the footer under the prompt; without
+   PitBoard the CLI has no such button. In a session where PaceLine's hooks module does not run, or
+   in a plain terminal, `paceline settings` prints the same list as text. The pane is read-only on a
+   phone. A new skill needs a new session in Claude Code Desktop, so start one after you update
+   PaceLine:
 
    ```
    /paceline:settings
@@ -313,14 +397,16 @@ shorter than 08:00 to 22:00, or a limit in the profile does not fit your machine
 
    ```
    paceline profile set timezone America/New_York
-   paceline profile set day_hours '[8, 24]'
+   paceline profile set max_agents 4
+   paceline profile set five_hour_stop_pct 90
    paceline profile set min_free_commit_mb 1024
    ```
 
-   Set these first: `timezone`, `day_hours`, `night_hours`, `models`, and the memory floor
-   (`min_free_commit_mb` and `commit_reserve_mb`). The defaults for the memory floor and the hours
-   are starting points. If a confirmation prompt appears at most Agent launches, lower
-   `min_free_commit_mb`; if your day is longer, widen `day_hours`.
+   Set these first: `timezone` and, if you turn on the memory guard, its floor (`min_free_commit_mb`
+   and `commit_reserve_mb`; see [Turn on the memory guard](#turn-on-the-memory-guard)). The defaults
+   for the floor are starting points and count only while the guard is on. If a confirmation prompt
+   about free memory appears at most Agent launches, lower `min_free_commit_mb`. The working hours
+   are not a profile key; see [Plan a week](#plan-a-week).
 3. A new profile follows this machine's time zone, so it moves when the machine does. To count in a
    fixed zone instead, for example a team's zone, run `paceline profile set timezone Europe/Kyiv`:
    it also turns the mode to `fixed`. `paceline profile set timezone_mode machine` follows the
@@ -329,58 +415,12 @@ shorter than 08:00 to 22:00, or a limit in the profile does not fit your machine
    earlier version stays fixed until you choose the machine mode.
 
 **How to tell it worked:** `profile set` prints `KEY: OLD -> NEW` and the new `paceline status`
-line, for example `day_hours: [8, 22] -> [8, 24]`; the pane shows the same line in a message after a
-save. A refused value exits 2, prints the reason, and changes nothing. The [profile
-keys](reference.md#profile-keys) list what each key does and its range. To change the five-hour,
-reserve, and throttle keys together, see [Choose a spending style](#choose-a-spending-style).
-
-## Choose a spending style
-
-**When you need it:** you want PaceLine to keep a margin below the limits, or to use the whole
-limit, and you want to see what that does to your week before you choose.
-
-1. Compare the styles on your own week: your profile, your zone, and your account's next weekly
-   reset. Without options, `paceline simulate` replays every style through four week shapes, with
-   and without a night queue; a narrower run is easier to read:
-
-   ```
-   paceline simulate --style careful --style balanced --week on-track --night-queue no
-   ```
-
-   Each row says how much of the week is left unused at the reset, how much the weekend day hours
-   and the nights spent, and for how many hours a launch would ask you first (`asks h`). The figures
-   come from a model; [the weekly simulation](explanation.md#the-weekly-simulation) says what it
-   leaves out. The settings view shows the same for an on-track week as `≈ X % unused` under the
-   style choice.
-2. Choose the style. `careful` keeps a margin, `balanced` is the defaults, `full` uses the whole
-   limit:
-
-   ```
-   paceline profile style careful
-   ```
-
-   In the settings view, pick it in the Spending style group. "What it sets (9)" opens the nine
-   values, each editable alone; changing one makes the style Custom.
-3. To override a style's values, write `<state>/pace-styles.json` by hand. PaceLine reads it for
-   `profile style`, `settings`, and `simulate`, and never writes it:
-
-   ```json
-   {"careful": {"reserve_pct": 10, "weekend_cap_pct": 18}, "full": {"throttle_weekly_pct": 95}}
-   ```
-
-   A value that fails the checks of `profile set`, a style name other than the three, and a key
-   outside the style's nine are ignored, each with a warning in `paceline settings`; the built-in
-   value stays in force. Apply the style again after you edit the file, because a profile set to a
-   style before its override changed reads as `custom`.
-4. The ninth value of a style, `reserve_release_min_hours`, starts the release of the reserve at
-   least that many hours before the reset: 54 for `balanced` and `full`, 0 (no floor) for `careful`.
-   Existing profiles have 54 too. The hours count back from your account's own reset, so the floor
-   works for any reset day. To get the release start of earlier versions back, run `paceline profile
-   set reserve_release_min_hours 0`.
-
-**How to tell it worked:** `paceline profile style` prints one `KEY: OLD -> NEW` line for each key
-that changed and the new status line, and `paceline settings` shows the style by name, for example
-`Spending style: careful`.
+line, for example `max_agents: 6 -> 4`; the pane shows the same line in a message after a save. A
+refused value exits 2, prints the reason, and changes nothing. The [profile
+keys](reference.md#profile-keys) list what each key does and its range. `five_hour_stop_pct` (95 by
+default) is the five-hour usage from which a launch asks you first, in working hours and off-hours
+alike. The reserve is set with `paceline reserve` (see [Keep a reserve for a task at the end of the
+week](#keep-a-reserve-for-a-task-at-the-end-of-the-week)).
 
 ## Seat PaceLine as your organization's plugin
 

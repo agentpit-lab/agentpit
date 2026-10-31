@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """away: tell paceline that the owner is not at the keyboard, so a launch that would ask for confirmation
-(a hard limit, or the five-hour burn over the agent cap) is denied instead.
+(a hard limit, the weekly reserve's stop line, or the plan in limit mode) is denied instead.
 
     paceline away on [--session ID]
     paceline away off
@@ -60,8 +60,8 @@ def main(argv=None):
     if args.command == "on":
         set_on(sd, args.session)
         print(describe(read(sd)))
-        print("A launch that would ask for confirmation (a hard limit, or the five-hour burn over the agent cap) "
-              "is now denied; your next message in any session clears this.")
+        print("A launch that would ask for confirmation (a hard limit, the weekly reserve's stop line, or the plan in "
+              "limit mode) is now denied; your next message in any session clears this.")
     elif args.command == "off":
         clear(sd)
         print(describe(read(sd)))

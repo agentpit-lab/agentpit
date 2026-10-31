@@ -25,28 +25,27 @@ current while idle](how-to.md#keep-usage-current-while-idle).
 
 ### Two accounts in one configuration directory keep their limits apart, with gaps
 
-PaceLine tags each reading with a one-way key of the account that is signed in, and keeps the
-readings of each account in a partition of its own in `rate-limits.json`. Pace, the night queue, and
-PitBoard read only the partition of the account signed in now. After a `/login` to another account
-in the same configuration directory, the old account's figures stay in the file and come back when
-you sign in to it again. A partition whose readings are all older than 7 days is dropped, except the
-newest one, which stays however old and shows as stale. A Claude Code Desktop session passes its
-account to its process in the variables `CLAUDE_CODE_ACCOUNT_UUID` and
-`CLAUDE_CODE_ORGANIZATION_UUID`. When both are set and the account variable is a UUID, the key comes
-from them and holds for the life of the process. After a `/login` or `/logout` in that session, the
-PaceLine hooks and PitBoard in it treat the account as `account unknown` until it restarts;
-`paceline status` and the gates run from that session still read the variables and report the
-account the session started with. Otherwise the key comes from `oauthAccount` in Claude Code's own
+PaceLine tags each reading with a one-way key of the account of the session's credential, and keeps
+the readings of each account in a partition of its own in `rate-limits.json`. Pace and the night
+queue read only the partition of the session's account. The hooks module learns that account from
+Claude Code's profile endpoint (see [usage-watch reads an endpoint outside the published
+API](#usage-watch-reads-an-endpoint-outside-the-published-api)) at session start, after `/login` or
+`/logout`, and when the stored credential changes, so a Claude Code Desktop session, a terminal
+session, and a `claude` started from a Desktop terminal tab each file under their own login. After a
+`/login` to another account in the same configuration directory, the old account's figures stay in
+the file and come back when you sign in to it again. A partition whose readings are all older than 7
+days is dropped, except the newest one, which stays however old and shows as stale. A `paceline`
+command outside any session takes the account from `oauthAccount` in Claude Code's own
 `.claude.json`, which names the account of the last `/login` in a terminal; see
 [Files](reference.md#files).
 
 Some gaps remain:
 
-- A `/login` in another open session can misfile readings for a while. Every open session shares the
-  `.claude.json` file, and a session tags a reading with the account the file names at the moment it
-  writes. A session that writes just before it sees the change of account tags a reading of the old
-  account with the new account's key, and it stands in the new partition until an exact reading or
-  the next window replaces it.
+- A `/login` in one terminal session changes the login of every terminal session of the same
+  configuration directory, because they share one stored credential. Each session asks the profile
+  endpoint again when it sees the credential file change, within about 10 seconds; a reading it
+  writes in between carries the new login's limits under the old account's key, and stands in that
+  partition until an exact reading or the next window replaces it.
 - A session still on PaceLine 0.2.5 does not tag its readings and merges them into a top level that
   mixes accounts. A merge by a newer session rebuilds the top level from the partitions, and a 0.2.5
   merge can mix it again. The mix lasts until every open session has restarted on the new version.
@@ -56,39 +55,38 @@ Some gaps remain:
 - A reading with no `account` field, from an older PaceLine or another writer, goes to the partition
   `unknown`. Pace and PitBoard use it when the signed-in account has no partition of its own, and
   mark the figures as `account unknown`.
-- A Desktop session that its host starts with its own credential, rather than with the two variables
-  alone, and macOS and Linux are not verified live. The variables are not part of Claude Code's
-  documented interface, so a later version may drop them; PaceLine then reads `.claude.json`. The
-  behaviour of `oauthAccount` there is read from Claude Code's files, not from a sign-in on those
-  systems. Where the file names no account, the state is `account unknown`.
+- The profile request from a Claude Code Desktop session, and macOS and Linux, are not verified
+  live: the request was checked from a terminal on Windows. If Desktop refuses it, a Desktop session
+  writes no reading, and pace shows no figures for it.
+- PitBoard still takes a session's account from the variables `CLAUDE_CODE_ACCOUNT_UUID` and
+  `CLAUDE_CODE_ORGANIZATION_UUID` first. In a `claude` started from a Desktop terminal tab, its row
+  shows the Desktop account's partition while PaceLine files the readings under the terminal login.
 
 **What you see:** after a `/login`, `/paceline:pace status` shows the new account's figures, or `no
 usage data yet for the signed-in account` until its first reading arrives. When PaceLine cannot tell
-the account, `status` ends with `account unknown (<reason>)` and the `pace:` line adds `account
-unknown`. See [Status says account unknown](troubleshooting.md#status-says-account-unknown).
+the account, `status` ends with `account unknown (<reason>)`; the `pace:` line does not mention it.
+See [Status says account unknown](troubleshooting.md#status-says-account-unknown).
 
 **What still works:** a Desktop session on one account and a terminal session on the other need no
-second directory: each tags and reads its own account. In a plain terminal, `paceline status` shows
-the terminal login's figures and ends with `other account <8 digits> active; --account <8 digits>`
-when another account has a reading under 30 minutes old; `paceline status --account <key>` shows
-that account's. A second configuration directory per account, as the next entry describes, keeps the
-files of two accounts apart altogether. See [Use two accounts on one
-machine](how-to.md#use-two-accounts-on-one-machine).
+second directory: each tags and reads its own account; PitBoard follows the session's variables (see
+above). In a plain terminal, `paceline status` shows the terminal login's figures and ends with
+`other account <8 digits> active; --account <8 digits>` when another account has a reading under 30
+minutes old; `paceline status --account <key>` shows that account's. A second configuration
+directory per account, as the next entry describes, keeps the files of two accounts apart
+altogether. See [Use two accounts on one machine](how-to.md#use-two-accounts-on-one-machine).
 
 ### Each configuration directory keeps its own state
 
 The state directory sits under the Claude Code configuration directory: `$CLAUDE_CONFIG_DIR`, else
 `~/.claude`. Two configuration directories on one machine have two state directories.
 
-**What you see:** each has its own pace switch, profile, plans, reservations, night queue,
-usage-watch switch, and usage-watch schedule. Turning pace on in one does not turn it on in the
-other.
+**What you see:** each has its own pace switch, profile, week plans, holds, night queue, usage-watch
+switch, and usage-watch schedule. Turning pace on in one does not turn it on in the other.
 
 **What still works:** to share one state directory, set `PACELINE_STATE_DIR` to the same path for
-both. Each session then resolves its own account from its own configuration directory's
-`.claude.json`, so the readings of the two accounts go to separate partitions of one limits file,
-and each session reads its own. See the [reference](reference.md#paceline-reference) for how
-`<state>` is found.
+both. Each session then files under the account of its own credential, so the readings of the two
+accounts go to separate partitions of one limits file, and each session reads its own. See the
+[reference](reference.md#paceline-reference) for how `<state>` is found.
 
 ## Surfaces and session kinds
 
@@ -116,17 +114,19 @@ cache while away](how-to.md#hold-the-cache-while-away).
 
 ### A hard limit refuses a launch in non-interactive runs
 
-At a hard limit, or over the agent cap while the five-hour window burns toward its threshold, the
-hook before an Agent or Workflow launch asks you to confirm. In a `claude -p` run nobody can answer,
-and Claude Code denies such a request. This entry is from Claude Code's documentation, not tested
-here.
+At a hard limit, at the weekly reserve's stop line, or in `limit` mode over the current part's
+share, the hook before an Agent or Workflow launch asks you to confirm. In a `claude -p` run nobody
+can answer, and Claude Code denies such a request. This entry is from Claude Code's documentation,
+not tested here. In the `auto`, `bypassPermissions` and `dontAsk` permission modes the hook itself
+denies these launches.
 
-**What you see:** an Agent or Workflow launch at a hard limit, or over the agent cap in the burn
-state, fails in the run. With a cap of 0, every launch fails.
+**What you see:** an Agent or Workflow launch at a hard limit, at the weekly reserve's stop line, or
+over the part's share in `limit` mode, fails in the run. `paceline mode inform` before the run
+removes the plan question.
 
-**What still works:** below the hard limits, and within the agent cap, the `pace:` line is advice
-only and the launch goes ahead. A night queue checks `paceline auto` before each item, and `auto`
-waits or stops at the same limits, and waits when the burn leaves no room for an agent. See [The
+**What still works:** below the stops and, in `limit` mode, within the part's share, a launch goes
+ahead and nothing asks; in `limit` mode the model reads the `pace:` line. A night queue checks
+`paceline auto` before each item, and `auto` waits or stops at the same limits. See [The
 confirmation at a hard limit](explanation.md#the-confirmation-at-a-hard-limit).
 
 ### The settings pane needs the hooks module and is read-only on a phone
@@ -139,9 +139,8 @@ for example where an organization manages Claude Code, there is no pane.
 not run, `/paceline:settings` reaches the model as the skill's text, which runs `paceline settings`,
 and `pane` says that the module does not run.
 
-**What still works:** `paceline settings` prints every value as text, and `paceline profile set`,
-`paceline profile style`, and the other commands change them. See [Change a profile
-setting](how-to.md#change-a-profile-setting).
+**What still works:** `paceline settings` prints every value as text, and `paceline profile set` and
+the other commands change them. See [Change a profile setting](how-to.md#change-a-profile-setting).
 
 ### A skill that an update adds needs a new session in Claude Code Desktop
 
@@ -317,12 +316,12 @@ writes and their TTL.
 
 ## pace
 
-### The pace line counts a model's own limit only when the model is set where Claude Code starts
+### The weekly limit counts a model's own limit only when the model is set where Claude Code starts
 
-The hook before a launch passes no model to pace. It counts a model-scoped weekly limit only when
-`PACELINE_MODEL` or `ANTHROPIC_MODEL` is set where Claude Code starts.
+The hook before a launch passes no model to pace. The weekly limit counts a model-scoped weekly
+bucket only when `PACELINE_MODEL` or `ANTHROPIC_MODEL` is set where Claude Code starts.
 
-**What you see:** the `pace:` line can advise a model whose own weekly limit is spent.
+**What you see:** a model whose own weekly limit is spent does not stop a launch.
 
 **What still works:** `paceline status --model <id>` shows the model-scoped limit. See [The budget
 per hour](explanation.md#the-budget-per-hour).
@@ -332,32 +331,33 @@ per hour](explanation.md#the-budget-per-hour).
 The hook before a launch gives `paceline status` 3 seconds. When pace takes longer than 3 seconds,
 the hook adds nothing.
 
-**What you see:** no `pace:` line and no confirmation for that launch; the launch goes ahead. A
-`hook.pre_agent` line with `"failure":true` goes to `<state>/debug.log`.
+**What you see:** no `pace:` line and no confirmation for that launch; the launch goes ahead, unless
+the memory guard is on and free memory is below its floor. A `hook.pre_agent` line with
+`"failure":true` goes to `<state>/debug.log`.
 
 **What still works:** the next launch tries again. Run `paceline doctor` to find a slow step.
 
-### Reservations of a cut-off session wait for the next pace call
+### Holds of a cut-off session wait for the next pace call
 
-At session end, a hook records the end and releases the session's reservations in its own process.
-Claude Code gives all `SessionEnd` hooks 1.5 seconds together by default, and a plugin's own timeout
-does not raise it, according to Claude Code's documentation. When that budget cuts the release off,
-or another `paceline` call holds the state lock, the next pace call releases them: the `pace:` line
-before a launch, `paceline auto`, or a session start. Only a hook stopped before it records the end
-leaves them until their process is gone or their lease ends.
+At session end, a hook records the end and releases the session's holds in its own process. Claude
+Code gives all `SessionEnd` hooks 1.5 seconds together by default, and a plugin's own timeout does
+not raise it, according to Claude Code's documentation. When that budget cuts the release off, or
+another `paceline` call holds the state lock, the next pace call releases them: the hook before a
+launch, `paceline auto`, or a session start. Only a hook stopped before it records the end leaves
+them until their process is gone or their lease ends.
 
-**What you see:** the reservations of an ended session stay active until the next pace call. When
-the hook was stopped before it recorded the end, the night queue counts them as outstanding until
-the lease ends (30 minutes, or 240 minutes for a subagent) or pace finds the owning process gone.
+**What you see:** the holds of an ended session stay active until the next pace call. When the hook
+was stopped before it recorded the end, the night queue counts them as outstanding until the lease
+ends (30 minutes, or 240 minutes for a subagent) or pace finds the owning process gone.
 
 **What still works:** `CLAUDE_CODE_SESSIONEND_HOOKS_TIMEOUT_MS`, set where Claude Code starts,
-raises the budget for all `SessionEnd` hooks. `paceline reserve list` shows the active reservations,
-and `paceline reserve prune` drops the ones whose process is gone. See
-[Reservations](explanation.md#reservations).
+raises the budget for all `SessionEnd` hooks. `paceline hold list` shows the active holds, and
+`paceline hold prune` drops the ones whose process is gone. See [Holds](explanation.md#holds).
 
 ### Unknown memory turns off the memory checks
 
-When pace cannot measure free memory, the memory checks do not apply.
+When the memory guard is on and pace cannot measure free memory, the memory checks do not apply.
+With the guard off, the default, there are no memory checks.
 
 **What you see:** `/paceline:pace status` says `host memory unknown`.
 
@@ -369,31 +369,29 @@ pace measures the five-hour burn rate from the readings of the current window, l
 minutes. The base reading must lie at least 10 minutes back; until then there is no rate. A window
 that has just reset, and a machine with no history yet, start without one.
 
-**What you see:** `paceline status --json` shows `"burn": null` under `five_hour`, no burn reason
-ends the status line, and the Agent and Workflow hook asks for no burn confirmation, however fast
-the percentage rises.
+**What you see:** `paceline status --json` shows `"burn": null` under `five_hour`, and `paceline
+auto` does not cap its agents by the burn, however fast the percentage rises.
 
-**What still works:** the hard limits, the budget per hour, and the agent count work without the
-burn rule, and the burn rule starts once 10 minutes of readings exist. See [The five-hour burn
+**What still works:** the hard limits and the budget per hour work without the burn rule, and the
+burn rule starts once 10 minutes of readings exist. See [The five-hour burn
 rate](explanation.md#the-five-hour-burn-rate).
 
-### Launch reservations rest on the order of Claude Code's hooks
+### Launch holds rest on the order of Claude Code's hooks
 
-The Agent and Workflow hook holds a `launch` reservation so that the launches of one assistant
-message count each other against the agent cap. Each `SubagentStart` of a session takes over the
-oldest `launch` reservation of that session, whichever launch it belongs to. The design assumes that
-Claude Code runs the `PreToolUse` hooks of one message before any `SubagentStart` of it. Claude Code
-does not document that order.
+The Agent and Workflow hook holds a `launch` hold so that the launches of one assistant message
+count each other in the active holds. Each `SubagentStart` of a session takes over the oldest
+`launch` hold of that session, whichever launch it belongs to. The design assumes that Claude Code
+runs the `PreToolUse` hooks of one message before any `SubagentStart` of it. Claude Code does not
+document that order.
 
-**What you see:** an agent whose start carries no session ID gets no reservation of its own: its
-`launch` reservation counts it for 60 seconds, and then nothing counts it. When the starts of a
-Workflow, or any start while other launches of the same session are pending, take over the oldest
-reservation, a pending launch can lose its reservation before its own agent starts, and that agent
-stays out of the count until it starts. A launch that you decline in a prompt keeps its reservation
-for 60 seconds.
+**What you see:** an agent whose start carries no session ID gets no hold of its own: its `launch`
+hold counts it for 60 seconds, and then nothing counts it. When the starts of a Workflow, or any
+start while other launches of the same session are pending, take over the oldest hold, a pending
+launch can lose its hold before its own agent starts, and that agent stays out of the count until it
+starts. A launch that you decline in a prompt keeps its hold for 60 seconds.
 
-**What still works:** the gate still asks or advises on the active reservations, and a launch
-reservation ends on its own after 60 seconds. See [Reservations](explanation.md#reservations).
+**What still works:** the gate still asks at its limits and counts the active holds, and a launch
+hold ends on its own after 60 seconds. See [Holds](explanation.md#holds).
 
 ### A prompt through the Agent SDK leaves the away marker
 
@@ -432,33 +430,90 @@ built-in European zones.
 
 **What still works:** see [The time zone is wrong](troubleshooting.md#the-time-zone-is-wrong).
 
-### The settings pane has no switch element and no editor for style overrides
+### The settings pane has no switch element
 
 Claude Code gives the pane no switch or checkbox element, so each of the four switches is a button
-that reads `● pace` while it is on and `○ pace` while it is off (likewise for each switch). The pane
-has no editor for style overrides: you write `<state>/pace-styles.json` by hand, and the pane only
-shows the values in force.
+that reads `● pace` while it is on and `○ pace` while it is off (likewise for each switch).
 
-**What you see:** a button where a switch would be, and in the spending style's nine values a note
-"(override)" beside a value that the file sets.
+**What you see:** a button where a switch would be.
 
-**What still works:** `paceline settings` shows each value in force with its source, and `paceline
-profile style` applies the overrides. See [Choose a spending
-style](how-to.md#choose-a-spending-style).
+**What still works:** `paceline settings` shows each value in force with its default. See [Change a
+profile setting](how-to.md#change-a-profile-setting).
 
 ### paceline simulate is a model of a week, not a forecast of yours
 
 `paceline simulate` replays a synthetic week through PaceLine's own budget code. It is a model: one
-reading per hour, a rolling five-hour sum instead of Claude Code's fixed windows, no declared plans
-and no reservations, a night queue that spends its whole allowance, and four fixed week shapes
-instead of your history.
+reading per hour, a rolling five-hour sum instead of Claude Code's fixed windows, no dated marks
+(only the working hours and weekday template of your plan file) and no holds, a night queue that
+spends its whole allowance, and four fixed week shapes instead of your history.
 
 **What you see:** the figures, and the settings view's `≈ X % unused`, can differ from what a real
 week gives; the last digit can also differ between Python versions.
 
 **What still works:** the budget, the recommendation, and the hard limits that it runs are
-PaceLine's own code, so the effect of a style on the budget is real. See [the weekly
+PaceLine's own code, so the effect of a profile setting on the budget is real. See [the weekly
 simulation](explanation.md#the-weekly-simulation).
+
+### The share of a part is fixed by the first merge or command after its start
+
+A part's share is fixed from the last reading before its start by the first merge or PaceLine
+command that runs after the part starts. The hooks module runs the merge within one tick (15
+seconds) of the boundary, or within about two minutes after `pace.lock` is free when it is busy at
+the boundary, while a session of the account with PaceLine loaded is open and pace is on; otherwise
+the first merge or command after the start fixes it. With nothing running at the boundary, the share
+still counts from the last reading before the start, so spend between that reading and the start
+counts inside the part. A part fixed from a reading taken after its start is marked `estimated`.
+
+**What you see:** `paceline plan` shows `estimated` next to the current part when its starting usage
+was read after the start. The share and the allowed spend of that part can be off by what was spent
+between the start and the reading.
+
+**What still works:** the share is fixed once: a mark set for the running part changes nothing this
+week, while a mark set for a part that has not started moves the shares of the later parts at once.
+See [Plan a week](how-to.md#plan-a-week).
+
+### The reserve stop reads whole points
+
+The weekly reserve stop compares the weekly usage Claude Code reports, in whole points, with 100%
+minus the reserve, with no tolerance. With the default 8%, a reading of 91% passes and 92% asks.
+Usage that rises inside one reported point is not seen until the reading changes.
+
+**What you see:** a launch at a reading of 91% goes ahead without a question, and one at 92% asks,
+although the real usage can lie anywhere inside that point.
+
+**What still works:** the stop asks at the first reading at or past the line, and the hard limits
+and the plan work as before. See [The weekly reserve](explanation.md#the-weekly-reserve).
+
+### The reserve stop does not catch work you do yourself
+
+The stop acts on Agent and Workflow launches only. It does not catch work the main session does
+itself, agents that are already running, launches you approved before the usage reached the stop
+line, or spend outside these hooks (claude.ai, other machines, sessions where pace is off). That
+work can spend the reserve before its release.
+
+**What you see:** the week's usage passes 100% minus the reserve with no question asked. The next
+launch asks, and `paceline status` shows the reserve with `launches ask`.
+
+**What still works:** every later Agent or Workflow launch asks until the release instant, and
+`paceline reserve` shows the figures at any time. See [The weekly
+reserve](explanation.md#the-weekly-reserve).
+
+### The week plan file is written only while pace is on
+
+PaceLine publishes the week plan file, `week-plan-<key>.json`, for readers such as PitBoard only
+while pace is on. `paceline off` removes the files, even when `pace.lock` stays busy, and with pace
+off no command writes them. A plan that PaceLine cannot read or build also removes the file of its
+account. The file changes only when a PaceLine command or the limits merge changes the plan or fixes
+a part; the merge writes it only when the file does not hold now: its part or week has ended, or the
+weekly reset of the reading differs from its `week_resets_at` by 10 minutes or more, as when the
+weekly window resets ahead of schedule or its reset moves later.
+
+**What you see:** with pace off, or after a plan file that cannot be used, a reader finds no week
+plan file and falls back to what it does without PaceLine; PitBoard then shows the even pace.
+
+**What still works:** `paceline on` writes the file at once, given a weekly reading and a known
+account; a plan file that cannot be read has to be repaired first. See [The week plan file (for
+readers)](reference.md#the-week-plan-file-for-readers).
 
 ## usage-watch
 
@@ -477,7 +532,10 @@ without usage-watch. See [Keep usage current while idle](how-to.md#keep-usage-cu
 usage-watch reads `https://api.anthropic.com/api/oauth/usage`, an endpoint outside Anthropic's
 published API reference. Its address, answer format, or availability can change without notice.
 PaceLine reaches it only through Claude Code, with the session's own login; PaceLine never sees a
-token.
+token. To tag each reading with the account of that login, PaceLine also asks
+`https://api.anthropic.com/api/oauth/profile`, another endpoint outside the published API, once per
+session start and after a login change, and keeps only a one-way key of the account and organization
+identifiers.
 
 **What you see:** if the endpoint changes, `/paceline:usage-watch status` shows `last error: HTTP
 <status>` or `unexpected response`, and usage-watch waits 10 minutes after any error other than
@@ -534,10 +592,10 @@ usage-watch, the data is as of the last turn of any session on this machine.
 
 ### Measured costs and the forecast need care
 
-The measured cost of a reservation or queue item is a change in account-wide weekly usage, so
-parallel work inflates it. A reservation that overlapped another is marked `overlapped`, and
-`paceline calibrate` leaves it out. The forecast and `paceline calibrate` need history: 3 hours of
-the last day for the forecast, and 14 days for calibration.
+The measured cost of a hold or queue item is a change in account-wide weekly usage, so parallel work
+inflates it. A hold that overlapped another is marked `overlapped`, and `paceline calibrate` leaves
+it out. The forecast and `paceline calibrate` need history: 3 hours of the last day for the
+forecast, and 14 days for calibration.
 
 **What you see:** no forecast, or no calibration proposal, until the history is there.
 

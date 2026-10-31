@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.1.18 - 2026-10-31
+
+### Added
+
+- Other plugins can add a button after PitBoard's, in the CLI row and in the Desktop footer, with
+  `$.pitboard.addButton({ key, label })`; the adding plugin answers the press. In the CLI PitBoard
+  draws ` | ` between buttons and nowhere else; in Desktop an added button reads `[ <label> ]` and
+  follows `[ PitBoard ]` with no `|`. See the reference page, Buttons of other plugins.
+- With PaceLine's week plan, the Week card measures the week against the plan: a `Plan` row (`within` or `above`,
+  amber in inform mode and red in limit mode), `Spare` or `Overspent` and `Budget` from the current part's share,
+  the bar's tick where the plan expects the week, and a `Reserve` row. In limit mode the card advises that PaceLine asks
+  before each agent launch while the week is above the plan and its data is fresh. Without a usable plan file the card is unchanged.
+
+### Changed
+
+- The button and the pane read `PitBoard`: `[ PitBoard ]` in the CLI row, `[ PitBoard ]` in the Desktop
+  footer and `PitBoard` as the pane's title. `/pitboard` keeps its name.
+- With PaceLine's week plan, the week gauge on the row takes the highest level of the `Used`, `Plan` and `Reserve` rows
+  (`Used` keeps the percentage rule), and the Week card's `Pace` is measured within the current part and against its `Budget`.
+- The documentation says the threshold of PaceLine's projection is 95% in all hours, as PaceLine now has one five-hour stop. The `5h limit` card's `Threshold` row shows 95% in working hours too (it showed 80%); PitBoard's code does not change, it reads the value from PaceLine's burn file. Between 80% and 95% in working hours, the card now shows PaceLine's projection to 95% where it fell back to its own `Runs out`.
+
 ## 0.1.17 - 2026-10-26
 
 ### Changed

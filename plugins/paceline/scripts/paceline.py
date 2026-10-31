@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """paceline: one command for pace, cache-watch, context-watch and usage-watch.
 
-    paceline <pace command> ...      status, auto, on, off, plan, reserve, queue, merge, doctor, ...
+    paceline <pace command> ...      status, auto, on, off, plan, reserve, hold, queue, merge, doctor, ...
     paceline cache-watch ...         on, off, status, config
     paceline context-watch ...       config, status
     paceline usage-watch ...         on, off, status

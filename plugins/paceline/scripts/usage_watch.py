@@ -41,7 +41,7 @@ def cmd_switch(sd, on):
 
 
 def cmd_status(sd):
-    key = limits_file.resolve_account()[0] or limits_file.UNKNOWN_ACCOUNT
+    key = limits_file.resolve_account(sd=sd)[0] or limits_file.UNKNOWN_ACCOUNT
     state = limits_file.read_json(sd / f"usage-watch.state-{key}.json") or {}
     error = state.get("last_error")
     print(f"usage-watch: {'on' if is_on(sd) else 'off'}")

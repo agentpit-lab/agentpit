@@ -1,8 +1,6 @@
 #!/usr/bin/env python3
-"""SessionStart hook: put what the owner should be asked about this session in front of Claude.
+"""SessionStart hook: put the one thing the owner should be asked about this session in front of Claude.
 
-- Plans that start tomorrow and are not confirmed yet.
-- The leftover-pool suggestion, when the forecast leaves part of the weekly limit unused.
 - A time zone hint, while the profile counts in UTC and this machine is in another zone.
 
 Does nothing while pace is off (`paceline on` turns it on). Silent when nothing applies; never
@@ -52,9 +50,14 @@ PACE = os.environ.get("PACELINE_SCRIPT") or str(Path(__file__).resolve().parent.
 TIMEOUT_SEC = 8
 
 
+# The session id of the hook's payload; every pace.py call names it, so its account is the session's.
+SESSION = None
+
+
 def pace_json(*argv):
+    session = [f"--session={SESSION}"] if SESSION else []
     try:
-        out = subprocess.run([sys.executable, PACE, *argv, "--json"], capture_output=True, text=True,
+        out = subprocess.run([sys.executable, PACE, *argv, *session, "--json"], capture_output=True, text=True,
                              encoding="utf-8", timeout=TIMEOUT_SEC)
     except (OSError, subprocess.TimeoutExpired) as error:
         note_failure("hook.session_start", argv=list(argv), error=error)
@@ -69,29 +72,6 @@ def pace_json(*argv):
     return parsed if isinstance(parsed, dict) else {}
 
 
-def plan_lines():
-    plans = pace_json("plan", "tomorrow").get("plans") or []
-    if not plans:
-        return []
-    parts = []
-    for p in plans:
-        phrase = p.get("phrase") or ""
-        part = f"{p.get('id', '?')} {p.get('type', '?')} {p.get('start_local', '')} .. {p.get('end_local', '')}"
-        parts.append(part + (f' ("{phrase}")' if phrase else ""))
-    return ["Pace: unconfirmed plan change(s) start tomorrow — " + "; ".join(parts)
-            + ". Ask the owner once whether the plan still holds, then run `paceline plan confirm <id>`."]
-
-
-def leftover_lines():
-    status = pace_json("status", "--no-merge")
-    if not status.get("suggest_leftover_tasks"):
-        return []
-    forecast = status.get("forecast_unused_pct")
-    share = f"{forecast}%" if forecast is not None else "a meaningful share"
-    return [f"Pace: forecast leaves {share} of the weekly limit unused before reset. Propose a leftover task "
-            "pool to the owner; on approval run `paceline queue --pool approve`."]
-
-
 def timezone_lines():
     hint = pace_json("profile", "check").get("hint")
     return [f"Pace: {hint} Tell the owner once."] if hint else []
@@ -100,19 +80,25 @@ def timezone_lines():
 def main():
     on = pace_on()
     # Drained even while pace is off: an unread pipe can block the writer.
+    global SESSION
     try:
-        sys.stdin.buffer.read()
+        payload = sys.stdin.buffer.read()
     except (OSError, ValueError):
-        pass
+        payload = b""
+    try:
+        parsed = json.loads(payload.decode("utf-8"))
+        session = parsed.get("session_id") if isinstance(parsed, dict) else None
+        SESSION = session if isinstance(session, str) and limits_file and limits_file.SESSION_ID.fullmatch(session) else None
+    except (ValueError, UnicodeDecodeError):
+        SESSION = None
     if not on or too_old():
         return 0
     trace("hook.session_start")
     lines = []
-    for source in (plan_lines, leftover_lines, timezone_lines):
-        try:
-            lines += source()
-        except Exception as error:  # noqa: BLE001 - a hook must never fail the session
-            note_failure("hook.session_start", step=source.__name__, error=error)
+    try:
+        lines += timezone_lines()
+    except Exception as error:  # noqa: BLE001 - a hook must never fail the session
+        note_failure("hook.session_start", step=timezone_lines.__name__, error=error)
     if lines:
         print(json.dumps({"hookSpecificOutput": {"hookEventName": "SessionStart",
                                                  "additionalContext": "\n".join(lines)}}))

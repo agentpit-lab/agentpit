@@ -581,8 +581,8 @@ ol.walker, ol.walker ol { padding-left: 1.4em; display: grid; gap: var(--space-2
   <main class="stack-lg">
     <header class="page-head">
       <h1>Симулятор бюджету PaceLine</h1>
-      <p class="lede">pace не має власного вікна. Він перетворює ліміти на бюджет на годину і повідомляє його одним рядком перед кожним запуском Agent і Workflow. Змінювати вхідні дані й дивитися, як змінюється цей рядок.</p>
-      <p class="tldr"><strong>Коротко</strong>pace розподіляє залишок тижневого ліміту між денними годинами до скидання; частка поточної години і є бюджетом. Що нижчий бюджет відносно норми для такого типу години, то менше агентів він радить, а нижче 70% норми переходить на дешевшу модель. На жорсткому ліміті він питає перед запуском.</p>
+      <p class="lede">pace не має власного вікна. Він перетворює ліміти на бюджет на годину. У режимі limit він повідомляє темп простими словами перед кожним запуском Agent і Workflow; у режимі inform модель нічого не читає. Змінювати вхідні дані й дивитися, як змінюється цей рядок.</p>
+      <p class="tldr"><strong>Коротко</strong>pace розподіляє залишок тижневого ліміту на решту тижня за позначками робочих і неробочих годин кожного дня та фіксує частку кожної частини на її початку. Бюджет на годину — це залишок частки поточної частини, поділений на години, що лишилися в ній. На цій сторінці поточна частина завжди за планом. На жорсткому ліміті pace просить підтвердження перед запуском.</p>
     </header>
 
     <section id="simulator" class="stack" aria-labelledby="h-sim" data-nav="Симулятор">
@@ -611,14 +611,26 @@ ol.walker, ol.walker ol { padding-left: 1.4em; display: grid; gap: var(--space-2
             <input type="range" id="in-clock" min="0" max="167" step="1" value="58">
           </div>
           <div class="control">
-            <span class="label" id="l-plan">Оголошений план на завтра</span>
-            <div class="chips" data-choice id="in-plan" role="group" aria-labelledby="l-plan">
-              <button type="button" class="chip" data-value="none" aria-pressed="true">Немає</button>
-              <button type="button" class="chip" data-value="away">Відсутність</button>
-              <button type="button" class="chip" data-value="heavy">Напружений день</button>
+            <span class="label" id="l-marks">Тижневий план</span>
+            <div class="chips" data-choice id="in-marks" role="group" aria-labelledby="l-marks">
+              <button type="button" class="chip" data-value="none" aria-pressed="true">Типово</button>
+              <button type="button" class="chip" data-value="away">Завтра вихідний</button>
+              <button type="button" class="chip" data-value="heavy">Завтра важкий день</button>
+              <button type="button" class="chip" data-value="night">Ночі на 0.5</button>
+              <button type="button" class="chip" data-value="dayoff">Сьогодні вихідний</button>
+              <button type="button" class="chip" data-value="template">Шаблон тижня</button>
+            </div>
+            <p class="muted small">Кожен день має позначку для робочих годин (☼) і одну для неробочих (☾): 0 — вихідний, 0.5 — легкий день, 1 — звичайний, 1.5 — важкий. Типово: ☼ 1 і ☾ 0 щодня. «Завтра вихідний» ставить ☼ завтрашнього дня на 0; «Завтра важкий день» ставить його на 1.5; «Ночі на 0.5» ставить ☾ сьогодні й завтра на 0.5; «Сьогодні вихідний» ставить ☼ і ☾ сьогодні на 0; «Шаблон тижня» позначає вівторок ☼ 1.5, п&#x27;ятницю ☼ 0.5 і суботу ☼ 0. Сьогодні — це дата на годиннику; неробочі години до початку робочого дня належать попередньому дню.</p>
+          </div>
+          <div class="control">
+            <span class="label" id="l-hours">Робочі години (решта доби — неробочі години)</span>
+            <div class="chips" data-choice id="in-hours" role="group" aria-labelledby="l-hours">
+              <button type="button" class="chip" data-value="09:00-18:00" aria-pressed="true">09:00-18:00</button>
+              <button type="button" class="chip" data-value="08:00-20:00">08:00-20:00</button>
+              <button type="button" class="chip" data-value="10:30-19:15">10:30-19:15</button>
             </div>
           </div>
-          <p class="muted small">Типові значення профілю, рахунок в UTC: день з 08:00 до 22:00, ніч з 00:00 до 08:00, п&#x27;ятигодинний поріг 80% удень і 95% уночі, 8% у резерві.</p>
+          <p class="muted small">Типові значення профілю, рахуються в UTC: п&#x27;ятигодинна межа 95% в усі години, 8% тижня утримується в резерві до початку робочих годин останнього дня перед скиданням.</p>
         </form>
 
         <div class="panel sim-outputs stack" aria-live="polite">
@@ -631,7 +643,7 @@ ol.walker, ol.walker ol { padding-left: 1.4em; display: grid; gap: var(--space-2
           <dl class="kv kv-out" id="out-kv"></dl>
           <div class="decision" id="out-decision"></div>
           <div class="stack-sm">
-            <span class="eyebrow">Що бачить агент перед запуском</span>
+            <span class="eyebrow">Що модель читає в режимі limit</span>
             <div class="transcript" id="out-line"></div>
           </div>
         </div>
@@ -642,10 +654,10 @@ ol.walker, ol.walker ol { padding-left: 1.4em; display: grid; gap: var(--space-2
       <div class="section-head">
         <span class="eyebrow">Тиждень</span>
         <h2 id="h-week">Куди йде решта тижневого бюджету</h2>
-        <p class="muted">Залишок розподіляється між денними годинами, що лишилися, з вагами профілю; ночі отримують нічну квоту. Оголошений план переносить бюджет між днями.</p>
+        <p class="muted">Залишок тижня без резерву розподіляється між решткою його частин за їхніми позначками: робочими й неробочими годинами кожного дня. Стовпчик — частка однієї дати, обидві частини разом. Тижневий план вище переносить бюджет між днями.</p>
       </div>
       <div class="panel wide">
-        <figure class="week-chart" id="week-chart" aria-label="Денний бюджет на кожен день, що лишився"></figure>
+        <figure class="week-chart" id="week-chart" aria-label="Частка тижня на кожну дату, що лишилася"></figure>
       </div>
     </section>
 
@@ -663,8 +675,8 @@ ol.walker, ol.walker ol { padding-left: 1.4em; display: grid; gap: var(--space-2
         <h2 id="h-details">Як це обчислюється і чого тут немає</h2>
       </div>
       <div>
-        <details class="more"><summary>Як обчислюється бюджет на годину</summary><div class="body"><p>Залишок тижня за вирахуванням резерву розподіляється між денними годинами, що лишилися, за вагами; кожна година обмежена тим, що вміщує п&#x27;ятигодинне вікно. Частка поточної години і є бюджетом.</p></div></details>
-        <details class="more"><summary>Чого не враховує цей симулятор</summary><div class="body"><p>Історія використання (прогноз, калібрування і темп витрати п&#x27;ятигодинного вікна), активні резервування, перевірки пам&#x27;яті машини та ліміти окремих моделей. <code>paceline status</code> на машині враховує їх.</p></div></details>
+        <details class="more"><summary>Як обчислюється бюджет на годину</summary><div class="body"><p>На початку кожної частини, робочих годин дня або його неробочих годин, pace фіксує її частку: залишок тижня без резерву, помножений на вагу частини і поділений на суму ваг цієї та всіх наступних частин. Бюджет на годину — це частка, що ще не витрачена, поділена на години, що лишилися в частині, але не більше, ніж може вмістити п&#x27;ятигодинне вікно.</p></div></details>
+        <details class="more"><summary>Чого не враховує цей симулятор</summary><div class="body"><p>Історія використання (прогноз, калібрування і темп витрати п&#x27;ятигодинного вікна), чинні утримання, перевірки пам&#x27;яті хоста, ліміти окремих моделей, витрата в поточній частині (вважається 0, тож частина за планом) і шлюз плану режиму <code>limit</code>. <code>paceline status</code> і <code>paceline plan</code> на цій машині їх включають.</p></div></details>
         <details class="more"><summary>Як вирішує нічна черга</summary><div class="body"><p>Перед кожним елементом <code>paceline auto</code> повертає start, wait або stop з кодом виходу (0, 10, 11); черга виконує це рішення, не ухвалюючи його знову.</p></div></details>
       </div>
     </section>
@@ -676,9 +688,9 @@ ol.walker, ol.walker ol { padding-left: 1.4em; display: grid; gap: var(--space-2
 
 
 </div>
-<script type="application/json" id="pb-strings">{"changed_line":"{input}: бюджет {b0} → {b1} %/h, агенти ≤{a0} → ≤{a1}, модель {m0} → {m1}.","changed_none":"Змінити будь-яке вхідне значення, щоб побачити, на що воно впливає.","days_short":"Пн,Вт,Ср,Чт,Пт,Сб,Нд","decision_day":"День: нічна черга не працює","decision_start":"Нічна черга: start","decision_stop":"Нічна черга: stop","decision_wait":"Нічна черга: wait","details_eyebrow":"Подробиці","details_left_out":"Чого не враховує цей симулятор","details_left_out_body":"Історія використання (прогноз, калібрування і темп витрати п'ятигодинного вікна), активні резервування, перевірки пам'яті машини та ліміти окремих моделей. `paceline status` на машині враховує їх.","details_queue":"Як вирішує нічна черга","details_queue_body":"Перед кожним елементом `paceline auto` повертає start, wait або stop з кодом виходу (0, 10, 11); черга виконує це рішення, не ухвалюючи його знову.","details_rule":"Як обчислюється бюджет на годину","details_rule_body":"Залишок тижня за вирахуванням резерву розподіляється між денними годинами, що лишилися, за вагами; кожна година обмежена тим, що вміщує п'ятигодинне вікно. Частка поточної години і є бюджетом.","details_title":"Як це обчислюється і чого тут немає","fmt_clock":"{day} {hh}:00","fmt_in":"{d} д {h} год","foot_getting_started":"Початок роботи з PaceLine","foot_source":"PaceLine перетворює використання на бюджет; ця сторінка показує ті самі правила на зразкових числах.","hard_limit":"Жорсткий ліміт: запуск зараз попросить підтвердження.","in_clock":"Зараз (день тижня, у часовому поясі профілю)","in_five":"Використано п'ятигодинного вікна","in_plan":"Оголошений план на завтра","in_profile_note":"Типові значення профілю, рахунок в UTC: день з 08:00 до 22:00, ніч з 00:00 до 08:00, п'ятигодинний поріг 80% удень і 95% уночі, 8% у резерві.","in_reset":"Тижневе скидання через","in_week":"Використано тижневого ліміту","inputs_title":"Ситуація","label_clock":"Зараз","label_five":"Використано п'ятигодинного вікна","label_plan":"План на завтра","label_reset":"Тижневе скидання через","label_week":"Використано тижневого ліміту","lang_en":"En","lang_label":"Мова","lang_uk":"Uk","legend_day":"Денний бюджет","legend_night_note":"Ночі: квота нічної черги, {night}% цієї ночі.","nav_label":"Симулятор бюджету","out_agents":"Паралельні агенти","out_budget":"Бюджет на цю годину","out_budget_day":"Відсоток тижня, який pace може витратити за цю годину, щоб тижня вистачило до скидання.","out_budget_night":"Уночі це бюджет наступної денної години; нічна черга витрачає власну квоту.","out_budget_off":"Поза денними годинами: це бюджет наступної денної години.","out_line":"Що бачить агент перед запуском","out_model":"Модель","out_night":"Нічна квота","out_threshold":"П'ятигодинний поріг","plan_away":"Відсутність","plan_heavy":"Напружений день","plan_none":"Немає","series_label":"сторінки цієї серії","sim_eyebrow":"Симулятор","sim_lede":"pace не має власного вікна. Він перетворює ліміти на бюджет на годину і повідомляє його одним рядком перед кожним запуском Agent і Workflow. Змінювати вхідні дані й дивитися, як змінюється цей рядок.","sim_title":"Що скаже pace: наперед","sit_ahead":"Тиждень витрачено наперед","sit_ahead_story":"Більшу частину тижня витрачено, а днів ще кілька: бюджет зменшується, модель стає дешевшою.","sit_apply":"Завантажити цю ситуацію","sit_away":"Оголошено вихідний","sit_away_story":"Завтра оголошено днем відсутності, тож його бюджет переходить на інші дні.","sit_fresh":"Новий тиждень","sit_fresh_story":"Використано мало, до скидання далеко: бюджет біля норми, і pace радить звичну кількість агентів.","sit_morning":"Напружений ранок","sit_morning_story":"П'ятигодинне вікно заповнилося рано. pace радить відкласти субагентів до його скидання.","sit_night":"Ніч із залишком бюджету","sit_night_story":"Нічні години з невитраченою квотою: нічна черга може почати наступний елемент.","situations_eyebrow":"Ситуації","situations_title":"Типові моменти, одним клацанням","theme_dark":"Темна","theme_label":"Тема сторінки","theme_light":"Світла","theme_system":"Системна","title":"Симулятор бюджету PaceLine","tldr_body":"pace розподіляє залишок тижневого ліміту між денними годинами до скидання; частка поточної години і є бюджетом. Що нижчий бюджет відносно норми для такого типу години, то менше агентів він радить, а нижче 70% норми переходить на дешевшу модель. На жорсткому ліміті він питає перед запуском.","tldr_label":"Коротко","toc_details":"Подробиці","toc_label":"Розділи","toc_simulator":"Симулятор","toc_situations":"Ситуації","toc_week":"Тиждень","week_chart_label":"Денний бюджет на кожен день, що лишився","week_eyebrow":"Тиждень","week_lede":"Залишок розподіляється між денними годинами, що лишилися, з вагами профілю; ночі отримують нічну квоту. Оголошений план переносить бюджет між днями.","week_title":"Куди йде решта тижневого бюджету","why_day":"Черга працює лише вночі. Удень pace радить і питає перед запуском на жорсткому ліміті."}</script>
-<script type="application/json" id="pb-glossary">{"budget":{"name":"Бюджет на годину","short":"Відсоток тижня, який pace може витратити за поточну денну годину, а вночі за наступну, щоб тижня вистачило до скидання; денні години будніх і вихідних днів зважуються за профілем."},"forecast":{"name":"Прогноз невикористаного","short":"Відсоток тижня, який за останнього темпу, імовірно, лишиться невитраченим на момент скидання."},"night":{"name":"Нічна квота","short":"Відсоток тижня, який нічна черга може витратити цієї ночі."},"plan":{"name":"План","short":"Оголошена зміна для дня: away (день не отримує бюджету) або heavy (його години важать більше, типово вдвічі). План перерозподіляє бюджет між днями, що лишилися."},"reservation":{"name":"Резервування","short":"Частка тижневого ліміту, утримана для субагента, gate або елемента черги, що виконується. Нічна черга враховує її перед стартом наступного елемента; удень рядок запуску показує, скільки резервувань активні."},"threshold":{"name":"П'ятигодинний поріг","short":"Використання п'ятигодинного вікна, вище якого pace не радить фонову роботу: нижчий удень, вищий уночі."}}</script>
-<script type="application/json" id="pb-facts">{"commands":[{"command":"paceline on","help":"turn the pace hooks on"},{"command":"paceline off","help":"turn the pace hooks off (every command still runs)"},{"command":"paceline status","help":"interactive one-line recommendation"},{"command":"paceline auto","help":"autonomous parameters for the next queue item"},{"command":"paceline calibrate","help":"propose parameter corrections from history"},{"command":"paceline simulate","help":"replay a week through the budget for each spending style (a model: one reading per hour, no plans or reservations)"},{"command":"paceline settings","help":"every setting and switch with its value, default and source; read-only"},{"command":"paceline profile","help":"print, change or check the profile (creates it with the detected time zone)"},{"command":"paceline profile show","help":"print the profile (the default)"},{"command":"paceline profile set","help":"change one key, with checks"},{"command":"paceline profile style","help":"take one spending style's values for its keys together"},{"command":"paceline profile check","help":"the time zone against this machine's, with a hint"},{"command":"paceline doctor","help":"diagnose pace on this machine; read-only without --live"},{"command":"paceline merge","help":"merge the sessions' readings from the inbox into rate-limits.json"},{"command":"paceline plan","help":"declared future plan changes"},{"command":"paceline plan add","help":""},{"command":"paceline plan list","help":""},{"command":"paceline plan find","help":""},{"command":"paceline plan modify","help":""},{"command":"paceline plan cancel","help":""},{"command":"paceline plan confirm","help":""},{"command":"paceline plan tomorrow","help":""},{"command":"paceline reserve","help":"reservation registry"},{"command":"paceline reserve acquire","help":""},{"command":"paceline reserve renew","help":""},{"command":"paceline reserve release","help":""},{"command":"paceline reserve release-session","help":""},{"command":"paceline reserve prune","help":""},{"command":"paceline reserve list","help":""},{"command":"paceline reserve reconcile","help":""},{"command":"paceline queue","help":"night queue and leftover pool (--pool)"},{"command":"paceline queue add","help":""},{"command":"paceline queue list","help":""},{"command":"paceline queue report","help":""},{"command":"paceline queue approve","help":""},{"command":"paceline queue clear-done","help":""},{"command":"paceline queue start","help":""},{"command":"paceline queue done","help":""},{"command":"paceline queue defer","help":""},{"command":"paceline queue fail","help":""},{"command":"paceline queue retry","help":""},{"command":"paceline queue remove","help":""},{"command":"paceline away","help":"tell the launch gate that you are away, so it denies a launch it would ask about: on|off|status"},{"command":"paceline cache-watch","help":"keep an idle session's one-hour prompt cache alive: on|off|status|config"},{"command":"paceline context-watch","help":"context against the auto-compaction point: config|status"},{"command":"paceline usage-watch","help":"read the account's exact usage through Claude Code: on|off|status"}],"env":["ANTHROPIC_MODEL","CLAUDE_CODE_ACCOUNT_UUID","CLAUDE_CODE_ORGANIZATION_UUID","CLAUDE_CONFIG_DIR","CLAUDE_PLUGIN_DATA","CLAUDE_PROJECT_DIR","CLAUDE_SESSION_ID","HOME","PACELINE_DEBUG","PACELINE_FREE_COMMIT_MB","PACELINE_MODEL","PACELINE_NOW","PACELINE_NO_MERGE","PACELINE_SCRIPT","PACELINE_STATE_DIR","PACELINE_USAGE_FILE","USERPROFILE"],"exit_codes":{"EXIT_ERROR":1,"EXIT_NONE":4,"EXIT_OK":0,"EXIT_SEVERAL":3,"EXIT_STOP":11,"EXIT_USAGE":2,"EXIT_WAIT":10},"profile":[{"default":2048,"internal":false,"key":"commit_reserve_mb"},{"default":[8,22],"internal":false,"key":"day_hours"},{"default":95.0,"internal":false,"key":"five_hour_hard_stop"},{"default":80.0,"internal":false,"key":"five_hour_threshold_day"},{"default":95.0,"internal":false,"key":"five_hour_threshold_night"},{"default":10.0,"internal":false,"key":"five_hour_to_week_pct"},{"default":6000,"internal":false,"key":"heavy_job_mb"},{"default":10.0,"internal":false,"key":"leftover_suggest_pct"},{"default":6,"internal":false,"key":"max_agents"},{"default":3,"internal":false,"key":"max_heavy_runs"},{"default":2048,"internal":false,"key":"min_free_commit_mb"},{"default":["opus","sonnet","haiku"],"internal":false,"key":"models"},{"default":1,"internal":true,"key":"next_plan_id"},{"default":[0,8],"internal":false,"key":"night_hours"},{"default":[],"internal":true,"key":"plans"},{"default":{"hour":18,"weekday":4},"internal":false,"key":"reserve_decay_start"},{"default":8.0,"internal":false,"key":"reserve_pct"},{"default":54,"internal":false,"key":"reserve_release_min_hours"},{"default":["sonnet","haiku"],"internal":false,"key":"routine_models"},{"default":95.0,"internal":false,"key":"scoped_exhausted_pct"},{"default":1.0,"internal":false,"key":"subagent_estimate_pct"},{"default":85.0,"internal":false,"key":"throttle_weekly_pct"},{"default":"UTC","internal":false,"key":"timezone"},{"default":false,"internal":true,"key":"timezone_confirmed"},{"default":"machine","internal":false,"key":"timezone_mode"},{"default":1,"internal":true,"key":"version"},{"default":1.0,"internal":false,"key":"weekday_weight"},{"default":20.0,"internal":false,"key":"weekend_cap_pct"},{"default":1.0,"internal":false,"key":"weekend_weight"}],"style_values":[{"balanced":80.0,"careful":70.0,"full":90.0,"key":"five_hour_threshold_day"},{"balanced":95.0,"careful":90.0,"full":97.0,"key":"five_hour_threshold_night"},{"balanced":95.0,"careful":90.0,"full":97.0,"key":"five_hour_hard_stop"},{"balanced":8.0,"careful":12.0,"full":4.0,"key":"reserve_pct"},{"balanced":{"hour":18,"weekday":4},"careful":{"hour":18,"weekday":4},"full":{"hour":18,"weekday":3},"key":"reserve_decay_start"},{"balanced":85.0,"careful":80.0,"full":92.0,"key":"throttle_weekly_pct"},{"balanced":20.0,"careful":15.0,"full":30.0,"key":"weekend_cap_pct"},{"balanced":10.0,"careful":15.0,"full":5.0,"key":"leftover_suggest_pct"},{"balanced":54,"careful":0,"full":54,"key":"reserve_release_min_hours"}],"styles":[{"asks_h":0,"night_pct":0.0,"night_queue":false,"peak_five_hour_pct":66.9,"style":"careful","throttled_h":4,"unused_pct":1.3,"week":"on-track","weekend_day_pct":25.0},{"asks_h":0,"night_pct":30.0,"night_queue":true,"peak_five_hour_pct":55.1,"style":"careful","throttled_h":42,"unused_pct":0.7,"week":"on-track","weekend_day_pct":18.4},{"asks_h":21,"night_pct":0.0,"night_queue":false,"peak_five_hour_pct":99.7,"style":"careful","throttled_h":51,"unused_pct":0.7,"week":"heavy-start","weekend_day_pct":24.8},{"asks_h":11,"night_pct":27.9,"night_queue":true,"peak_five_hour_pct":94.3,"style":"careful","throttled_h":70,"unused_pct":0.7,"week":"heavy-start","weekend_day_pct":12.9},{"asks_h":21,"night_pct":0.0,"night_queue":false,"peak_five_hour_pct":88.7,"style":"careful","throttled_h":4,"unused_pct":1.4,"week":"light-start","weekend_day_pct":25.0},{"asks_h":0,"night_pct":38.1,"night_queue":true,"peak_five_hour_pct":57.9,"style":"careful","throttled_h":25,"unused_pct":0.7,"week":"light-start","weekend_day_pct":20.0},{"asks_h":0,"night_pct":0.0,"night_queue":false,"peak_five_hour_pct":66.9,"style":"careful","throttled_h":0,"unused_pct":31.2,"week":"away-thu-fri","weekend_day_pct":25.0},{"asks_h":2,"night_pct":39.4,"night_queue":true,"peak_five_hour_pct":90.0,"style":"careful","throttled_h":13,"unused_pct":0.7,"week":"away-thu-fri","weekend_day_pct":23.3},{"asks_h":0,"night_pct":0.0,"night_queue":false,"peak_five_hour_pct":62.4,"style":"balanced","throttled_h":0,"unused_pct":0.9,"week":"on-track","weekend_day_pct":26.7},{"asks_h":0,"night_pct":30.0,"night_queue":true,"peak_five_hour_pct":47.9,"style":"balanced","throttled_h":42,"unused_pct":0.4,"week":"on-track","weekend_day_pct":17.2},{"asks_h":7,"night_pct":0.0,"night_queue":false,"peak_five_hour_pct":99.1,"style":"balanced","throttled_h":48,"unused_pct":0.4,"week":"heavy-start","weekend_day_pct":22.3},{"asks_h":11,"night_pct":28.1,"night_queue":true,"peak_five_hour_pct":92.9,"style":"balanced","throttled_h":79,"unused_pct":0.4,"week":"heavy-start","weekend_day_pct":9.8},{"asks_h":20,"night_pct":0.0,"night_queue":false,"peak_five_hour_pct":86.0,"style":"balanced","throttled_h":0,"unused_pct":0.9,"week":"light-start","weekend_day_pct":26.7},{"asks_h":0,"night_pct":37.2,"night_queue":true,"peak_five_hour_pct":51.4,"style":"balanced","throttled_h":17,"unused_pct":0.4,"week":"light-start","weekend_day_pct":20.5},{"asks_h":0,"night_pct":0.0,"night_queue":false,"peak_five_hour_pct":62.4,"style":"balanced","throttled_h":0,"unused_pct":30.1,"week":"away-thu-fri","weekend_day_pct":26.7},{"asks_h":1,"night_pct":39.9,"night_queue":true,"peak_five_hour_pct":95.0,"style":"balanced","throttled_h":7,"unused_pct":0.4,"week":"away-thu-fri","weekend_day_pct":23.7},{"asks_h":0,"night_pct":0.0,"night_queue":false,"peak_five_hour_pct":60.3,"style":"full","throttled_h":0,"unused_pct":0.2,"week":"on-track","weekend_day_pct":30.9},{"asks_h":0,"night_pct":30.0,"night_queue":true,"peak_five_hour_pct":46.5,"style":"full","throttled_h":41,"unused_pct":0.2,"week":"on-track","weekend_day_pct":15.0},{"asks_h":6,"night_pct":0.0,"night_queue":false,"peak_five_hour_pct":95.9,"style":"full","throttled_h":55,"unused_pct":0.2,"week":"heavy-start","weekend_day_pct":19.0},{"asks_h":1,"night_pct":28.7,"night_queue":true,"peak_five_hour_pct":90.9,"style":"full","throttled_h":78,"unused_pct":0.2,"week":"heavy-start","weekend_day_pct":6.0},{"asks_h":0,"night_pct":0.0,"night_queue":false,"peak_five_hour_pct":81.9,"style":"full","throttled_h":0,"unused_pct":0.3,"week":"light-start","weekend_day_pct":32.3},{"asks_h":0,"night_pct":36.0,"night_queue":true,"peak_five_hour_pct":44.6,"style":"full","throttled_h":14,"unused_pct":0.2,"week":"light-start","weekend_day_pct":20.1},{"asks_h":0,"night_pct":0.0,"night_queue":false,"peak_five_hour_pct":62.8,"style":"full","throttled_h":0,"unused_pct":26.5,"week":"away-thu-fri","weekend_day_pct":32.3},{"asks_h":0,"night_pct":38.8,"night_queue":true,"peak_five_hour_pct":86.1,"style":"full","throttled_h":0,"unused_pct":0.2,"week":"away-thu-fri","weekend_day_pct":24.7}]}</script>
+<script type="application/json" id="pb-strings">{"changed_line":"{input}: бюджет {b0} → {b1} %/h.","changed_none":"Змінити будь-яке вхідне значення, щоб побачити, на що воно впливає.","days_short":"Пн,Вт,Ср,Чт,Пт,Сб,Нд","decision_day":"Робочі години: нічна черга в простої","decision_start":"Нічна черга: start","decision_stop":"Нічна черга: stop","decision_wait":"Нічна черга: wait","details_eyebrow":"Подробиці","details_left_out":"Чого не враховує цей симулятор","details_left_out_body":"Історія використання (прогноз, калібрування і темп витрати п'ятигодинного вікна), чинні утримання, перевірки пам'яті хоста, ліміти окремих моделей, витрата в поточній частині (вважається 0, тож частина за планом) і шлюз плану режиму `limit`. `paceline status` і `paceline plan` на цій машині їх включають.","details_queue":"Як вирішує нічна черга","details_queue_body":"Перед кожним елементом `paceline auto` повертає start, wait або stop з кодом виходу (0, 10, 11); черга виконує це рішення, не ухвалюючи його знову.","details_rule":"Як обчислюється бюджет на годину","details_rule_body":"На початку кожної частини, робочих годин дня або його неробочих годин, pace фіксує її частку: залишок тижня без резерву, помножений на вагу частини і поділений на суму ваг цієї та всіх наступних частин. Бюджет на годину — це частка, що ще не витрачена, поділена на години, що лишилися в частині, але не більше, ніж може вмістити п'ятигодинне вікно.","details_title":"Як це обчислюється і чого тут немає","fmt_clock":"{day} {hh}:00","fmt_in":"{d} д {h} год","foot_getting_started":"Початок роботи з PaceLine","foot_source":"PaceLine перетворює використання на бюджет; ця сторінка показує ті самі правила на зразкових числах.","hard_limit":"Жорсткий ліміт: запуск зараз попросить підтвердження.","in_clock":"Зараз (день тижня, у часовому поясі профілю)","in_five":"Використано п'ятигодинного вікна","in_hours":"Робочі години (решта доби — неробочі години)","in_marks":"Тижневий план","in_marks_note":"Кожен день має позначку для робочих годин (☼) і одну для неробочих (☾): 0 — вихідний, 0.5 — легкий день, 1 — звичайний, 1.5 — важкий. Типово: ☼ 1 і ☾ 0 щодня. «Завтра вихідний» ставить ☼ завтрашнього дня на 0; «Завтра важкий день» ставить його на 1.5; «Ночі на 0.5» ставить ☾ сьогодні й завтра на 0.5; «Сьогодні вихідний» ставить ☼ і ☾ сьогодні на 0; «Шаблон тижня» позначає вівторок ☼ 1.5, п'ятницю ☼ 0.5 і суботу ☼ 0. Сьогодні — це дата на годиннику; неробочі години до початку робочого дня належать попередньому дню.","in_profile_note":"Типові значення профілю, рахуються в UTC: п'ятигодинна межа 95% в усі години, 8% тижня утримується в резерві до початку робочих годин останнього дня перед скиданням.","in_reset":"Тижневе скидання через","in_week":"Використано тижневого ліміту","inputs_title":"Ситуація","label_clock":"Зараз","label_five":"Використано п'ятигодинного вікна","label_hours":"Робочі години","label_marks":"Тижневий план","label_reset":"Тижневе скидання через","label_week":"Використано тижневого ліміту","lang_en":"En","lang_label":"Мова","lang_uk":"Uk","legend_day":"Частка дати (робочі й неробочі години)","legend_night_note":"Нічна квота сьогоднішньої ночі (частка неробочих годин, обмежена п'ятигодинним вікном): {night}%.","marks_away":"Завтра вихідний","marks_dayoff":"Сьогодні вихідний","marks_heavy":"Завтра важкий день","marks_night":"Ночі на 0.5","marks_none":"Типово","marks_template":"Шаблон тижня","nav_label":"Симулятор бюджету","out_budget":"Бюджет на цю годину","out_budget_day":"Відсоток тижня, який pace може витрачати на годину зараз: частка цієї робочої частини, зафіксована на її початку, мінус уже витрачене, поділене на години, що лишилися в ній.","out_budget_off":"Неробочі години: те саме правило для частки цієї неробочої частини. За типової позначки неробочих годин 0 частка дорівнює 0; нічна черга витрачає саме цю частку.","out_line":"Що модель читає в режимі limit","out_night":"Нічна квота","out_threshold":"П'ятигодинна межа","reserve_ask":"Тижневий резерв: запуск зараз запитує підтвердження, бо він витратив би резерв.","series_label":"сторінки цієї серії","sim_eyebrow":"Симулятор","sim_lede":"pace не має власного вікна. Він перетворює ліміти на бюджет на годину. У режимі limit він повідомляє темп простими словами перед кожним запуском Agent і Workflow; у режимі inform модель нічого не читає. Змінювати вхідні дані й дивитися, як змінюється цей рядок.","sim_title":"Що скаже pace: наперед","sit_ahead":"Тиждень витрачено наперед","sit_ahead_story":"Більшу частину тижня витрачено, а днів ще лишилося: бюджет зменшується.","sit_apply":"Завантажити цю ситуацію","sit_away":"Заплановано вихідний день","sit_away_story":"Робочі години завтрашнього дня позначено 0, тож їхня частка переходить на інші дні.","sit_fresh":"Новий тиждень","sit_fresh_story":"Мало використано, до скидання далеко: бюджет близький до норми за планом.","sit_morning":"Напружений ранок","sit_morning_story":"П'ятигодинне вікно заповнилося рано. До його скидання запуск спершу просить підтвердження.","sit_night":"Ніч із залишком бюджету","sit_night_story":"Неробочі години сьогоднішньої ночі позначено 0.5, тож вони мають частку: нічна черга може почати наступний елемент.","situations_eyebrow":"Ситуації","situations_title":"Типові моменти, одним клацанням","theme_dark":"Темна","theme_label":"Тема сторінки","theme_light":"Світла","theme_system":"Системна","title":"Симулятор бюджету PaceLine","tldr_body":"pace розподіляє залишок тижневого ліміту на решту тижня за позначками робочих і неробочих годин кожного дня та фіксує частку кожної частини на її початку. Бюджет на годину — це залишок частки поточної частини, поділений на години, що лишилися в ній. На цій сторінці поточна частина завжди за планом. На жорсткому ліміті pace просить підтвердження перед запуском.","tldr_label":"Коротко","toc_details":"Подробиці","toc_label":"Розділи","toc_simulator":"Симулятор","toc_situations":"Ситуації","toc_week":"Тиждень","week_chart_label":"Частка тижня на кожну дату, що лишилася","week_eyebrow":"Тиждень","week_lede":"Залишок тижня без резерву розподіляється між решткою його частин за їхніми позначками: робочими й неробочими годинами кожного дня. Стовпчик — частка однієї дати, обидві частини разом. Тижневий план вище переносить бюджет між днями.","week_title":"Куди йде решта тижневого бюджету","why_day":"Черга працює лише в неробочі години. У робочі години pace затримує запуск лише на жорсткому ліміті або понад межу зупинки тижневого резерву, а в режимі `limit` — коли частина перевищила свою частку."}</script>
+<script type="application/json" id="pb-glossary">{"budget":{"name":"Бюджет на годину","short":"Відсоток тижня, який pace може витрачати на годину в поточній частині тижневого плану: частка частини, зафіксована на її початку, мінус витрачене, поділене на години, що лишилися в ній."},"forecast":{"name":"Прогноз невикористаного","short":"Відсоток тижня, який за останнього темпу, імовірно, лишиться невитраченим на момент скидання."},"hold":{"name":"Утримання","short":"Частка тижневого ліміту, утримувана для запущеного субагента, gate або елемента черги. Нічна черга враховує її перед стартом наступного елемента; поза нічним прогоном рядок запуску показує, скільки утримань активні."},"night":{"name":"Нічна квота","short":"Відсоток тижня, який нічна черга може витратити сьогодні вночі: частка неробочих годин сьогоднішньої ночі, яка дорівнює 0, доки неробочі години не позначено."},"plan":{"name":"Тижневий план","short":"Кожен день тижня — це його робочі години і неробочі, кожні з позначкою від 0 до 2: вихідний 0, легкий 0.5, звичайний 1, важкий 1.5. Залишок тижня ділиться між частинами, що лишилися, за їхніми позначками."},"reserve":{"name":"Тижневий резерв","short":"Частка тижня, 8% за типовим значенням, яка лишається поза планом і поза запусками до початку робочих годин дня відкриття резерву. До того запуск запитує підтвердження, щойно тижневе використання досягає 100% мінус резерв; відтоді частка розподіляється на решту тижня."},"threshold":{"name":"П'ятигодинна межа","short":"Використання п'ятигодинного вікна, від якого pace запитує підтвердження перед запуском Agent або Workflow: типово 95% в робочі й неробочі години однаково."}}</script>
+<script type="application/json" id="pb-facts">{"commands":[{"command":"paceline on","help":"turn the pace hooks on","service":false},{"command":"paceline off","help":"turn the pace hooks off (every command still runs)","service":false},{"command":"paceline status","help":"interactive one-line recommendation","service":false},{"command":"paceline auto","help":"autonomous parameters for the next queue item","service":false},{"command":"paceline calibrate","help":"propose parameter corrections from history","service":true},{"command":"paceline simulate","help":"replay a week through the budget with your profile (a model: one reading per hour, no plans or holds)","service":true},{"command":"paceline settings","help":"every setting and switch with its value, default and source; read-only","service":false},{"command":"paceline profile","help":"print, change or check the profile (creates it with the detected time zone)","service":false},{"command":"paceline profile show","help":"print the profile (the default)","service":false},{"command":"paceline profile set","help":"change one key, with checks","service":false},{"command":"paceline profile check","help":"the time zone against this machine's, with a hint","service":false},{"command":"paceline doctor","help":"diagnose pace on this machine; read-only without --live","service":true},{"command":"paceline merge","help":"merge the sessions' readings from the inbox into rate-limits.json","service":true},{"command":"paceline plan","help":"the week plan: marks per part, shares, template (no subcommand: show the week)","service":false},{"command":"paceline plan set","help":"mark a day's working hours and off-hours","service":false},{"command":"paceline plan reset","help":"remove a day's marks, or every day's","service":false},{"command":"paceline plan template","help":"the weekday marks every week starts from","service":false},{"command":"paceline plan template show","help":"the template (the default)","service":false},{"command":"paceline plan template set","help":"mark a weekday","service":false},{"command":"paceline plan template reset","help":"remove a weekday's marks, or the whole template","service":false},{"command":"paceline mode","help":"inform (no plan prompts) or limit (a launch past the part's share asks); bare: show it","service":false},{"command":"paceline reserve","help":"the weekly reserve: show it, or set its size, release weekday and name","service":false},{"command":"paceline hold","help":"hold registry","service":false},{"command":"paceline hold acquire","help":"","service":false},{"command":"paceline hold renew","help":"","service":false},{"command":"paceline hold release","help":"","service":false},{"command":"paceline hold release-session","help":"","service":false},{"command":"paceline hold prune","help":"","service":false},{"command":"paceline hold list","help":"","service":false},{"command":"paceline hold reconcile","help":"","service":false},{"command":"paceline queue","help":"night queue and leftover pool (--pool)","service":false},{"command":"paceline queue add","help":"","service":false},{"command":"paceline queue list","help":"","service":false},{"command":"paceline queue report","help":"","service":false},{"command":"paceline queue approve","help":"","service":false},{"command":"paceline queue clear-done","help":"","service":false},{"command":"paceline queue start","help":"","service":false},{"command":"paceline queue done","help":"","service":false},{"command":"paceline queue defer","help":"","service":false},{"command":"paceline queue fail","help":"","service":false},{"command":"paceline queue retry","help":"","service":false},{"command":"paceline queue remove","help":"","service":false},{"command":"paceline away","help":"tell the launch gate that you are away, so it denies a launch it would ask about: on|off|status","service":false},{"command":"paceline cache-watch","help":"keep an idle session's one-hour prompt cache alive: on|off|status|config","service":false},{"command":"paceline context-watch","help":"context against the auto-compaction point: config|status","service":false},{"command":"paceline usage-watch","help":"read the account's exact usage through Claude Code: on|off|status","service":false}],"env":["ANTHROPIC_MODEL","CLAUDE_CODE_ACCOUNT_UUID","CLAUDE_CODE_ENTRYPOINT","CLAUDE_CODE_ORGANIZATION_UUID","CLAUDE_CODE_SESSION_ID","CLAUDE_CONFIG_DIR","CLAUDE_PID","CLAUDE_PLUGIN_DATA","CLAUDE_PROJECT_DIR","CLAUDE_SESSION_ID","HOME","PACELINE_ACCOUNT_KEY","PACELINE_DEBUG","PACELINE_FREE_COMMIT_MB","PACELINE_MODEL","PACELINE_NOW","PACELINE_NO_MERGE","PACELINE_SCRIPT","PACELINE_STATE_DIR","PACELINE_USAGE_FILE","USERPROFILE"],"exit_codes":{"EXIT_ERROR":1,"EXIT_NONE":4,"EXIT_OK":0,"EXIT_SEVERAL":3,"EXIT_STOP":11,"EXIT_USAGE":2,"EXIT_WAIT":10},"profile":[{"default":2048,"internal":false,"key":"commit_reserve_mb"},{"default":95.0,"internal":false,"key":"five_hour_stop_pct"},{"default":10.0,"internal":false,"key":"five_hour_to_week_pct"},{"default":6000,"internal":false,"key":"heavy_job_mb"},{"default":6,"internal":false,"key":"max_agents"},{"default":3,"internal":false,"key":"max_heavy_runs"},{"default":false,"internal":false,"key":"memory_guard"},{"default":2048,"internal":false,"key":"min_free_commit_mb"},{"default":1.0,"internal":false,"key":"subagent_estimate_pct"},{"default":"UTC","internal":false,"key":"timezone"},{"default":false,"internal":true,"key":"timezone_confirmed"},{"default":"machine","internal":false,"key":"timezone_mode"},{"default":1,"internal":true,"key":"version"}],"reserve_default_pct":8,"simulate":[{"asks_h":1,"night_pct":0.0,"night_queue":false,"peak_five_hour_pct":100.0,"unused_pct":5.1,"week":"on-track"},{"asks_h":1,"night_pct":0.0,"night_queue":true,"peak_five_hour_pct":100.0,"unused_pct":5.1,"week":"on-track"},{"asks_h":4,"night_pct":0.0,"night_queue":false,"peak_five_hour_pct":100.0,"unused_pct":5.1,"week":"heavy-start"},{"asks_h":4,"night_pct":0.0,"night_queue":true,"peak_five_hour_pct":100.0,"unused_pct":5.1,"week":"heavy-start"},{"asks_h":1,"night_pct":0.0,"night_queue":false,"peak_five_hour_pct":100.0,"unused_pct":8.7,"week":"light-start"},{"asks_h":1,"night_pct":0.0,"night_queue":true,"peak_five_hour_pct":100.0,"unused_pct":8.7,"week":"light-start"},{"asks_h":2,"night_pct":0.0,"night_queue":false,"peak_five_hour_pct":100.0,"unused_pct":28.6,"week":"away-thu-fri"},{"asks_h":2,"night_pct":0.0,"night_queue":true,"peak_five_hour_pct":100.0,"unused_pct":28.6,"week":"away-thu-fri"}]}</script>
 <script type="application/json" id="pb-data">{}</script>
 <script>
 const __m = {}
@@ -1082,11 +1094,9 @@ const PBPace = (() => {
     queue_item_estimate_pct: 1.0,
   }
 
-  // The fixed values of pace.py the port reads (HEAVY_WEIGHT and the rest there); golden.json carries
-  // pace.py's values and the golden test requires these to equal them.
+  // The fixed values of pace.py the port reads (STALE_THRESHOLD_MIN and the rest there); golden.json
+  // carries pace.py's values and the golden test requires these to equal them.
   const CONSTANTS = {
-    HEAVY_WEIGHT: 2.0,
-    NIGHT_BASE_PCT: 5.0,
     STALE_THRESHOLD_MIN: 30,
     CAPACITY_WARN_RATIO: 0.9,
   }
@@ -1134,6 +1144,23 @@ const PBPace = (() => {
     return Number(py_fixed(x, n))
   }
 
+  // pace.host_view: the `host` object of a status, the one place the memory guard's figures are made
+  function host_view(profile, commit_mb) {
+    const guard = profile.memory_guard === true
+    let max_heavy_runs = null
+    if (guard && commit_mb !== null) {
+      max_heavy_runs = Math.max(0, Math.min(Math.trunc(profile.max_heavy_runs),
+        Math.trunc(Math.floor((commit_mb - profile.commit_reserve_mb) / profile.heavy_job_mb))))
+    }
+    return {
+      guard, free_commit_mb: commit_mb === null ? null : py_round_int(commit_mb),
+      min_free_commit_mb: guard ? profile.min_free_commit_mb : null, max_heavy_runs,
+    }
+  }
+
+  // pace.floor_gb: a memory floor in GB with one decimal, dropped when whole
+  const floor_gb = mb => py_fixed(mb / 1024, 1).replace(/\.0$/, '')
+
   // round(x) to an int
   function py_round_int(x) {
     return Number(py_fixed(x, 0)) + 0
@@ -1148,22 +1175,12 @@ const PBPace = (() => {
   // ------------------------------------------------------------ time (UTC only)
 
   const weekday = t => (new Date(t).getUTCDay() + 6) % 7
-  const hour_of = t => new Date(t).getUTCHours()
   const date_of = t => Math.floor(t / DAY) * DAY
   const date_iso = d => new Date(d).toISOString().slice(0, 10)
   const parse_iso = s => (s == null ? null : Date.parse(s))
 
-  function local_dt(day, hour) {
-    return day + hour * HOUR
-  }
-
   function iso_ms(t) {
     return new Date(t).toISOString()
-  }
-
-  // datetime.isoformat() of a UTC instant
-  function iso_seconds(t) {
-    return new Date(t).toISOString().slice(0, 19) + '+00:00'
   }
 
   function fmt_local(t) {
@@ -1192,178 +1209,255 @@ const PBPace = (() => {
     return Math.max(...values)
   }
 
-  // ------------------------------------------------------------ plans
+  // ------------------------------------------------------------ the week calendar (scripts/week.py)
 
-  function plan_weight(profile, plan) {
-    if (plan.type === 'away') return 0.0
-    return Number(plan.weight || CONSTANTS.HEAVY_WEIGHT)
+  const DEFAULT_WORK_HOURS = '09:00-18:00'
+  const WEEKDAYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']
+  const MARK_NAMES = { off: 0.0, 'day-off': 0.0, light: 0.5, normal: 1.0, heavy: 1.5 }
+  const MARK_STEP = 0.25
+  const MARK_MAX = 2.0
+  const DEFAULT_MARKS = { work: 1.0, off: 0.0 }
+  const TOLERANCE_PCT = 1.0
+  const MINUTES_STEP = 15
+  const MIN_SPAN = 60
+
+  function parse_work_hours(text) {
+    const m = typeof text === 'string' ? /^\s*(\d{1,2}):(\d{2})\s*-\s*(\d{1,2}):(\d{2})\s*$/.exec(text) : null
+    if (!m) throw new Error(`work_hours must look like HH:MM-HH:MM, e.g. ${DEFAULT_WORK_HOURS}; got ${JSON.stringify(text)}`)
+    const [h0, m0, h1, m1] = m.slice(1).map(Number)
+    if (h0 > 23 || h1 > 23 || m0 > 59 || m1 > 59) throw new Error(`work_hours times must be 00:00 to 23:59; got ${text}`)
+    const start = h0 * 60 + m0
+    const end = h1 * 60 + m1
+    if (start % MINUTES_STEP || end % MINUTES_STEP) throw new Error(`work_hours minutes must be a multiple of ${MINUTES_STEP}; got ${text}`)
+    if (start >= end) throw new Error(`work_hours must start before it ends within one calendar day; got ${text}`)
+    if (end - start < MIN_SPAN) throw new Error(`work_hours must cover at least 1 hour of working time; got ${text}`)
+    if (1440 - (end - start) < MIN_SPAN) throw new Error(`work_hours must leave at least 1 hour of off-hours; got ${text}`)
+    return [start, end]
   }
 
-  function plan_at(plans, t) {
-    let best = null
-    for (const plan of plans) {
-      if (parse_iso(plan.start) <= t && t < parse_iso(plan.end)) {
-        if (best === null || plan.declared_at > best.declared_at
-            || (plan.declared_at === best.declared_at && plan.id > best.id)) best = plan
-      }
+  const minutes_of = wh => (typeof wh === 'string' ? parse_work_hours(wh) : wh)
+
+  // A mark name or a number in steps of 0.25 within [0, 2]; throws on anything else.
+  function parse_mark(value) {
+    let number
+    if (typeof value === 'boolean') throw new Error('bad mark')
+    if (typeof value === 'string') {
+      const key = value.trim().toLowerCase()
+      if (key in MARK_NAMES) return MARK_NAMES[key]
+      number = key === '' ? NaN : Number(key)
+    } else if (typeof value === 'number') {
+      number = value
+    } else {
+      throw new Error('bad mark')
     }
-    return best
+    if (!Number.isFinite(number) || !(number >= 0 && number <= MARK_MAX)) throw new Error('bad mark')
+    if ((number / MARK_STEP) % 1) throw new Error('bad mark')
+    return number
   }
 
-  function plans_starting_tomorrow(profile, now) {
-    const today = date_of(now)
-    return profile.plans.filter(p => date_of(parse_iso(p.start)) === today + DAY && p.confirmed_on !== date_iso(today))
+  const is_object = v => v !== null && typeof v === 'object' && !Array.isArray(v)
+
+  // `day` is the local date as the UTC midnight (ms) that carries it.
+  function marks_for(day, plan) {
+    plan = is_object(plan) ? plan : {}
+    const days = is_object(plan.days) ? plan.days : {}
+    const template = is_object(plan.template) ? plan.template : {}
+    const dated = days[date_iso(day)]
+    const wd = template[WEEKDAYS[weekday(day)]]
+    const out = {}
+    for (const [kind, dflt] of Object.entries(DEFAULT_MARKS)) {
+      let found = false
+      for (const source of [dated, wd]) {
+        if (!is_object(source) || source[kind] == null) continue
+        try {
+          out[kind] = parse_mark(source[kind])
+        } catch (e) {
+          continue
+        }
+        found = true
+        break
+      }
+      if (!found) out[kind] = dflt
+    }
+    return out
+  }
+
+  // The UTC instant of a local wall time; the port runs in UTC, so there is no gap or repeated hour.
+  function local_instant(day, minutes) {
+    return day + minutes * 60 * 1000
+  }
+
+  function kind_at(local, work_hours) {
+    const [start, end] = minutes_of(work_hours)
+    const day = date_of(local)
+    for (const d of [day - DAY, day, day + DAY]) {
+      if (local_instant(d, start) <= local && local < local_instant(d, end)) return 'work'
+    }
+    return 'off'
+  }
+
+  // The parts overlapping [window_start, reset), oldest first. A day runs from one working start to the next.
+  function parts(window_start, reset, work_hours, plan = null) {
+    const [w0, w1] = minutes_of(work_hours)
+    let day = date_of(window_start) - DAY
+    const last = date_of(reset) + DAY
+    const out = []
+    while (day <= last) {
+      const s = local_instant(day, w0)
+      const e = local_instant(day, w1)
+      const nxt = local_instant(day + DAY, w0)
+      const marks = marks_for(day, plan)
+      for (const [kind, a, b] of [['work', s, e], ['off', e, nxt]]) {
+        const lo = Math.max(a, window_start)
+        const hi = Math.min(b, reset)
+        if (hi <= lo) continue
+        const full = (b - a) / HOUR
+        const hours = (hi - lo) / HOUR
+        out.push({ day, kind, start: lo, end: hi, full_hours: full, hours, mark: marks[kind], weight: marks[kind] * hours / full })
+      }
+      day += DAY
+    }
+    return out
+  }
+
+  // [the part holding t, the parts after it]; with no part holding t, [null, the parts that start after t].
+  function split_at(all, t) {
+    for (let i = 0; i < all.length; i++) {
+      if (all[i].start <= t && t < all[i].end) return [all[i], all.slice(i + 1)]
+    }
+    return [null, all.filter(p => p.start > t)]
+  }
+
+  const left = (used, reserve) => Math.max(0.0, 100.0 - used - reserve)
+
+  // The share of the first part of `from_current`, fixed at its start; null (unplanned) when the weights sum to 0.
+  function fix_share(left_at_start, from_current) {
+    const total = py_sum(from_current.map(p => p.weight))
+    if (!from_current.length || total <= 0) return null
+    return left_at_start * from_current[0].weight / total
+  }
+
+  // [rest, shares of the later parts] while the current part holds `fixed_share`.
+  function spread(left_now, fixed_share, spent_in_part, later_parts) {
+    const held = fixed_share !== null ? Math.max(0.0, fixed_share - spent_in_part) : 0.0
+    const rest = Math.max(0.0, left_now - held)
+    const total = py_sum(later_parts.map(p => p.weight))
+    if (total <= 0) return [rest, later_parts.map(() => 0.0)]
+    return [rest, later_parts.map(p => rest * p.weight / total)]
+  }
+
+  function allowed(share, start, end, t) {
+    return share * Math.min(1.0, Math.max(0.0, (t - start) / (end - start)))
+  }
+
+  const is_over = (spent, allowed_now) => spent > allowed_now + TOLERANCE_PCT
+
+  // The instant the weekly reserve is released: the working start of its release day in the week ending at
+  // `reset` (null: the last day whose working hours end by the reset); the reset itself with no candidate.
+  function release_at(reset, work_hours, release_weekday) {
+    if (release_weekday !== null && !WEEKDAYS.includes(release_weekday)) {
+      throw new Error(`release weekday must be one of ${WEEKDAYS.join(', ')}; got ${JSON.stringify(release_weekday)}`)
+    }
+    const [w0, w1] = minutes_of(work_hours)
+    const week_start = reset - WEEK
+    let best = null
+    for (const part of parts(week_start, reset, work_hours)) {
+      if (part.kind !== 'work') continue
+      const start = local_instant(part.day, w0)
+      if (!(week_start <= start && start < reset)) continue
+      if (release_weekday === null) {
+        if (local_instant(part.day, w1) > reset) continue
+      } else if (WEEKDAYS[weekday(part.day)] !== release_weekday) {
+        continue
+      }
+      if (best === null || start > best) best = start
+    }
+    return best === null ? reset : best
+  }
+
+  // The reserve held at `t`, in percent: `pct` before the release instant, 0 from it; 0 without one.
+  function kept(t, pct, release) {
+    if (release === null) return 0.0
+    return t < release ? Number(pct) : 0.0
   }
 
   // ------------------------------------------------------------ budget model
 
-  function classify(local, profile) {
-    const h = hour_of(local)
-    const [n0, n1] = profile.night_hours
-    const [d0, d1] = profile.day_hours
-    if (n0 <= h && h < n1) return 'night'
-    if (d0 <= h && h < d1) return weekday(local) >= 5 ? 'weekend' : 'work'
-    return 'off'
-  }
+  const RESERVE_DEFAULTS = { pct: 8, name: null, release: null }
+  const RESERVE_PCT_MAX = 50
+  const RESERVE_NAME_MAX = 32
+  const RESERVE_TEXT_OFF = 'no reserve (0 %)'
+  const RESERVE_TEXT_ERROR = 'reserve unknown: the stop is off'
 
-  function build_slots(start, end, profile, plans) {
-    const per_hour = profile.five_hour_to_week_pct / 5.0
-    const night_share = profile.five_hour_threshold_night / 100.0
-    const slots = []
-    let t = start
-    while (t < end) {
-      const boundary = Math.floor(t / HOUR) * HOUR + HOUR
-      const stop = Math.min(boundary, end)
-      const hours = total_seconds(stop - t) / 3600.0
-      const local = t
-      const kind = classify(local, profile)
-      let weight
-      if (kind === 'work') weight = Number(profile.weekday_weight)
-      else if (kind === 'weekend') weight = Number(profile.weekend_weight)
-      else weight = 0.0
-      if ((kind === 'work' || kind === 'weekend') && plans.length) {
-        const plan = plan_at(plans, t)
-        if (plan) weight = plan.type === 'away' ? 0.0 : weight * plan_weight(profile, plan)
-      }
-      const cap = per_hour * hours * (kind === 'night' ? night_share : 1.0)
-      slots.push({ start: t, hours, local, kind, weight, cap, eff: weight * hours })
-      t = stop
+  // The reserve of one week: size, name, release weekday and release instant (null when off or failed).
+  // Never throws; a failure gives `error`, the default size for the nominal rates, and nothing kept.
+  function reserve_state(plan, reset) {
+    try {
+      const stored = is_object(plan.reserve) ? plan.reserve : {}
+      let pct = RESERVE_DEFAULTS.pct
+      if (Number.isInteger(stored.pct) && stored.pct >= 0 && stored.pct <= RESERVE_PCT_MAX) pct = stored.pct
+      // The page never takes a reserve name; this is a copy of Python's reserve_name_ok: 1-32 printable
+      // characters (no control, format, private-use or unassigned character, no separator but an ASCII space),
+      // not all blank. The golden grid holds a blank name and one with a no-break space.
+      let name = null
+      if (typeof stored.name === 'string' && stored.name.length >= 1 && [...stored.name].length <= RESERVE_NAME_MAX
+        && !/[\p{C}\p{Z}]/u.test(stored.name.replaceAll(' ', '')) && stored.name.trim() !== '') name = stored.name
+      const release = WEEKDAYS.includes(stored.release) ? stored.release : null
+      const at = pct === 0 ? null : release_at(reset, plan.work_hours, release)
+      if (at !== null && !Number.isFinite(at)) throw new TypeError('the release instant is not a time')
+      return { pct, name, release, release_at: at, error: null, kept: t => kept(t, pct, at) }
+    } catch (e) {
+      return reserve_failed_state(e)
     }
-    return slots
   }
 
-  function waterfill(total, items) {
-    const alloc = items.map(() => 0.0)
-    const active = []
-    items.forEach(([w, c], i) => { if (w > 0 && c > 0) active.push([i, w, c]) })
-    if (total <= 0 || !active.length) return [0.0, alloc]
-    if (py_sum(active.map(([, , c]) => c)) <= total) {
-      for (const [i, , c] of active) alloc[i] = c
-      return [Infinity, alloc]
+  function reserve_failed_state(e) {
+    return { pct: RESERVE_DEFAULTS.pct, name: null, release: null, release_at: null,
+      error: `the reserve could not be computed (${e.name})`, kept: () => 0.0 }
+  }
+
+  // The local weekday, day of month and clock of an instant: Fri 30 09:00.
+  function day_text(t) {
+    const wd = WEEKDAYS[weekday(t)]
+    return `${wd[0].toUpperCase()}${wd.slice(1)} ${new Date(t).getUTCDate()} ${iso_ms(t).slice(11, 16)}`
+  }
+
+  // The reserve as the texts name it: `reserve 8 %`, or `reserve "tests" 8 %` with a name.
+  const reserve_label = (pct, name) => (name ? `reserve "${name}" ${pct} %` : `reserve ${pct} %`)
+
+  const reserve_error_form = message => ({ error: message, over: false, kept_pct: 0, text: RESERVE_TEXT_ERROR })
+
+  // The `reserve` object of status --json and plan --json.
+  function reserve_figures(now, state, seven_used, reset) {
+    if (state.error) return reserve_error_form(state.error)
+    const at = state.release_at
+    const off = state.pct === 0 || at === null
+    const released = !off && now >= at
+    const over = !off && !released && seven_used >= 100 - state.pct
+    // No release candidate this week: the release instant is the reset, so the reserve never opens.
+    const kept_to_reset = !off && at === reset
+    const obj = {
+      pct: state.pct, name: state.name, release: state.release,
+      release_at: off ? null : iso_ms(at), release_at_local: off ? null : fmt_local(at),
+      release_day: off ? null : date_iso(date_of(at)), release_text: off ? null : day_text(at),
+      reset_text: day_text(reset), label: reserve_label(state.pct, state.name), released, kept_to_reset,
+      opens_clock: off || released || kept_to_reset ? null : iso_ms(at).slice(11, 16), kept_pct: py_round(state.kept(now), 3),
+      stop_at_pct: off ? null : 100 - state.pct, used_pct: py_round(seven_used, 3), over,
     }
-    active.sort((a, b) => a[2] / a[1] - b[2] / b[1])
-    let remaining = total
-    let wsum = py_sum(active.map(([, w]) => w))
-    let k = 0
-    while (k < active.length) {
-      const [i, w, c] = active[k]
-      if (w * remaining / wsum >= c) {
-        alloc[i] = c
-        remaining -= c
-        wsum -= w
-        k += 1
-      } else break
-    }
-    const rate = remaining / wsum
-    for (const [i, w] of active.slice(k)) alloc[i] = w * rate
-    return [rate, alloc]
+    obj.text = reserve_text(obj)
+    return obj
   }
 
-  function allocate(total, slots, weekend_cap_left) {
-    const day = []
-    slots.forEach((s, i) => { if (s.kind === 'work' || s.kind === 'weekend') day.push(i) })
-    const alloc = slots.map(() => 0.0)
-    const [rate, part] = waterfill(total, day.map(i => [slots[i].eff, slots[i].cap]))
-    let rates = { work: rate, weekend: rate }
-    const weekend = day.filter(i => slots[i].kind === 'weekend')
-    if (py_sum(weekend.map(i => part[day.indexOf(i)])) > weekend_cap_left + 1e-9) {
-      const [wrate, wpart] = waterfill(Math.max(0.0, weekend_cap_left), weekend.map(i => [slots[i].eff, slots[i].cap]))
-      const work = day.filter(i => slots[i].kind === 'work')
-      const [drate, dpart] = waterfill(total - py_sum(wpart), work.map(i => [slots[i].eff, slots[i].cap]))
-      weekend.forEach((i, j) => { alloc[i] = wpart[j] })
-      work.forEach((i, j) => { alloc[i] = dpart[j] })
-      rates = { work: drate, weekend: wrate }
-    } else {
-      day.forEach((i, j) => { alloc[i] = part[j] })
-    }
-    return [rates, alloc]
-  }
-
-  function release_start(reset, profile) {
-    const decay = profile.reserve_decay_start
-    const reset_day = date_of(reset)
-    let start = null
-    for (let back = 0; back < 8; back++) {
-      const day = reset_day - back * DAY
-      if (weekday(day) === decay.weekday) {
-        const candidate = local_dt(day, decay.hour)
-        if (candidate < reset) {
-          start = candidate
-          break
-        }
-      }
-    }
-    const floor = reset - profile.reserve_release_min_hours * HOUR
-    return start === null ? floor : Math.min(start, floor)
-  }
-
-  function reserve_at(t, reset, profile) {
-    const base = Number(profile.reserve_pct)
-    const start = release_start(reset, profile)
-    if (t >= reset) return 0.0
-    if (t <= start) return base
-    return base * total_seconds(reset - t) / total_seconds(reset - start)
-  }
-
-  function used_at(history, t, reset, model) {
-    if (t <= reset - WEEK) return 0.0
-    let best = null
-    for (const record of history) {
-      if (record._at > t) break
-      const r = parse_iso(record.seven_day.resets_at)
-      if (r && Math.abs(total_seconds(r - reset)) < 600) best = record
-    }
-    return best ? effective_used(best, model) : null
-  }
-
-  function weekend_start(now, reset) {
-    const saturday = date_of(now) - (weekday(now) - 5) * DAY
-    return Math.max(local_dt(saturday, 0), reset - WEEK)
-  }
-
-  function weekend_day_spend(history, now, reset, profile, model, effective, runs) {
-    const local = now
-    const saturday = date_of(local) - (weekday(local) - 5) * DAY
-    const start = weekend_start(now, reset)
-    const before = used_at(history, start, reset, model)
-    let spent = effective - (before !== null ? before : 0.0)
-    const [n0, n1] = profile.night_hours
-    for (const day of [saturday, saturday + DAY]) {
-      const a = Math.max(local_dt(day, n0), start)
-      const b = Math.min(local_dt(day, n1), now)
-      if (b <= a) continue
-      const run = (runs || []).find(r => r.night_date === date_iso(day)
-        && (r.reset == null || r.reset === iso_ms(reset))) ?? null
-      if (run !== null) {
-        const last = b === now ? effective : (run.last_effective ?? run.used_at_start)
-        spent -= Math.max(0.0, last - run.used_at_start)
-        continue
-      }
-      const u0 = used_at(history, a, reset, model)
-      const u1 = b === now ? effective : used_at(history, b, reset, model)
-      if (u0 !== null && u1 !== null) spent -= Math.max(0.0, u1 - u0)
-    }
-    return Math.max(0.0, spent)
+  // The one text of a `reserve` object.
+  function reserve_text(obj) {
+    if (obj.error) return RESERVE_TEXT_ERROR
+    if (obj.pct === 0) return RESERVE_TEXT_OFF
+    const label = obj.label
+    if (obj.released) return `${label} released ${obj.release_text}, kept again from the reset ${obj.reset_text}`
+    let text = obj.kept_to_reset ? `${label} kept to the reset ${obj.reset_text}`
+      : `${label} kept, opens ${obj.release_text}`
+    if (obj.over) text += `; launches ask (week used ${obj.used_pct} %)`
+    return text
   }
 
   function roll_bucket(bucket, now, period) {
@@ -1376,7 +1470,21 @@ const PBPace = (() => {
     return [0.0, reset, true]
   }
 
-  function compute(now, profile, usage, model = null, commit_mb = null, outstanding = 0.0, runs = null) {
+  // The entry of the part that holds `now`, derived as part_entry does with no stored entry: the figure
+  // the part is fixed from is `used_at_start` (0 when the part starts at the week's start).
+  function part_entry(now, state, plan, reset, used_at_start) {
+    const week_start = reset - WEEK
+    const [current, later] = split_at(parts(week_start, reset, plan.work_hours, plan), now)
+    if (current === null) return null
+    const used_start = current.start <= week_start ? 0.0 : used_at_start
+    const left_start = left(used_start, state.kept(current.start))
+    return { part: current, day: current.day, kind: current.kind, start: current.start, end: current.end,
+      share: fix_share(left_start, [current, ...later]), used_at_start: used_start }
+  }
+
+  const r3 = v => (v === null ? null : py_round(v, 3))
+
+  function compute(now, profile, usage, plan, model = null, commit_mb = null, outstanding = 0.0) {
     const record = usage.record
     if (!record || !record.seven_day) throw new Error('no usage data yet')
     load_zone(profile.timezone)
@@ -1387,72 +1495,54 @@ const PBPace = (() => {
     const scoped = rolled ? [] : (record.scoped || []).map(s => ({ ...s }))
     const matched = scoped_match(scoped, model)
     const effective = Math.max(seven_used, ...matched.map(s => Number(s.used_percentage)))
-    const window_start = reset - WEEK
     const remaining = Math.max(0.0, 100.0 - effective)
-    const reserve = reserve_at(now, reset, profile)
-    const release = release_start(reset, profile)
-    const spendable = Math.max(0.0, remaining - reserve)
+    let state = reserve_state(plan, reset)
+    let reserve
+    try {
+      reserve = reserve_figures(now, state, seven_used, reset)
+    } catch (e) {
+      state = reserve_failed_state(e)
+      reserve = reserve_error_form(state.error)
+    }
+    const spendable = Math.max(0.0, remaining - state.kept(now))
 
     const age_min = record._at != null ? total_seconds(now - record._at) / 60.0 : Infinity
     const stale = age_min > CONSTANTS.STALE_THRESHOLD_MIN
 
-    const plans = profile.plans || []
-    const slots = build_slots(now, reset, profile, plans)
-    const local_now = now
-
-    let weekend_spent = 0.0
-    let weekend_released = 0.0
-    if (weekday(local_now) >= 5) {
-      weekend_spent = weekend_day_spend(history, now, reset, profile, model, effective, runs)
-      weekend_released = Math.max(0.0, reserve_at(weekend_start(now, reset), reset, profile) - reserve)
+    const work_hours = plan.work_hours
+    const kind_now = kind_at(now, work_hours)
+    let entry = part_entry(now, state, plan, reset, usage.used_at_start)
+    if (entry === null) {
+      // No part of the week holds `now`: nothing is planned there, and the budget is 0.
+      const hours = total_seconds(reset - now) / 3600.0
+      entry = { part: { day: date_of(now), kind: kind_now, start: now, end: reset, full_hours: hours, hours, mark: 0.0, weight: 0.0 },
+        day: date_of(now), kind: kind_now, start: now, end: reset, share: null, used_at_start: seven_used }
     }
-    const weekend_cap_left = Math.max(0.0, Number(profile.weekend_cap_pct) + weekend_released - weekend_spent)
-    const [rates, alloc] = allocate(spendable, slots, weekend_cap_left)
+    const share = entry.share
+    const spent = Math.max(0.0, seven_used - entry.used_at_start)
+    const part_hours = (entry.end - entry.start) / HOUR
+    const hours_left = Math.max((entry.end - now) / HOUR, 1e-9)
+    const per_hour_cap = k / 5.0
+    const budget_per_hour = share === null ? 0.0 : Math.min(Math.max(0.0, share - spent) / hours_left, per_hour_cap)
+    const rate = share && part_hours > 0 ? share / part_hours : 0.0
+    const normal_rate = rate > 0 ? Math.min(rate, per_hour_cap) : (100.0 - state.pct) / 168.0
 
-    const week_slots = build_slots(window_start, reset, profile, [])
-    const [normal_rates] = allocate(100.0 - Number(profile.reserve_pct), week_slots, Number(profile.weekend_cap_pct))
-    const expected = { work: 0.0, weekend: 0.0 }
-    for (const s of slots) {
-      if (s.kind in expected && normal_rates[s.kind] !== Infinity) {
-        expected[s.kind] += Math.min(normal_rates[s.kind] * s.eff, s.cap)
-      } else if (s.kind in expected) {
-        expected[s.kind] += s.weight > 0 ? s.cap : 0.0
-      }
-    }
-    const expected_spend = expected.work + Math.min(expected.weekend, weekend_cap_left)
-    const surplus = Math.max(0.0, spendable - expected_spend)
+    const later = parts(entry.end, reset, work_hours, plan)
+    const left_now = left(seven_used, state.kept(now))
+    const [, later_shares] = spread(left_now, share, spent, later)
 
-    const day_share = profile.five_hour_threshold_day / 100.0
-    const day_capacity = py_sum(slots.filter(s => (s.kind === 'work' || s.kind === 'weekend') && s.weight > 0)
-      .map(s => s.cap * day_share))
-    const unallocated = Math.max(0.0, spendable - py_sum(alloc))
+    const stop = Number(profile.five_hour_stop_pct)
+    // The current part counts only when it carries weight, as the later parts do.
+    let day_capacity = entry.part.weight > 0 ? hours_left * per_hour_cap * stop / 100.0 : 0.0
+    day_capacity += py_sum(later.filter(p => p.weight > 0).map(p => p.hours * per_hour_cap * stop / 100.0))
     const capacity_warning = remaining >= CONSTANTS.CAPACITY_WARN_RATIO * day_capacity
 
-    const current = slots.find(s => (s.kind === 'work' || s.kind === 'weekend') && s.weight > 0) ?? null
-    const per_hour_cap = k / 5.0
-    let budget_per_hour
-    if (current === null) {
-      budget_per_hour = 0.0
-    } else {
-      const rate = rates[current.kind]
-      budget_per_hour = rate === Infinity ? per_hour_cap : Math.min(rate * current.weight, per_hour_cap)
-    }
-    const normal_kind = current !== null ? current.kind : 'work'
-    const normal_rate = normal_rates[normal_kind] !== Infinity ? normal_rates[normal_kind] : per_hour_cap
-    const in_day = slots.length > 0 && (slots[0].kind === 'work' || slots[0].kind === 'weekend')
-    const current_plan = plan_at(plans, now)
-
     const [five_used, five_reset] = roll_bucket(record.five_hour, now, null)
-    const in_night = classify(local_now, profile) === 'night'
-    const five_threshold = Number(profile[in_night ? 'five_hour_threshold_night' : 'five_hour_threshold_day'])
+    const five_threshold = stop
 
-    const night = night_info(now, reset, profile, slots, alloc, spendable, surplus, commit_mb)
-
-    let heavy_runs = null
-    if (commit_mb !== null) {
-      heavy_runs = Math.max(0, Math.min(Math.trunc(profile.max_heavy_runs),
-        Math.trunc(Math.floor((commit_mb - profile.commit_reserve_mb) / profile.heavy_job_mb))))
-    }
+    const host = host_view(profile, commit_mb)
+    const guarded = host.guard ? commit_mb : null
+    const night = night_info(now, reset, profile, entry, later, later_shares, spent, guarded)
 
     const forecast = forecast_unused(history, now, reset, remaining, model)
     const hours_to_reset = total_seconds(reset - now) / 3600.0
@@ -1471,77 +1561,72 @@ const PBPace = (() => {
         remaining_pct: remaining, reset: iso_ms(reset), reset_local: fmt_local(reset),
         hours_to_reset: py_round(hours_to_reset, 2), elapsed_pct: py_round(elapsed_pct, 1),
       },
-      reserve_pct: py_round(reserve, 3),
-      reserve_release_start: iso_ms(release),
-      reserve_release_start_local: fmt_local(release),
+      reserve,
       spendable_pct: py_round(spendable, 3),
+      five_hour_to_week_pct: k,
       budget_per_hour_pct: py_round(budget_per_hour, 3),
       normal_per_hour_pct: py_round(normal_rate, 3),
-      normal_pct_kind: normal_kind,
-      rates: Object.fromEntries(Object.entries(rates).map(([k2, v]) => [k2, v === Infinity ? null : py_round(v, 4)])),
-      weekend: {
-        cap_pct: profile.weekend_cap_pct, spent_pct: py_round(weekend_spent, 3),
-        cap_left_pct: py_round(weekend_cap_left, 3),
-        reserve_released_pct: py_round(weekend_released, 3),
+      normal_pct_kind: entry.kind,
+      budget_part: {
+        kind: entry.kind, day: date_iso(entry.day), start: iso_ms(entry.start), end: iso_ms(entry.end),
+        share_pct: r3(share), spent_pct: py_round(spent, 3), part_hours: py_round(part_hours, 3),
+        hours_left: py_round(hours_left, 3), unplanned: share === null,
+        // Nothing is stored in the simulator: every part is derived.
+        stored: false,
       },
-      surplus_pct: py_round(surplus, 3),
-      expected_day_spend_pct: py_round(expected_spend, 3),
       day_capacity_pct: py_round(day_capacity, 3),
-      unallocated_pct: py_round(unallocated, 3),
       capacity_warning,
-      in_day_hours: in_day,
-      current_plan,
+      in_day_hours: kind_now === 'work',
       five_hour: {
         used_pct: five_used, reset: five_reset ? iso_ms(five_reset) : null,
         reset_local: five_reset ? fmt_local(five_reset) : null,
-        threshold_pct: five_threshold, hard_stop_pct: profile.five_hour_hard_stop,
+        threshold_pct: five_threshold,
         // The simulator has no reading history, so it measures no burn rate.
         burn: null,
       },
       night,
-      host: {
-        free_commit_mb: commit_mb === null ? null : py_round_int(commit_mb),
-        min_free_commit_mb: profile.min_free_commit_mb, max_heavy_runs: heavy_runs,
-      },
-      outstanding_reservations_pct: py_round(outstanding, 3),
+      host,
+      outstanding_holds_pct: py_round(outstanding, 3),
       forecast_unused_pct: forecast === null ? null : py_round(forecast, 1),
-      _slots: slots,
-      _alloc: alloc,
+      _entry: entry,
+      _later: later,
     }
   }
 
-  function night_info(now, reset, profile, slots, alloc, spendable, surplus, commit_mb) {
-    const local = now
-    const day_start = profile.day_hours[0]
-    let night_date
-    let start
-    if (hour_of(local) < profile.night_hours[1]) {
-      night_date = date_of(local)
-      start = Math.max(now, local_dt(night_date, profile.night_hours[0]))
+  // Tonight's off-hours part as the night run's allowance.
+  function night_info(now, reset, profile, entry, later, later_shares, spent, commit_mb) {
+    const k = Number(profile.five_hour_to_week_pct)
+    let tonight = null // [part, share, current]
+    if (entry.kind === 'off') {
+      tonight = [entry.part, entry.share, true]
     } else {
-      night_date = date_of(local) + DAY
-      start = local_dt(night_date, profile.night_hours[0])
+      for (let i = 0; i < later.length; i++) {
+        if (later[i].kind === 'off' && later[i].day === entry.day) {
+          tonight = [later[i], later_shares[i], false]
+          break
+        }
+      }
     }
-    let end = local_dt(night_date, profile.night_hours[1])
-    start = Math.min(start, reset)
-    end = Math.min(end, reset)
-    const hours = Math.max(0.0, total_seconds(end - start) / 3600.0)
-    const window_capacity = hours * profile.five_hour_to_week_pct / 5.0 * profile.five_hour_threshold_night / 100.0
     const host = commit_mb !== null && commit_mb < profile.min_free_commit_mb ? 0.0 : Infinity
-    const last_night = local_dt(night_date, day_start) >= reset
-    let next_day_share = 0.0
-    if (!last_night) {
-      next_day_share = py_sum(slots.map((s, i) => [s, alloc[i]])
-        .filter(([s]) => (s.kind === 'work' || s.kind === 'weekend') && date_of(s.local) === night_date)
-        .map(([, a]) => a))
+    const host_pct = host === Infinity ? null : host
+    if (tonight === null) {
+      return {
+        date: date_iso(entry.day), start: iso_ms(reset), end: iso_ms(reset), hours: 0.0, current: false,
+        mark: null, weight: 0.0, share_pct: null, fixed: false, window_capacity_pct: 0.0,
+        host_capacity_pct: host_pct, last_before_reset: true, allowance_pct: 0.0,
+      }
     }
-    const base = CONSTANTS.NIGHT_BASE_PCT
-    const allowance = Math.max(0.0, Math.min(base + surplus, window_capacity, host, spendable - next_day_share))
+    const [part, share, current] = tonight
+    const start = Math.max(now, part.start)
+    const hours = Math.max(0.0, (part.end - start) / HOUR)
+    const window_capacity = hours * k / 5.0 * Number(profile.five_hour_stop_pct) / 100.0
+    const basis = current ? (share !== null ? Math.max(0.0, share - spent) : 0.0) : (share || 0.0)
+    const allowance = Math.max(0.0, Math.min(basis, window_capacity, host))
     return {
-      date: date_iso(night_date), start: iso_ms(start), end: iso_ms(end), hours: py_round(hours, 2),
-      last_before_reset: last_night, base_pct: base, window_capacity_pct: py_round(window_capacity, 3),
-      host_capacity_pct: host === Infinity ? null : host, next_day_share_pct: py_round(next_day_share, 3),
-      allowance_pct: py_round(allowance, 3),
+      date: date_iso(part.day), start: iso_ms(start), end: iso_ms(part.end), hours: py_round(hours, 2),
+      current, mark: part.mark, weight: part.weight, share_pct: r3(share), fixed: current,
+      window_capacity_pct: py_round(window_capacity, 3), host_capacity_pct: host_pct,
+      last_before_reset: part.end >= reset, allowance_pct: py_round(allowance, 3),
     }
   }
 
@@ -1549,6 +1634,7 @@ const PBPace = (() => {
     const points = history.filter(r => {
       if (!(now - DAY <= r._at && r._at <= now)) return false
       const x = parse_iso(r.seven_day.resets_at)
+      // 600 s mirrors limits_file.SAME_WEEK_TOLERANCE_SEC (no golden point exercises this filter).
       return x && Math.abs(total_seconds(x - reset)) < 600
     })
     if (points.length < 2) return null
@@ -1560,76 +1646,41 @@ const PBPace = (() => {
 
   // ------------------------------------------------------------ recommendation
 
-  function recommend(calc, profile) {
+  function recommend(calc) {
     const reasons = []
     const commit = calc.host.free_commit_mb
+    const floor = calc.host.min_free_commit_mb
     const five = calc.five_hour
     const weekly = calc.weekly
     let blocked = false
-    if (commit !== null && commit < profile.min_free_commit_mb) {
+    if (commit !== null && floor !== null && commit < floor) {
       blocked = true
-      reasons.push(`free commit ${py_fixed(commit / 1024, 1)} GB < ${py_fixed(profile.min_free_commit_mb / 1024, 0)} GB`)
+      reasons.push(`free commit ${py_fixed(commit / 1024, 1)} GB < ${floor_gb(floor)} GB`)
     }
-    if (five.used_pct >= five.hard_stop_pct) {
+    if (five.used_pct >= five.threshold_pct) {
       blocked = true
-      reasons.push(`5h ${py_fixed(five.used_pct, 0)}% >= ${py_fixed(five.hard_stop_pct, 0)}%`)
+      reasons.push(`5h ${py_fixed(five.used_pct, 0)}% >= ${py_fixed(five.threshold_pct, 0)}%`)
     }
     if (weekly.effective_pct >= 100) {
       blocked = true
       reasons.push('weekly limit exhausted')
     }
-    const background_paused = !blocked && five.used_pct >= five.threshold_pct
-    if (background_paused) {
-      reasons.push(`5h ${py_fixed(five.used_pct, 0)}% >= ${py_fixed(five.threshold_pct, 0)}%: no new background work `
-        + `until ${five.reset_local || 'window reset'}`)
-    }
-    const normal = calc.normal_per_hour_pct || 0.0
-    const ratio = normal > 0 ? calc.budget_per_hour_pct / normal : 1.0
-    const throttle = ratio < 0.7 || (weekly.effective_pct >= profile.throttle_weekly_pct && weekly.hours_to_reset > 24)
-    let agents
-    if (blocked || background_paused) agents = 0
-    else agents = Math.max(1, Math.min(Math.trunc(profile.max_agents), py_round_int(ratio * 2)))
-    const models = allowed_models(calc, profile, throttle)
-    const model = blocked ? 'none' : models.length ? models[0] : 'none'
-    if (throttle && !blocked) reasons.push('throttle: routine subagent work on ' + profile.routine_models.join('/'))
-    return {
-      // No burn rate without history, so the burn rule never limits the simulator.
-      blocked, background_paused, pace_ratio: py_round(ratio, 2), throttle, five_hour_burn_limited: false,
-      max_parallel_agents: agents,
-      max_heavy_runs: calc.host.max_heavy_runs, model, allowed_models: models, reasons,
-    }
+    return { blocked, reasons }
   }
 
-  function allowed_models(calc, profile, throttle, need_pct = 0.0) {
-    const models = [...(throttle ? profile.routine_models : profile.models)]
-    const out = []
-    for (const m of models) {
-      const bucket = calc.weekly.scoped.filter(s => typeof s.name === 'string' && m.includes(s.name.toLowerCase()))
-      if (bucket.length) {
-        const used = Math.max(...bucket.map(s => Number(s.used_percentage)))
-        if (used >= profile.scoped_exhausted_pct || 100 - used < need_pct) continue
-      }
-      out.push(m)
-    }
-    return out
-  }
+  const KIND_LABEL = { work: 'working-hours', off: 'off-hours' }
 
-  const KIND_LABEL = { work: 'weekday', weekend: 'weekend' }
-
-  function status_line(calc, rec, extras) {
+  function status_line(calc, rec) {
     const w = calc.weekly
-    const scoped = w.scoped.map(s => `${s.name} ${py_fixed(s.used_percentage, 0)}%`).join(', ')
     const normal_label = KIND_LABEL[calc.normal_pct_kind] ?? calc.normal_pct_kind
     const normal = `${normal_label} norm ${py_fixed(calc.normal_per_hour_pct, 2)}`
     const parts = [
-      `7d ${py_fixed(w.effective_pct, 0)}%` + (scoped ? ` (${scoped})` : '') + ` reset ${w.reset_local}`,
-      `budget ${py_fixed(calc.budget_per_hour_pct, 2)}%/h` + (
-        calc.rates.work !== null && Math.abs(calc.rates.work - calc.budget_per_hour_pct) > 0.005
-          ? ` (weekday ${py_fixed(calc.rates.work, 2)}, ${normal})`
-          : ` (${normal})`),
+      `7d ${py_fixed(w.seven_day_pct, 0)}% reset ${w.reset_local}`,
+      `budget ${py_fixed(calc.budget_per_hour_pct, 2)}%/h (${normal})`,
     ]
     if (calc.forecast_unused_pct !== null) parts.push(`forecast unused ${py_fixed(calc.forecast_unused_pct, 0)}%`)
-    parts.push(`agents <=${rec.max_parallel_agents} model ${rec.model}`)
+    // Once released, or at 0 %, the plan already says it: the part shows only while the stop acts or is unknown.
+    if (calc.reserve && (calc.reserve.error || (calc.reserve.pct > 0 && !calc.reserve.released))) parts.push(calc.reserve.text)
     parts.push(`5h ${py_fixed(calc.five_hour.used_pct, 0)}%/${py_fixed(calc.five_hour.threshold_pct, 0)}`)
     parts.push(`night ${py_fixed(calc.night.allowance_pct, 1)}%`)
     const age = calc.data.age_min
@@ -1637,13 +1688,12 @@ const PBPace = (() => {
     if (calc.data.stale) data = 'STALE ' + data
     if (calc.data.source === 'fallback' && calc.data.error) data += ` (${calc.data.error})`
     parts.push(data)
-    if (calc.host.free_commit_mb === null) parts.push('host memory unknown')
+    if (calc.host.guard && calc.host.free_commit_mb === null) parts.push('host memory unknown')
     if (calc.pace_on === false) parts.push('pace hooks off (paceline on)')
     if (calc.capacity_warning) {
       parts.push(`WARNING remainder ${py_fixed(w.remaining_pct, 0)}% near day capacity ${py_fixed(calc.day_capacity_pct, 0)}%`)
     }
     parts.push(...rec.reasons)
-    parts.push(...extras)
     return parts.join(' | ')
   }
 
@@ -1682,19 +1732,23 @@ const PBPace = (() => {
     return [null, 'budget']
   }
 
+  // The run's end: its stored night_end (the simulator's runs always carry one).
+  function night_over(run, now) {
+    return now >= parse_iso(run.night_end)
+  }
+
   function autonomous(now, calc, store, profile, start_run = false) {
     const queue = store.queue
     const pool = store.pool
     const effective = calc.weekly.effective_pct
     const night = calc.night
-    const local = now
     let run = queue.run
     const reused = Boolean(start_run && run && run.night_date === night.date)
     if (start_run && !reused) {
       if (run) queue.past_runs = [...(queue.past_runs || []), run].slice(-14)
       run = {
         started_at: iso_ms(now), night_date: night.date, reset: calc.weekly.reset, used_at_start: effective,
-        allowance_pct: night.allowance_pct, surplus_pct: calc.surplus_pct,
+        night_end: night.end, allowance_pct: night.allowance_pct,
         last_before_reset: night.last_before_reset, pool_spent_pct: 0.0,
       }
       queue.run = run
@@ -1702,27 +1756,27 @@ const PBPace = (() => {
     if (!run) {
       return {
         mode: 'autonomous', action: 'stop', may_start_next_item: false, max_parallel_agents: 0,
-        max_heavy_runs: calc.host.max_heavy_runs, allowed_models: [], budget_for_next_item_pct: 0.0, next_item: null,
+        max_heavy_runs: calc.host.max_heavy_runs, budget_for_next_item_pct: 0.0, next_item: null,
         wait_until: null, reasons: ['no queue run: start one with auto --start-run'], run: null,
         stale: calc.data.stale, weekly_effective_pct: effective, five_hour_used_pct: calc.five_hour.used_pct,
       }
     }
     const spent = Math.max(0.0, effective - run.used_at_start)
-    const today = date_iso(date_of(local))
-    if (!(today > run.night_date || (today === run.night_date && hour_of(local) >= profile.night_hours[1]))) {
+    if (!night_over(run, now)) {
       run.last_effective = effective
       run.last_seen = iso_ms(now)
     }
-    const budget = Math.max(0.0, run.allowance_pct - spent - calc.outstanding_reservations_pct)
+    const budget = Math.max(0.0, run.allowance_pct - spent - calc.outstanding_holds_pct)
     const reasons = []
     let action = 'start'
     let wait_until = null
     const commit = calc.host.free_commit_mb
+    const floor = calc.host.min_free_commit_mb
     const five = calc.five_hour
     let stop = null
-    if (commit !== null && commit < profile.min_free_commit_mb) {
-      stop = `free commit ${py_fixed(commit / 1024, 1)} GB < ${py_fixed(profile.min_free_commit_mb / 1024, 0)} GB`
-    } else if ((today === run.night_date && hour_of(local) >= profile.night_hours[1]) || today > run.night_date) {
+    if (commit !== null && floor !== null && commit < floor) {
+      stop = `free commit ${py_fixed(commit / 1024, 1)} GB < ${floor_gb(floor)} GB`
+    } else if (night_over(run, now)) {
       stop = 'night ended'
     }
     const running_ids = new Set([...queue.items, ...pool.items].filter(i => i.status === 'running').map(i => i.id))
@@ -1730,8 +1784,7 @@ const PBPace = (() => {
     let source = 'queue'
     const pool_ok = run.last_before_reset && pool.approved_reset === calc.weekly.reset
     if (item === null && pool_ok) {
-      const pool_budget = Math.min(budget, Math.max(0.0, run.surplus_pct - (run.pool_spent_pct ?? 0.0)))
-      const [pitem, pwhy] = pick_next(pool.items, pool_budget, running_ids)
+      const [pitem, pwhy] = pick_next(pool.items, budget, running_ids)
       if (pitem !== null || why === 'empty' || why === 'blocked') {
         item = pitem
         why = pwhy
@@ -1756,7 +1809,7 @@ const PBPace = (() => {
         action = 'wait'
         reasons.push(`usage data stale (${calc.data.age_min === null ? 'None' : py_str(calc.data.age_min)} min)`)
       }
-      if (five.used_pct >= Math.min(five.threshold_pct, five.hard_stop_pct)) {
+      if (five.used_pct >= five.threshold_pct) {
         action = 'wait'
         wait_until = five.reset
         reasons.push(`5h ${py_fixed(five.used_pct, 0)}% >= ${py_fixed(five.threshold_pct, 0)}%, wait for window reset`)
@@ -1764,16 +1817,10 @@ const PBPace = (() => {
     }
     const heavy = calc.host.max_heavy_runs
     const agents = action === 'stop' ? 0 : Math.max(1, Math.min(Math.trunc(profile.max_agents), heavy !== null ? heavy : 3))
-    const throttle = effective >= profile.throttle_weekly_pct && calc.weekly.hours_to_reset > 24
-    const models = allowed_models(calc, profile, throttle, item ? item.estimate_pct : 0.0)
-    const may = action === 'start' && item !== null && models.length > 0
-    if (action === 'start' && !models.length) {
-      action = 'wait'
-      reasons.push('no model has weekly headroom')
-    }
+    const may = action === 'start' && item !== null
     return {
       mode: 'autonomous', action, may_start_next_item: may, max_parallel_agents: agents, max_heavy_runs: heavy,
-      allowed_models: models, budget_for_next_item_pct: py_round(budget, 3),
+      budget_for_next_item_pct: py_round(budget, 3),
       next_item: item ? { ...item_view(item), source } : null, wait_until, reasons,
       run: {
         night_date: run.night_date, allowance_pct: run.allowance_pct, spent_pct: py_round(spent, 3),
@@ -1788,7 +1835,6 @@ const PBPace = (() => {
   function auto_line(result) {
     let line = `auto: ${result.may_start_next_item ? 'START ' + result.next_item.id : result.action.toUpperCase()}`
       + ` | budget ${py_fixed(result.budget_for_next_item_pct, 2)}% | agents <=${result.max_parallel_agents}`
-      + ` models ${result.allowed_models.join(',') || 'none'}`
     if (result.run && result.run.reused) {
       line += ` | run of ${result.run.night_date} kept, ${py_fixed(result.run.remaining_pct, 2)}% of`
         + ` ${py_fixed(result.run.allowance_pct, 2)}% left`
@@ -1801,75 +1847,283 @@ const PBPace = (() => {
 
   // ------------------------------------------------------------ pre-agent hook
 
-  function hard_limits(status) {
-    const reasons = []
+  // The hard stops that hold, as [kind, reason] pairs; kind is memory, five_hour, weekly or weekly_scoped.
+  function hard_stops(status) {
+    const stops = []
     const host = status.host || {}
     const commit = host.free_commit_mb ?? null
     const floor = host.min_free_commit_mb ?? null
     if (commit !== null && floor !== null && commit < floor) {
-      reasons.push(`free memory ${py_fixed(commit / 1024, 1)} GB < ${py_fixed(floor / 1024, 0)} GB, a runaway process can crash the host`)
+      stops.push(['memory', `free memory ${py_fixed(commit / 1024, 1)} GB < ${floor_gb(floor)} GB, a runaway process can crash the host`])
     }
-    if ((status.data || {}).stale) return reasons
+    if ((status.data || {}).stale) return stops
     const five = status.five_hour || {}
     const used = five.used_pct ?? null
     const threshold = five.threshold_pct ?? null
     if (used !== null && threshold !== null && used >= threshold) {
-      reasons.push(`5h window ${py_fixed(used, 0)}% >= ${py_fixed(threshold, 0)}% background threshold, `
-        + `resets ${five.reset_local || 'later'}`)
+      stops.push(['five_hour', `5h window ${py_fixed(used, 0)}% >= ${py_fixed(threshold, 0)}% stop, `
+        + `resets ${five.reset_local || 'later'}`])
     }
-    if (((status.weekly || {}).effective_pct || 0) >= 100) reasons.push('weekly limit exhausted')
-    return reasons
+    const weekly = status.weekly || {}
+    if ((weekly.effective_pct || 0) >= 100) {
+      stops.push([(typeof weekly.seven_day_pct === 'number' && weekly.seven_day_pct >= 100) ? 'weekly' : 'weekly_scoped', 'weekly limit exhausted'])
+    }
+    return stops
   }
 
-  function advice(status) {
-    const rec = status.recommendation || {}
+  const hard_limits = status => hard_stops(status).map(stop => stop[1])
+
+  // The reserve reason (a list of one text, or none): the week's spend is past the reserve's stop line.
+  function reserve_limits(status) {
+    try {
+      const reserve = status.reserve
+      if (!is_object(reserve) || reserve.over !== true) return []
+      return [`weekly ${reserve.label} kept until ${reserve.release_text}: `
+        + `week used ${py_fixed(reserve.used_pct, 0)} % >= ${py_fixed(reserve.stop_at_pct, 0)} %`]
+    } catch (e) {
+      return []
+    }
+  }
+
+  // The plan reason (a list of one text, or none): the part is over its share in limit mode on fresh data.
+  function plan_limits(status) {
+    const plan = status.plan
+    if (!is_object(plan) || plan.effective_mode !== 'limit') return []
+    const part = plan.part
+    if (!is_object(part) || part.over !== true || part.unplanned !== false) return []
+    if ((status.data || {}).stale === true) return []
+    return ['plan']
+  }
+
+  const FRACTIONS = [[0.15, 'a small part of that'], [0.29, 'about a quarter of that'], [0.42, 'about a third of that'],
+    [0.58, 'about half of that'], [0.71, 'about two thirds of that'], [0.88, 'about three quarters of that'],
+    [1.15, 'about the same']]
+  const FIVE_HOUR_NEAR_POINTS = 25
+  const RESERVE_NEAR_POINTS = 10
+  const RESERVE_GOAL = "the reserve is kept for the owner's unplanned work, and work done in this session spends it too"
+
+  const part_word = part => (part.kind === 'work' ? 'working-hours' : 'off-hours')
+  const hhmm = text => text.slice(11, 16)
+
+  function kept_reserve(status) {
+    const reserve = status.reserve
+    if (!is_object(reserve) || reserve.error || reserve.released || !((reserve.pct || 0) > 0) || !reserve.release_text) return null
+    return reserve
+  }
+
+  const reserve_for = reserve => (reserve.name ? ` for "${reserve.name}"` : '')
+
+  function stops_text(status, five_hour = true) {
     const five = status.five_hour || {}
+    const burn = is_object(five.burn) ? five.burn : null
+    const week = (status.weekly || {}).seven_day_pct || 0
+    const used = five.used_pct || 0
+    const clauses = []
+    const stop = five.threshold_pct ?? null
+    const limited = burn !== null && burn.limited === true
+    if (five_hour && stop !== null && (used >= Math.max(0, stop - FIVE_HOUR_NEAR_POINTS) || limited)) {
+      let clause = `5-hour window ${py_fixed(used, 0)} %`
+      const reaches = limited ? burn.threshold_at_local || burn.threshold_at : null
+      if (reaches && five.reset_local) {
+        clause += ` and at this rate ${py_fixed(stop, 0)} % at ${hhmm(reaches)}, `
+          + `before its reset at ${hhmm(five.reset_local)}`
+      }
+      clauses.push(`${clause} (each launch asks the owner from ${py_fixed(stop, 0)} %)`)
+    }
+    const reserve = kept_reserve(status)
+    if (reserve !== null && week >= reserve.stop_at_pct - RESERVE_NEAR_POINTS) {
+      clauses.push(`${py_fixed(reserve.pct, 0)} % of the week kept in reserve${reserve_for(reserve)} until `
+        + `${reserve.release_text}, week ${py_fixed(week, 0)} % used `
+        + `(each launch asks the owner from ${py_fixed(reserve.stop_at_pct, 0)} % used)`)
+    }
+    if (!clauses.length) return `No safety stop is near: week ${py_fixed(week, 0)} % used, 5-hour window ${py_fixed(used, 0)} %.`
+    return 'Safety stops: ' + clauses.join('; ') + '.'
+  }
+
+  function share_sentence(status, part, over) {
+    const budget = status.budget_per_hour_pct || 0
+    const end = hhmm(part.end_local)
+    if (over && budget <= 0) return `The share is used up; nothing more is planned until ${end}.`
+    const burn = (status.five_hour || {}).burn
+    const scale = status.five_hour_to_week_pct
+    let lead = 'The share allows'
+    let ratio = null
+    if (is_object(burn) && scale) {
+      const rate = burn.rate_per_hour_pct * scale / 100
+      lead = `Last ${py_fixed(burn.span_min, 0)} min about ${py_fixed(rate, 1)} %/h; the share allows`
+      if (rate > 0) ratio = budget / rate
+    }
+    let fraction = ''
+    if (over && ratio !== null) {
+      const hit = FRACTIONS.find(([limit]) => ratio < limit)
+      if (hit) fraction = `, ${hit[1]}`
+    }
+    return `${lead} about ${py_fixed(budget, 1)} %/h until ${end}${fraction}.`
+  }
+
+  // The line the model reads before a launch in limit mode, or null.
+  function pace_line(status) {
+    if (status.no_usage) return null
+    const head = 'pace (limit mode): '
     const data = status.data || {}
-    const parts = [
-      `agents <=${rec.max_parallel_agents} (active reservations ${status.active_reservations ?? 0})`,
-      `model ${rec.model} of ${(rec.allowed_models || []).join('/') || 'none'}`,
-      `5h ${py_fixed(five.used_pct ?? 0, 0)}%/${py_fixed(five.threshold_pct ?? 0, 0)}`,
-      `budget ${py_fixed(status.budget_per_hour_pct ?? 0, 2)}%/h vs norm ${py_fixed(status.normal_per_hour_pct || 0, 2)}`,
-    ]
-    if (data.stale) parts.push(`STALE data ${data.age_min === null ? 'None' : py_str(data.age_min)} min old`)
-    parts.push(...(rec.reasons || []))
-    return 'pace: ' + parts.join(' | ')
+    if (data.stale === true) {
+      const age = data.age_min
+      const old = typeof age === 'number' ? `${py_fixed(age, 0)} min old` : 'old'
+      const checks = []
+      if (kept_reserve(status) !== null) checks.push('the weekly reserve')
+      if ((status.host || {}).guard === true) checks.push('the memory floor')
+      const checked = checks.length ? `are checked only against ${checks.join(' and ')}` : 'are not checked'
+      return `${head}usage figures are ${old}, so launches ${checked} until fresh figures arrive. `
+        + `${stops_text(status, false)}`
+    }
+    const part = (status.plan || {}).part
+    if (!is_object(part)) return null
+    if (part.unplanned === true) {
+      return `${head}nothing is planned for this part, so launches are not checked against the plan. ${stops_text(status)}`
+    }
+    const stops = stops_text(status)
+    if (part.over === true) {
+      const over = part.spent_pct - part.allowed_pct
+      return `${head}${py_fixed(over, 1)} % of the week over this ${part_word(part)} part's share. `
+        + `${share_sentence(status, part, true)} While over the share, each agent launch asks the owner `
+        + `first; do not retry a declined launch. ${stops}`
+    }
+    return `${head}on plan. This ${part_word(part)} part has used ${py_fixed(part.spent_pct, 1)} % of the week; its share `
+      + `is ${py_fixed(part.share_pct, 1)} % until ${hhmm(part.end_local)}, and ${py_fixed(part.allowed_pct, 1)} % by now `
+      + `would be on plan. ${share_sentence(status, part, false)} Over the share, each agent launch asks the `
+      + `owner first; do not retry a declined launch. ${stops}`
+  }
+
+  function hold_lead(verdict) {
+    if (verdict === 'deny') return 'pace: this launch was refused because the owner is away and cannot confirm it.'
+    return "pace: this launch needs the owner's confirmation."
+  }
+
+  // The text the model reads when a stop or the plan gate holds the launch.
+  function hold_text(status, verdict, reasons) {
+    const ask = verdict !== 'deny'
+    const need = ask ? 'asks the owner first' : "needs the owner's confirmation"
+    const kinds = hard_stops(status).map(stop => stop[0])
+    const reserve_holds = (reasons.reserve || []).length > 0
+    const plan_holds = (reasons.plan || []).length > 0
+    if (ask && plan_holds && !kinds.length && !reserve_holds) {
+      const text = pace_line(status)
+      if (text) return text
+    }
+    const five = status.five_hour || {}
+    const weekly = status.weekly || {}
+    const reserve = is_object(status.reserve) ? status.reserve : {}
+    const part = (status.plan || {}).part || {}
+    const sentences = []
+    if (kinds.includes('memory')) {
+      const host = status.host
+      sentences.push(`Free memory is ${py_fixed(host.free_commit_mb / 1024, 1)} GB, below the `
+        + `${floor_gb(host.min_free_commit_mb)} GB floor set for this machine; a new heavy `
+        + `process can crash it. Until memory frees up, each agent launch ${need}.`)
+    }
+    if (kinds.includes('five_hour')) {
+      const reset_at = five.reset_local ? `at ${hhmm(five.reset_local)}` : 'later'
+      sentences.push(`The 5-hour window is ${py_fixed(five.used_pct, 0)} % used and resets `
+        + `${reset_at}; until then each agent launch ${need}, and at 100 % all work, `
+        + "this session's included, stops until the reset.")
+    }
+    if (kinds.includes('weekly') || kinds.includes('weekly_scoped')) {
+      let reset = reserve.error ? null : reserve.reset_text
+      reset = reset || weekly.reset_local.slice(0, 16)
+      if (kinds.includes('weekly')) {
+        sentences.push(`The weekly limit is used up until the reset at ${reset}; all work, this session's `
+          + 'included, stops until then.')
+      } else {
+        sentences.push(`The weekly limit of this session's model is used up until the reset at ${reset}; `
+          + `work on that model stops until then, and each agent launch ${need}.`)
+      }
+    }
+    if (reserve_holds) {
+      sentences.push(`The week is ${py_fixed(reserve.used_pct, 0)} % used, and the last ${py_fixed(reserve.pct, 0)} % is `
+        + `kept in reserve${reserve_for(reserve)} until ${reserve.release_text}; until then each `
+        + `agent launch ${need}.`)
+    }
+    if (plan_holds) {
+      sentences.push(`This ${part_word(part)} part is ${py_fixed(part.spent_pct - part.allowed_pct, 1)} % of the `
+        + `week over its share until ${hhmm(part.end_local)}.`)
+    }
+    let goal = null
+    if (reserve_holds) goal = RESERVE_GOAL
+    else if (plan_holds) {
+      goal = `the share allows about ${py_fixed(status.budget_per_hour_pct || 0, 1)} %/h until ${hhmm(part.end_local)}`
+    }
+    let tail = ask ? 'If the owner declines, do not retry the launch' : 'Do not retry the launch'
+    tail += goal ? `: ${goal}.` : '.'
+    return [hold_lead(verdict), ...sentences, tail].join(' ')
   }
 
   // ------------------------------------------------------------ the simulator's entry point
 
+  // The plan file's `template` and `days` for a mark set name, relative to the UTC date on the clock.
+  // A port of `marks_of` in .ci/pace_golden.py; a new object on every call, an unknown name gives no marks.
+  function mark_set(name, clock) {
+    const today = date_of(Date.parse(PINS.anchor) + clock * HOUR)
+    const today_key = date_iso(today)
+    const tomorrow_key = date_iso(today + DAY)
+    let template = {}
+    const days = {}
+    if (name === 'away') days[tomorrow_key] = { work: 0 }
+    else if (name === 'heavy') days[tomorrow_key] = { work: 1.5 }
+    else if (name === 'night') {
+      days[today_key] = { off: 0.5 }
+      days[tomorrow_key] = { off: 0.5 }
+    } else if (name === 'dayoff') days[today_key] = { work: 0, off: 0 }
+    else if (name === 'template') template = { tue: { work: 1.5 }, fri: { work: 0.5 }, sat: { work: 0 } }
+    return { template, days }
+  }
+
   // inputs: week (weekly used %), reset (hours to the weekly reset, 1-167), five (five-hour used %),
-  // clock (UTC hour of week, 0 = Monday 00:00), plan ('none' | 'away' | 'heavy' for tomorrow).
+  // clock (UTC hour of week, 0 = Monday 00:00), marks ({template, days}: the week plan's marks),
+  // work_hours ("HH:MM-HH:MM"), reserve ({pct, name, release}: the plan file's reserve, the default
+  // without) and used_at_start (the week's usage when the current part began).
+  // Optional: memory_guard (true turns the profile's guard on) and commit_mb (the free commit, the pin without).
   function simulate(inputs, profile) {
-    profile = { ...profile, plans: [] }
+    if (inputs.memory_guard === true) profile = { ...profile, memory_guard: true }
+    const commit_mb = inputs.commit_mb ?? PINS.commit_mb
     const now = Date.parse(PINS.anchor) + inputs.clock * HOUR
     const reset = now + inputs.reset * HOUR
-    if (inputs.plan === 'away' || inputs.plan === 'heavy') {
-      const tomorrow = date_of(now) + DAY
-      profile.plans = [{
-        id: 'P1', type: inputs.plan, start: iso_seconds(local_dt(tomorrow, 0)), end: iso_seconds(local_dt(tomorrow + DAY, 0)),
-        phrase: '', declared_at: iso_ms(now), weight: inputs.plan === 'away' ? 0.0 : CONSTANTS.HEAVY_WEIGHT, confirmed_on: null,
-      }]
-    }
+    const marks = inputs.marks ?? { template: {}, days: {} }
+    const work_hours = inputs.work_hours ?? DEFAULT_WORK_HOURS
+    const used_at_start = inputs.used_at_start ?? inputs.week
+    const plan = { work_hours, template: marks.template, days: marks.days, reserve: inputs.reserve ?? RESERVE_DEFAULTS }
     const record = {
       seven_day: { used_percentage: inputs.week, resets_at: iso_ms(reset) },
       five_hour: { used_percentage: inputs.five, resets_at: iso_ms(now + PINS.five_hour_reset_hours * HOUR) },
       scoped: [],
       _at: now - PINS.data_age_min * 60 * 1000,
     }
-    const usage = { record, source: PINS.data_source, error: null, history: [] }
-    const calc = compute(now, profile, usage, null, PINS.commit_mb, 0.0, [])
-    const rec = recommend(calc, profile)
-    const extras = []
-    const tomorrow = plans_starting_tomorrow(profile, now)
-    if (tomorrow.length) extras.push(`${tomorrow.length} plan(s) start tomorrow, unconfirmed: ` + tomorrow.map(p => p.id).join(','))
-    const line = status_line(calc, rec, extras)
+    const usage = { record, source: PINS.data_source, error: null, history: [], used_at_start }
+    const calc = compute(now, profile, usage, plan, null, commit_mb, 0.0)
+    const rec = recommend(calc)
+    const line = status_line(calc, rec)
 
-    const status = { ...calc, recommendation: rec, active_reservations: 0 }
+    const entry = calc._entry
+    const spent = Math.max(0.0, inputs.week - entry.used_at_start)
+    const allowed_now = entry.share !== null ? allowed(entry.share, entry.start, entry.end, now) : null
+    const over = allowed_now !== null ? is_over(spent, allowed_now) : false
+    // The plan object the hook reads: "inform" for the gates, and a limit copy for the line and the hold text.
+    const part = {
+      kind: entry.kind, share_pct: entry.share, spent_pct: py_round(spent, 3),
+      allowed_pct: allowed_now === null ? null : py_round(allowed_now, 3), over, unplanned: entry.share === null,
+      estimated: false, end_local: fmt_local(entry.end),
+    }
+    const status = { ...calc, recommendation: rec, active_holds: 0, plan: { effective_mode: 'inform', part } }
+    const limit_status = { ...status, plan: { effective_mode: 'limit', part } }
     const limits = hard_limits(status)
+    const reserve_reasons = reserve_limits(status)
+    const limit_reasons = {
+      limits: hard_limits(limit_status), reserve: reserve_limits(limit_status), plan: plan_limits(limit_status),
+    }
+    const holds = limit_reasons.limits.length + limit_reasons.reserve.length + limit_reasons.plan.length > 0
 
+    const kind = kind_at(now, plan.work_hours)
     let queue
-    if (classify(now, profile) === 'night') {
+    if (kind === 'off') {
       const store = {
         queue: {
           run: null, next_id: 2, items: [{
@@ -1883,53 +2137,53 @@ const PBPace = (() => {
       queue = {
         action: result.action, exit_code: AUTO_EXIT[result.action], line: auto_line(result), reasons: result.reasons,
         budget_for_next_item_pct: result.budget_for_next_item_pct, max_parallel_agents: result.max_parallel_agents,
-        allowed_models: result.allowed_models, may_start_next_item: result.may_start_next_item,
+        may_start_next_item: result.may_start_next_item,
         wait_until: result.wait_until,
       }
     } else {
       queue = { action: 'day', exit_code: null, line: null, reasons: [], budget_for_next_item_pct: null,
-        max_parallel_agents: null, allowed_models: [], may_start_next_item: false, wait_until: null }
+        max_parallel_agents: null, may_start_next_item: false, wait_until: null }
     }
 
+    // What the plan view shows per date from the current part on: the current share and the later parts'.
+    const left_now = left(inputs.week, reserve_state(plan, reset).kept(now))
+    const [, later_shares] = spread(left_now, entry.share, spent, calc._later)
+    const shares = [[entry.day, entry.share || 0.0], ...calc._later.map((part, n) => [part.day, later_shares[n]])]
     const days = []
-    calc._slots.forEach((s, i) => {
-      const date = date_iso(date_of(s.local))
-      if (!days.length || days[days.length - 1].date !== date) days.push({ date, allocs: [] })
-      days[days.length - 1].allocs.push(calc._alloc[i])
-    })
+    for (const [day, value] of shares) {
+      if (!days.length || days[days.length - 1].day !== day) days.push({ day, values: [] })
+      days[days.length - 1].values.push(value)
+    }
 
     return {
       now_local: calc.now_local,
-      kind: classify(now, profile),
+      kind,
       budget_per_hour_pct: calc.budget_per_hour_pct,
-      rates: calc.rates,
       normal_per_hour_pct: calc.normal_per_hour_pct,
       normal_pct_kind: calc.normal_pct_kind,
-      reserve_pct: calc.reserve_pct,
-      reserve_release_start: calc.reserve_release_start,
-      reserve_release_start_local: calc.reserve_release_start_local,
+      budget_part: calc.budget_part,
+      reserve: calc.reserve,
       spendable_pct: calc.spendable_pct,
-      surplus_pct: calc.surplus_pct,
-      expected_day_spend_pct: calc.expected_day_spend_pct,
       day_capacity_pct: calc.day_capacity_pct,
-      unallocated_pct: calc.unallocated_pct,
       capacity_warning: calc.capacity_warning,
       in_day_hours: calc.in_day_hours,
       weekly: calc.weekly,
-      weekend: calc.weekend,
       five_hour: calc.five_hour,
       night: calc.night,
+      host: calc.host,
       forecast_unused_pct: calc.forecast_unused_pct,
       recommendation: rec,
       queue,
-      hook: { hard_limit: limits.length > 0, reasons: limits, reason: limits.length ? `pace hard limit: ${limits.join('; ')}` : null,
-        advice: advice(status) },
-      day_alloc: days.map(d => ({ date: d.date, alloc_pct: py_sum(d.allocs) })),
+      hook: { hard_limit: limits.length > 0, reasons: limits,
+        reserve_stop: reserve_reasons.length > 0, reserve_reasons, ask: limits.length + reserve_reasons.length > 0, reason: limits.length ? `pace hard limit: ${limits.join('; ')}` : null,
+        line_limit: pace_line(limit_status),
+        hold_ask: holds ? hold_text(limit_status, 'ask', limit_reasons) : null },
+      day_alloc: days.map(d => ({ date: date_iso(d.day), alloc_pct: py_sum(d.values) })),
       status_line: line,
     }
   }
 
-  return { simulate, PINS, CONSTANTS, py_sum, py_fixed, py_round }
+  return { simulate, mark_set, pace_line, hold_text, PINS, CONSTANTS, py_sum, py_fixed, py_round }
 })()
 
 // The budget simulator: pace's rules from port.js on the reader's inputs.
@@ -1939,27 +2193,29 @@ const PBPace = (() => {
   const DAYS = t('days_short').split(',')
   const pad = n => String(n).padStart(2, '0')
 
-  const inputs = { week: 42, reset: 98, five: 23, clock: 58, plan: 'none' }
+  const inputs = { week: 42, reset: 98, five: 23, clock: 58, marks: 'none', hours: '09:00-18:00' }
 
   const PROFILE = { ...P, timezone: 'UTC' }
 
   // pace's own rules, ported in port.js and pinned to pace.py by a golden test.
   function model(x) {
-    const r = PBPace.simulate(x, PROFILE)
+    const marks = PBPace.mark_set(x.marks, x.clock)
+    const r = PBPace.simulate({ week: x.week, reset: x.reset, five: x.five, clock: x.clock, marks, work_hours: x.hours }, PROFILE)
     return {
       budget: r.budget_per_hour_pct,
       threshold: r.five_hour.threshold_pct,
       night: r.night.allowance_pct,
       hard: r.hook.hard_limit,
       hardReason: r.hook.reason,
-      agents: r.recommendation.max_parallel_agents,
-      model: r.recommendation.model ?? '-',
+      reserveAsk: r.hook.ask && r.hook.reserve_stop,
+      reserveReasons: r.hook.reserve_reasons ?? [],
       decision: r.queue.action,
       reasons: r.queue.reasons,
       kind: r.kind,
-      isNight: r.kind === 'night',
+      isOff: r.kind === 'off',
+      marks,
       days: r.day_alloc,
-      launchLine: r.hook.advice,
+      launchLine: r.hook.line_limit,
     }
   }
 
@@ -1973,7 +2229,7 @@ const PBPace = (() => {
   function renderChanged(m) {
     const out = document.getElementById('out-changed')
     if (!before || !moved) { out.textContent = t('changed_none'); return }
-    out.textContent = t('changed_line', { input: t(`label_${moved}`), b0: before.budget.toFixed(2), b1: m.budget.toFixed(2), a0: before.agents, a1: m.agents, m0: before.model, m1: m.model })
+    out.textContent = t('changed_line', { input: t(`label_${moved}`), b0: before.budget.toFixed(2), b1: m.budget.toFixed(2) })
   }
 
   function render() {
@@ -1985,12 +2241,10 @@ const PBPace = (() => {
     document.getElementById('out-in-five').textContent = `${x.five}%`
     document.getElementById('out-in-clock').textContent = fmtClock(x.clock)
     document.getElementById('out-budget').textContent = m.budget.toFixed(2)
-    document.getElementById('out-budget-note').textContent = t(m.kind === 'night' ? 'out_budget_night' : m.kind === 'off' ? 'out_budget_off' : 'out_budget_day')
+    document.getElementById('out-budget-note').textContent = t(m.kind === 'off' ? 'out_budget_off' : 'out_budget_day')
     const over = x.five >= m.threshold
     document.getElementById('out-kv').replaceChildren(
       el('dt', {}, PB.term('threshold', t('out_threshold'))), el('dd', {}, el('span', { class: `pill ${over ? 'act' : ''}`, text: `${x.five}% / ${m.threshold}%` })),
-      el('dt', { text: t('out_agents') }), el('dd', { text: `≤ ${m.agents}` }),
-      el('dt', { text: t('out_model') }), el('dd', { text: m.model }),
       el('dt', {}, PB.term('night', t('out_night'))), el('dd', { text: `${m.night.toFixed(1)}%` }),
     )
     const cls = m.decision === 'start' ? 'go' : m.decision === 'wait' ? 'watch' : m.decision === 'stop' ? 'act' : 'idle'
@@ -1999,8 +2253,9 @@ const PBPace = (() => {
       el('div', { class: `decision-pill ${cls}`, text: t(`decision_${m.decision}`) }),
       why ? el('p', { class: 'muted', text: why }) : null,
       m.hard ? el('p', { class: 'hard', text: `${t('hard_limit')} (${m.hardReason})` }) : null,
+      m.reserveAsk ? el('p', { class: 'hard', text: `${t('reserve_ask')} (${m.reserveReasons.join('; ')})` }) : null,
     ].filter(Boolean))
-    document.getElementById('out-line').textContent = m.launchLine
+    document.getElementById('out-line').textContent = m.launchLine ?? ''
     drawWeek(x, m)
   }
 
@@ -2025,25 +2280,25 @@ const PBPace = (() => {
       add('line', { x1: L, x2: W - R, y1: y(v), y2: y(v), class: 'grid' })
       add('text', { x: L - 6, y: y(v) + 4, 'text-anchor': 'end', class: 'axis' }, `${v.toFixed(1)}%`)
     }
-    const tomorrow = Math.floor(x.clock / 24) + 1
+    const WEEKDAYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']
     entries.forEach((e, i) => {
       const x0 = L + i * bw + bw * 0.18
       const w = bw * 0.64
       const day = (new Date(`${e.date}T00:00:00Z`).getUTCDay() + 6) % 7
       add('rect', { x: x0, y: y(e.alloc_pct), width: w, height: y(0) - y(e.alloc_pct), class: `bar-day ${i === 0 ? 'today' : ''}` })
       add('text', { x: x0 + w / 2, y: y(e.alloc_pct) - 5, 'text-anchor': 'middle', class: 'val' }, e.alloc_pct.toFixed(1))
-      add('text', { x: x0 + w / 2, y: H - 12, 'text-anchor': 'middle', class: `axis ${i === 1 && x.plan !== 'none' && day === tomorrow % 7 ? 'planned' : ''}` }, DAYS[day])
+      add('text', { x: x0 + w / 2, y: H - 12, 'text-anchor': 'middle', class: `axis ${m.marks.days[e.date] || m.marks.template[WEEKDAYS[day]] ? 'planned' : ''}` }, DAYS[day])
     })
     document.getElementById('week-chart').replaceChildren(s, el('figcaption', { class: 'legend' },
       el('span', { class: 'key day', text: t('legend_day') }), el('span', { class: 'muted', text: t('legend_night_note', { night: m.night.toFixed(1) }) })))
   }
 
   const SITUATIONS = [
-    ['fresh', { week: 6, reset: 160, five: 4, clock: 9, plan: 'none' }],
-    ['morning', { week: 38, reset: 100, five: 86, clock: 59, plan: 'none' }],
-    ['ahead', { week: 81, reset: 90, five: 30, clock: 82, plan: 'none' }],
-    ['away', { week: 44, reset: 98, five: 12, clock: 58, plan: 'away' }],
-    ['night', { week: 51, reset: 70, five: 20, clock: 98, plan: 'none' }],
+    ['fresh', { week: 6, reset: 160, five: 4, clock: 9, marks: 'none', hours: '09:00-18:00' }],
+    ['morning', { week: 38, reset: 100, five: 86, clock: 59, marks: 'none', hours: '09:00-18:00' }],
+    ['ahead', { week: 86, reset: 90, five: 30, clock: 82, marks: 'none', hours: '09:00-18:00' }],
+    ['away', { week: 44, reset: 98, five: 12, clock: 58, marks: 'away', hours: '09:00-18:00' }],
+    ['night', { week: 51, reset: 76, five: 20, clock: 92, marks: 'night', hours: '09:00-18:00' }],
   ]
 
   function load(values) {
@@ -2051,7 +2306,7 @@ const PBPace = (() => {
     moved = null
     Object.assign(inputs, values)
     for (const k of ['week', 'reset', 'five', 'clock']) document.getElementById(`in-${k}`).value = inputs[k]
-    setSeg(document.getElementById('in-plan'), inputs.plan, false)
+    for (const k of ['marks', 'hours']) setSeg(document.getElementById(`in-${k}`), inputs[k], false)
     render()
   }
 
@@ -2059,14 +2314,16 @@ const PBPace = (() => {
     for (const k of ['week', 'reset', 'five', 'clock']) {
       document.getElementById(`in-${k}`).addEventListener('input', e => { if (moved !== k) before = model(inputs); moved = k; inputs[k] = Number(e.target.value); render() })
     }
-    document.getElementById('in-plan').addEventListener('pb:change', e => { before = model(inputs); moved = 'plan'; inputs.plan = e.detail; render() })
+    for (const k of ['marks', 'hours']) {
+      document.getElementById(`in-${k}`).addEventListener('pb:change', e => { before = model(inputs); moved = k; inputs[k] = e.detail; render() })
+    }
     document.getElementById('inputs').addEventListener('submit', e => e.preventDefault())
     const cards = document.getElementById('situation-cards')
     for (const [key, values] of SITUATIONS) {
       const m = model(values)
       cards.append(el('article', { class: 'panel sit-card' },
         el('h3', { text: t(`sit_${key}`) }),
-        el('div', { class: 'sit-figure' }, el('span', { class: 'sit-budget', text: m.isNight ? t(`decision_${m.decision}`) : `${m.budget.toFixed(2)}%/h` }), el('span', { class: 'muted', text: `5h ${values.five}% · 7d ${values.week}%` })),
+        el('div', { class: 'sit-figure' }, el('span', { class: 'sit-budget', text: m.isOff ? t(`decision_${m.decision}`) : `${m.budget.toFixed(2)}%/h` }), el('span', { class: 'muted', text: `5h ${values.five}% · 7d ${values.week}%` })),
         el('p', { text: t(`sit_${key}_story`) }),
         el('button', { type: 'button', class: 'chip', text: t('sit_apply'), onclick: () => { load(values); document.getElementById('simulator').scrollIntoView({ behavior: 'smooth' }) } }),
       ))

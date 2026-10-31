@@ -1,6 +1,7 @@
 import { advisorView, alerts, BAR, CALM_FILL, cardFor, COLD, desktopModelColor, DIM, dim, displayModel, EFFORT_COLORS, type Gauge, GROUPS, IDLE_MARK, isKnownFamily, LABEL, label, LEVEL, limitStyle, listOrder, modelColor, ON, type Part, readings, type Row, RULE, t, TRACK, VALUE } from './cards'
 import { barSvg, cacheIconSvg, type Card, type CardBar, DESKTOP_COLD, DESKTOP_LEVEL, DESKTOP_ON, pieSvg, ringMarksSvg, ruleSvg, type Tone, wideBarSvg } from './desktop'
 import type { View } from './view'
+import type { PitboardButton } from '../types'
 
 // The element tables differ per surface; these trees use only what all of them share,
 // plus Svg where `isRemote` says the surface has it.
@@ -220,7 +221,7 @@ export function drawDesktop(els: Els, v: View, open: string | null, toggle: (key
   const glyphMarks = (g: Gauge) => (g.mark && !Svg ? [<Text key={`m-${g.key}`} color={DESKTOP_ON}>{markText(g)}</Text>] : [])
   const content = (g: Gauge) => {
     if (bars && g.pace !== undefined) {
-      const bar = barSvg(g.pct ?? 0, g.level, g.pace)
+      const bar = barSvg(g.pct ?? 0, g.level, g.pace, undefined, g.paceName)
       return [
         name(g.key, g.label),
         Svg ? <Svg key={`bar-${g.key}`} source={bar.source} alt={`${g.label} ${bar.alt}`} width={bar.width} height={bar.height} /> : null,
@@ -382,16 +383,17 @@ const shownValue = (g: Gauge) => g.level !== 'calm' && g.value !== null && !g.ic
 
 // The pane button beside ⓘ, drawn bracketed as the row's one action, apart from the plain names that
 // open a card's line.
-const PANE_BUTTON = 'pitboard'
+const PANE_BUTTON = 'PitBoard'
 
 // The state glyphs drawn between a reading's gauge and its value: ↻, and ᶻ (one cell) while idle compaction is expected.
 const markText = (g: Gauge) => `${g.mark ?? ''}${g.idle ? IDLE_MARK : ''}`
 
 // The terminal row's width in cells, from the same pieces drawTerminal draws, so the rule above spans
 // the row alone. Gaps: 1 inside a reading, 1 + · + 1 between readings, 1 + │ + 1 between groups; the
-// last part is ⓘ (2), 1 + · + 1 and the pane button `[ pitboard ]`, and the rule runs 1 past it so the
-// button sits as far from its end as ⓘ from the │ before it.
-export function terminalCells(v: View): number {
+// last part is ⓘ (2), 1 + · + 1 and the pane button `[ PitBoard ]`, then for each button another plugin
+// added a gap, `|`, a gap and its `[ label ]`; the rule runs 1 past it so the last button sits as far
+// from its end as ⓘ from the │ before it.
+export function terminalCells(v: View, buttons: PitboardButton[] = []): number {
   const { gauges, advisorOn } = readings(v)
   const readingWidth = (g: Gauge) =>
     [g.label.length, g.pct !== null || g.icon ? 2 : null, g.mark ? markText(g).length : null, shownValue(g) && g.value ? g.value.length : null, g.extra?.length ?? null]
@@ -404,10 +406,10 @@ export function terminalCells(v: View): number {
     const adv = advisorView(advisorOn)
     groupWidths.push(['Advisor', adv.name ?? 'off', ...(adv.isInactive ? ['(inactive)'] : [])].reduce((sum, w, i) => sum + w.length + (i > 0 ? 1 : 0), 0))
   }
-  return [...groupWidths, 2 + 3 + PANE_BUTTON.length + 4].reduce((sum, w, i) => sum + w + (i > 0 ? 3 : 0), 0) + 1
+  return [...groupWidths, 2 + 3 + PANE_BUTTON.length + 4 + buttons.reduce((sum, b) => sum + 3 + b.label.length + 4, 0)].reduce((sum, w, i) => sum + w + (i > 0 ? 3 : 0), 0) + 1
 }
 
-export function drawTerminal(els: Els, v: View, open: string | null, toggle: (key: string) => void, togglePane: () => void = () => {}) {
+export function drawTerminal(els: Els, v: View, open: string | null, toggle: (key: string) => void, togglePane: () => void = () => {}, buttons: PitboardButton[] = []) {
   const { Box, Button, Text } = els
   const { gauges, info, advisor, advisorOn } = readings(v)
   const m = v.meta
@@ -537,7 +539,7 @@ export function drawTerminal(els: Els, v: View, open: string | null, toggle: (ke
     <Box flexDirection="column" paddingLeft={1}>
       {/* A rule parts the row from the engine's mode line above; a Box has no top-only border. */}
       <Box key="rule" height={1} marginTop={1} overflow="hidden">
-        <Text color={RULE}>{'─'.repeat(terminalCells(v))}</Text>
+        <Text color={RULE}>{'─'.repeat(terminalCells(v, buttons))}</Text>
       </Box>
       <Box flexDirection="row" flexWrap="wrap" columnGap={1}>
         {[
@@ -549,6 +551,10 @@ export function drawTerminal(els: Els, v: View, open: string | null, toggle: (ke
               {name('info', 'ⓘ ')}
               <Text key="pane-sep" color={RULE}>·</Text>
               {Button ? <Button key="pane" label={PANE_BUTTON} dimColor onPress={() => togglePane()} /> : <Text dimColor>{PANE_BUTTON}</Text>}
+              {buttons.flatMap(b => [
+                <Text key={`sep-${b.key}`} color={RULE}>|</Text>,
+                Button ? <Button key={`button-${b.key}`} label={b.label} dimColor onPress={() => {}} /> : <Text key={`button-${b.key}`} dimColor>{b.label}</Text>,
+              ])}
             </Box>
             {pointer('info', 0)}
           </Box>,

@@ -45,15 +45,20 @@ SKIP_LOCK = f"skipped: another writer holds {LOCK_FILE}"
 
 # A fraction of a second, before an offset or the end of the text.
 _FRACTION = re.compile(r"\.(\d+)(?=[+-]\d{2}:\d{2}$|$)")
+# Hour 24 after the date ("T24:00").
+_HOUR_24 = re.compile(r"[T ]24(?::|$)")
 
 
 def fromisoformat(value):
     """datetime.fromisoformat for the forms the readings and the files hold, on Python 3.9 too.
 
     Before 3.11 it takes neither "Z" nor a fraction of other than 3 or 6 digits, and reset times can
-    carry other counts ("02:59:59.7+00:00"), which 3.9 would refuse.
+    carry other counts ("02:59:59.7+00:00"), which 3.9 would refuse. Newer versions take hour 24 as the
+    next midnight; it is refused on every version, as PitBoard's reader refuses it.
     """
     text = str(value).strip().replace("Z", "+00:00")
+    if _HOUR_24.search(text):
+        raise ValueError(f"hour 24 in {text!r}")
     return dt.datetime.fromisoformat(_FRACTION.sub(lambda m: "." + (m.group(1) + "000000")[:6], text))
 
 
@@ -102,8 +107,19 @@ ACCOUNT_PREFIX = "paceline-account-v1"
 # The partition of readings whose account is not known.
 UNKNOWN_ACCOUNT = "unknown"
 ACCOUNT_KEY = re.compile(r"[0-9a-f]{16}")
+# The version of <state>/week-plan-<key>.json, the file PaceLine publishes for readers; the publisher writes it and
+# the merge's plan step tells a file it can keep by it.
+WEEK_PLAN_VERSION = 1
 _UUID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
 ACCOUNT_RETRY_SEC = 0.05
+
+
+def week_plan_path(sd, key):
+    """<state>/week-plan-<key>.json, the readers' file. A key that is not 16 lower-case hex digits is a ValueError:
+    every caller checks the key first, and a path built from another one would be a file nobody reads."""
+    if not (isinstance(key, str) and ACCOUNT_KEY.fullmatch(key)):
+        raise ValueError(f"not an account key: {key!r}")
+    return sd / f"week-plan-{key}.json"
 
 
 def account_file():
@@ -156,10 +172,11 @@ def account_key_of_ids(account_uuid, organization_uuid):
 
 
 def environment_account():
-    """The key of the account a Desktop host started this process with, else None.
+    """The key the process's account variables would give, else None. Only the doctor reports it.
 
-    The host passes the two identifier variables; they belong to the process, while the state file
-    names the account of the last terminal login. Both must be set.
+    A Desktop host passes the two identifier variables to every process it starts, a terminal opened
+    from a Desktop session inherits them, and they do not follow the credential: never a tag for a reading.
+    Both must be set.
     """
     account = os.environ.get("CLAUDE_CODE_ACCOUNT_UUID")
     organization = os.environ.get("CLAUDE_CODE_ORGANIZATION_UUID")
@@ -172,19 +189,94 @@ def read_account_text(path):
     return path.read_text(encoding="utf-8")
 
 
-def resolve_account(path=None):
-    """(key, None) for the account signed in now, else (None, reason): "no-file", "unreadable" or "no-account".
+def session_accounts_dir(sd):
+    """<state>/session-accounts: one file per session, the account its credential belongs to."""
+    return sd / "session-accounts"
 
-    Without a path the process's own account variables come first, then the state file.
-    Claude Code rewrites the file often, so a read or parse failure is tried once more after
-    ACCOUNT_RETRY_SEC. Never raises, and passes nothing from the file or an error on: an error message
-    may quote the file.
+
+SESSION_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}")
+
+
+def own_session():
+    """The session id of this process from the environment, else None."""
+    return os.environ.get("CLAUDE_SESSION_ID") or os.environ.get("CLAUDE_CODE_SESSION_ID") or None
+
+
+SESSION_REASONS = ("desktop", "refused", "no-credential", "logged-out", "no-state-key")
+SESSION_SOURCES = ("profile", "state-file")
+# Reasons whose account the session cannot name yet or any more: a reader gets no record, never the
+# newest partition of some other account.
+NO_RECORD_REASONS = ("pending", "desktop", "refused", "logged-out")
+
+
+def session_entry(session, sd=None):
+    """(key, reason, source) of the session's entry in session-accounts, else None for no readable entry.
+
+    An entry names a key, or no key with the reason the module gave (an unknown reason reads as
+    "pending"). source is the entry's own ("profile" or "state-file"), else None. Never raises. A
+    session id that is not a plain file name has no entry.
     """
-    if path is None:
-        own = environment_account()
-        if own is not None:
-            return own, None
-        path = account_file()
+    if not isinstance(session, str) or not SESSION_ID.fullmatch(session):
+        return None
+    try:
+        entry = json.loads((session_accounts_dir(sd or paceline_dir()) / f"{session}.json").read_text(encoding="utf-8"))
+    except Exception:
+        return None
+    if not isinstance(entry, dict):
+        return None
+    source = entry.get("source") if entry.get("source") in SESSION_SOURCES else None
+    key = entry.get("account")
+    if isinstance(key, str) and ACCOUNT_KEY.fullmatch(key):
+        return key, None, source
+    if key is not None:
+        return None
+    reason = entry.get("reason")
+    return None, reason if reason in SESSION_REASONS else "pending", source
+
+
+def session_account(session, sd=None):
+    """The key the session's entry names, else None (no entry, unreadable, or an entry with no key)."""
+    entry = session_entry(session, sd)
+    return entry[0] if entry else None
+
+
+SESSION_ACCOUNT_MAX_AGE = dt.timedelta(days=7)
+# Two weekly resets this close (seconds) are the same week: the rule used_at, the plan file's entries and
+# the other readings of a window all share. The pane's TypeScript has no copy of it.
+SAME_WEEK_TOLERANCE_SEC = 600
+
+
+def same_week(resets_at, reset):
+    """True when the weekly reset instant `resets_at` is within SAME_WEEK_TOLERANCE_SEC of `reset`."""
+    return resets_at is not None and reset is not None and abs((resets_at - reset).total_seconds()) < SAME_WEEK_TOLERANCE_SEC
+
+
+def prune_session_accounts(sd, ended=(), max_age=SESSION_ACCOUNT_MAX_AGE):
+    """Delete the session-accounts entries of ended sessions and every entry older than max_age.
+
+    ended holds (session id, ended_at) pairs; a session's entry goes only when it was last written at
+    or before ended_at, since a later write is the same session resumed under its id. Never raises.
+    """
+    folder = session_accounts_dir(sd)
+    for session, ended_at in ended:
+        if isinstance(session, str) and SESSION_ID.fullmatch(session):
+            path = folder / f"{session}.json"
+            with contextlib.suppress(OSError):
+                if path.stat().st_mtime <= ended_at.timestamp():
+                    path.unlink()
+    cutoff = wall_clock().timestamp() - max_age.total_seconds()
+    try:
+        entries = list(folder.glob("*.json"))
+    except OSError:
+        return
+    for path in entries:
+        with contextlib.suppress(OSError):
+            if path.stat().st_mtime < cutoff:
+                path.unlink()
+
+
+def _state_file_account(path):
+    """(key, reason) of the state file at path; a read or parse failure is tried once more after ACCOUNT_RETRY_SEC."""
     result = (None, "unreadable")
     for attempt in range(2):
         try:
@@ -198,6 +290,64 @@ def resolve_account(path=None):
         if attempt == 0:
             time.sleep(ACCOUNT_RETRY_SEC)
     return result
+
+
+def account_source(path=None, session=None, sd=None):
+    """(key, reason, source): the account in use and where it came from, in the one order that decides it.
+
+    1. PACELINE_ACCOUNT_KEY, when it is 16 lower-case hex digits: the module that started this process
+       knows the credential's account (source "env-key").
+    2. The session's entry in session-accounts, for the session given or else the environment's; a
+       session whose entry is missing or unreadable is "pending", one whose entry names no account
+       has the entry's reason (source "session").
+    3. Without a session, the state file at path, else account_file(), except under the Desktop
+       entrypoint, whose state file names the last terminal login, not the session's account
+       (reason "desktop"; source "state-file").
+    An explicit path reads that file only. The account variables are never read. Never raises, and
+    passes nothing from the file or an error on: an error message may quote the file.
+    """
+    if path is not None:
+        key, reason = _state_file_account(path)
+        return key, reason, "state-file"
+    forced = os.environ.get("PACELINE_ACCOUNT_KEY")
+    if isinstance(forced, str) and ACCOUNT_KEY.fullmatch(forced):
+        return forced, None, "env-key"
+    session = session or own_session()
+    if session:
+        entry = session_entry(session, sd)
+        return (entry[0], entry[1], "session") if entry else (None, "pending", "session")
+    if os.environ.get("CLAUDE_CODE_ENTRYPOINT") == "claude-desktop":
+        return None, "desktop", None
+    key, reason = _state_file_account(account_file())
+    return key, reason, "state-file"
+
+
+def resolve_account(path=None, session=None, sd=None):
+    """(key, None) for the account in use now, else (None, reason): "pending", "desktop", "no-file", "unreadable" or "no-account".
+
+    The order is in account_source. Claude Code rewrites the state file often, so a read or parse
+    failure is tried once more after ACCOUNT_RETRY_SEC. Never raises. sd names another state directory
+    for the session's entry (pace's --state-dir).
+    """
+    key, reason, _ = account_source(path, session, sd)
+    return key, reason
+
+
+def account_report(session=None, sd=None):
+    """What the doctor shows of the account: the key in use and, side by side, each source's own key.
+
+    source is "env-key", "session", "state-file" or None, and for a session's entry the source the entry
+    carries ("profile" or "state-file"); session_key, variables_key and state_file_key
+    are 16 hex digits or None. Never a token or an identifier.
+    """
+    key, reason, source = account_source(None, session, sd)
+    found = session or own_session()
+    entry = session_entry(found, sd) if found else None
+    if source == "session" and entry and entry[2]:
+        source = entry[2]
+    return {"state": "known" if key else "unknown", "reason": reason, "source": source,
+            "session_key": session_account(found, sd) if found else None,
+            "variables_key": environment_account(), "state_file_key": _state_file_account(account_file())[0]}
 
 
 def reading_account(reading):
@@ -729,7 +879,7 @@ def pick_partition(limits, key, reason):
     if not limits:
         return None, account("known" if key else "unknown", None if key else reason)
     if key is None:
-        return limits, account("unknown", reason)
+        return (None if reason in NO_RECORD_REASONS else limits), account("unknown", reason)
     held = held_partitions(limits)
     if key in held:
         return held[key], account("known", None)
