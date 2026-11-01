@@ -1,5 +1,5 @@
 #!/bin/sh
-# Installs or updates PaceLine and PitBoard as organization (managed) plugins on macOS and Linux.
+# Installs or updates PaceLine, PitBoard and PitCrew as organization (managed) plugins on macOS and Linux.
 #
 # On a Team or Enterprise login, and on any machine with managed settings, the built-in
 # sec-default guard skips the hooks of plugins a person installs. A plugin counts as the
@@ -15,8 +15,11 @@
 # settings, the admin console must carry "managedSourcesBehavior": "merge".
 # Needs git unless --source is given.
 #
-# Usage: install-agentpit-org.sh [--version <plugin>=<version>]... [--latest] [--source <marketplace dir>]
-#                                [--skip-user-plugins] [--uninstall]
+# Usage: install-agentpit-org.sh [--plugins <name>,<name>...] [--version <plugin>=<version>]... [--latest]
+#                                [--source <marketplace dir>] [--skip-user-plugins] [--uninstall]
+#   --plugins  the plugins to seat, from paceline, pitboard, pitcrew and stint, comma-separated:
+#              --plugins paceline,pitboard; the default is paceline,pitboard,pitcrew (Stint's
+#              module needs no seating)
 #   --version  pins a plugin to a release: --version pitboard=0.1.14
 #   --latest   takes the latest release of every plugin not pinned, without asking
 #   --source   a local marketplace folder with plugins/<name>, used instead of GitHub
@@ -28,7 +31,8 @@ set -eu
 marketplace=agentpit-org
 user_marketplace=agentpit
 repository=https://github.com/agentpit-lab/agentpit
-plugins="paceline pitboard"
+known="paceline pitboard pitcrew stint"
+plugins="paceline pitboard pitcrew"
 pins=
 latest=0
 source_dir=
@@ -37,17 +41,30 @@ uninstall=0
 
 while [ $# -gt 0 ]; do
     case $1 in
+        --plugins|--version|--source) [ $# -ge 2 ] || { echo "$1 needs a value" >&2; exit 2; } ;;
+    esac
+    case $1 in
+        --plugins)
+            plugins=
+            for name in $(printf '%s' "$2" | tr ',' ' '); do
+                case " $known " in *" $name "*) ;; *) echo "--plugins takes one or more of: $known" >&2; exit 2 ;; esac
+                case " $plugins " in *" $name "*) ;; *) plugins="$plugins${plugins:+ }$name" ;; esac
+            done
+            [ -n "$plugins" ] || { echo "--plugins takes one or more of: $known" >&2; exit 2; }
+            shift 2 ;;
         --version)
-            name=${2%%=*}
-            case " $plugins " in *" $name "*) ;; *) echo "--version takes <plugin>=<version> for one of: $plugins" >&2; exit 2 ;; esac
-            [ "$name" != "$2" ] || { echo "--version takes <plugin>=<version>" >&2; exit 2; }
-            pins="$pins $name=${2#*=}"; shift 2 ;;
+            [ "${2%%=*}" != "$2" ] || { echo "--version takes <plugin>=<version>" >&2; exit 2; }
+            pins="$pins $2"; shift 2 ;;
         --latest) latest=1; shift ;;
         --source) source_dir=$2; shift 2 ;;
         --skip-user-plugins) skip_user=1; shift ;;
         --uninstall) uninstall=1; shift ;;
         *) echo "unknown argument: $1" >&2; exit 2 ;;
     esac
+done
+
+for pin in $pins; do
+    case " $plugins " in *" ${pin%%=*} "*) ;; *) echo "--version takes <plugin>=<version> for one of: $plugins" >&2; exit 2 ;; esac
 done
 
 if [ "$(id -u)" -eq 0 ]; then
@@ -69,13 +86,13 @@ esac
 drop_in="$root/managed-settings.d/50-$marketplace.json"
 data_root="$HOME/.claude/plugins/data"
 
-set_user_plugins() {  # $1: enable | disable
+set_user_plugins() {  # $1: enable | disable, $2: the plugins, $plugins by default
     [ "$skip_user" -eq 1 ] && return 0
     if ! command -v claude >/dev/null 2>&1; then
         echo "warning: claude is not on PATH; $1 the @$user_marketplace copies by hand." >&2
         return 0
     fi
-    for p in $plugins; do
+    for p in ${2-$plugins}; do
         claude plugin "$1" "$p@$user_marketplace" --scope user >/dev/null 2>&1 \
             && echo "User-scope $p@$user_marketplace: $1d." || true
     done
@@ -162,16 +179,18 @@ sudo mkdir -p "$target/plugins" "$target/.claude-plugin" "$(dirname "$drop_in")"
 for p in $plugins; do
     sudo rsync -a --delete --exclude .git "$(src_for "$p")/plugins/$p/" "$target/plugins/$p/"
 done
+removed=
 for d in "$target"/plugins/*/; do
+    [ -d "$d" ] || continue
     name=$(basename "$d")
-    case " $plugins " in *" $name "*) ;; *) sudo rm -rf "$d" ;; esac
+    case " $plugins " in *" $name "*) ;; *) sudo rm -rf "$d"; removed="$removed $name" ;; esac
 done
 
 sudo tee "$target/.claude-plugin/marketplace.json" >/dev/null <<EOF
 {
   "name": "$marketplace",
   "owner": { "name": "agentpit-lab", "url": "https://github.com/agentpit-lab" },
-  "description": "PaceLine and PitBoard seated as organization plugins from a local copy of the agentpit marketplace.",
+  "description": "AgentPit plugins seated as organization plugins from a local copy of the agentpit marketplace.",
   "plugins": [
     $entries
   ]
@@ -211,6 +230,8 @@ for p in $plugins; do
 done
 
 set_user_plugins disable
+# A plugin dropped from the set gets its user-scope copy back, which an earlier run disabled.
+[ -z "$removed" ] || set_user_plugins enable "$removed"
 
 cat <<EOF
 

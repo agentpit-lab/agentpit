@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.20 - 2026-11-01
+
+### Fixed
+
+- On a narrow Desktop row the `ⓘ` mark goes first, then the times to the reset, before the bars give way to
+  bare figures; before, the reset times were dropped while `ⓘ` stayed.
+
 ## 0.1.19 - 2026-11-01
 
 ### Changed

@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.1.7 - 2026-11-01
+
+### Changed
+
+- The lock moves sse-starlette to 3.6.0 and anyio, pydantic, pydantic-core, pydantic-settings,
+  python-multipart and tzdata to their newer patch or minor releases. The cryptography pins are
+  unchanged: 50.0.2 everywhere except Intel macOS, which keeps 48.0.1.
+
+## 0.1.6 - 2026-11-01
+
+### Fixed
+
+- `explain_query` replaces only the exact parameters of a `BETWEEN $n AND $m`. The replacement also
+  matched the start of a longer number, so `b = $10` next to a `BETWEEN $1` became the lower bound
+  followed by `0`.
+
 ## 0.1.5 - 2026-10-26
 
 ### Fixed

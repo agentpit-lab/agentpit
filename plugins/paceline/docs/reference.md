@@ -217,14 +217,18 @@ answer the format of [The advice format](#the-advice-format-for-readers) describ
   `estimated`), and `first_prompt`. Only `status --launch-key` can return `first_prompt` true, once
   for each part in `limit` mode. When the plan file cannot be read, `plan` is `null` and
   `plan_error` says why.
-- `paceline plan offer [--refuse]` is the command behind the off-hours offer. On the operator's own
-  prompt in an off-hours part that is unplanned (its mark is the default and it has no share), with
-  pace on, PaceLine adds one line for the model, once for each part across sessions: it asks whether
-  to plan the part (`light`, `normal`, or `heavy`) and names `paceline plan set DAY --off-hours V`.
-  A part whose mark the operator set, by a dated mark or by the weekday template, is not offered.
-  `--refuse` records a no for the part, and no offer follows until the part ends. The record is
-  `<state>/plan-offer-<account>.json`, and `paceline off` removes it. The command prints nothing
-  when no offer is due, skips the inbox merge, and waits at most half a second for the lock.
+- `paceline plan offer [--refuse] [--hold | --confirm]` is the command behind the off-hours offer.
+  On the operator's own prompt in an off-hours part that is unplanned (its mark is the default and
+  it has no share), with pace on, PaceLine adds one line for the model, once for each part across
+  sessions: it asks whether to plan the part (`light`, `normal`, or `heavy`) and names `paceline
+  plan set DAY --off-hours V`. A part whose mark the operator set, by a dated mark or by the weekday
+  template, is not offered. `--refuse` records a no for the part, and no offer follows until the
+  part ends. The record is `<state>/plan-offer-<account>.json`, and `paceline off` removes it. The
+  command prints nothing when no offer is due, skips the inbox merge, and waits at most half a
+  second for the lock. The prompt hook runs it with `--hold`, which records the offer as `pending`,
+  and then with `--confirm`, which records it as `offered` once the hook has the line; a pending
+  record ends the offers of its part for 30 seconds, so a run that was cut off before the line was
+  shown is offered again.
 
 Every command above that reads or changes the plan first fixes the current part's share, once, at
 the part's start, from the usage at that start; a later command in the same part writes nothing.
@@ -396,9 +400,10 @@ none), and the key each source would give (`session_key`, `variables_key`, `stat
 an identifier or a token; see [Status says account
 unknown](troubleshooting.md#status-says-account-unknown). `--json` shows the evidence of each probe.
 Without `--live` it changes nothing; `--live` also runs one merge. `--bundle` writes a zip with the
-report, the debug log, the profile, the pace switch, the limits file, the last 50 history lines, and
-the last 20 holds. The report and the bundle write your home directory as `~`. The bundle holds hold
-labels and session IDs.
+report, the debug log, the profile, the pace switch, the limits file, the last 50 history lines, the
+last 20 holds, and the week plan file of the account in use. The report and the bundle write your
+home directory as `~`. The bundle holds hold labels and session IDs, and the plan file holds the
+free-text name of the reserve.
 
 ### Simulate a week
 
@@ -537,7 +542,9 @@ What each key does:
   `memory_guard` is on.
 - `commit_reserve_mb`, `heavy_job_mb`, `max_heavy_runs`: the heavy runs allowed are
   `min(max_heavy_runs, (free memory - commit_reserve_mb) // heavy_job_mb)`, and never fewer than 0.
-  Used only while `memory_guard` is on; with it off, the figure is not computed.
+  `heavy_job_mb` is a whole number of 1 or more: `paceline profile set` refuses 0 and negative
+  values, and a profile file that holds one leaves the figure out. Used only while `memory_guard` is
+  on; with it off, the figure is not computed.
 - `max_agents`: the most parallel agents `paceline advice` gives, and so Stint's run.
 
 ## Environment variables
@@ -609,7 +616,7 @@ such as `CET-1CEST` is ignored.
 | `<state>/session-accounts/<session id>.json` | The account of one session's credential, written by the hooks module: `account` (the 16-hex-digit key, or `null`), `source` (`profile` or `state-file`), `reason` when there is no key (`desktop`, `no-credential`, `logged-out`, or `no-state-key`), and `checked_at`. A command run in the session reads it. It is removed with the session's end marker, and after 7 days. |
 | `<state>/five-hour-burn-<key>.json` | The five-hour burn snapshot of an account, for other readers: the file with the account's key holds that account's. PaceLine writes it and never reads it back. See [The five-hour burn file (for readers)](#the-five-hour-burn-file-for-readers). |
 | `<state>/week-plan-<key>.json` | The week plan of an account, for other readers: the current part with its fixed share, the reserve and the later parts. The file with the account's key holds that account's. PaceLine writes it while pace is on and never reads a figure back from it; the limits merge reads it only to decide whether to run its plan step: when the part or week has ended, or the weekly reset of the reading differs from `week_resets_at` by 10 minutes or more. See [The week plan file (for readers)](#the-week-plan-file-for-readers). |
-| `<state>/plan-offer-<key>.json` | The off-hours offer of an account: `day`, `kind`, `week_reset`, `state` (`offered` or `refused`) and `at` of the part last offered. `paceline plan offer` writes it, and `paceline off` removes it. |
+| `<state>/plan-offer-<key>.json` | The off-hours offer of an account: `day`, `kind`, `week_reset`, `state` (`pending`, `offered`, or `refused`) and `at` of the part last offered. `paceline plan offer` writes it, and `paceline off` removes it. |
 | `<state>/last-request-<key>.json` | The time of the account's newest request, for other readers: the file with the account's key holds that account's. The module writes it after every step that returned usage; nothing in PaceLine reads it back. See [The last-request file (for readers)](#the-last-request-file-for-readers). |
 | `<state>/away.json` | The away marker: `on`, `set_at`, and the `session` that set it. Missing, or `on` not true, means off. |
 | `<state>/pace.lock` | The lock of the pace files. |

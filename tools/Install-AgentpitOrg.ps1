@@ -2,7 +2,7 @@
 #Requires -RunAsAdministrator
 <#
 .SYNOPSIS
-Installs or updates PaceLine and PitBoard as organization (managed) plugins on Windows.
+Installs or updates PaceLine, PitBoard and PitCrew as organization (managed) plugins on Windows.
 
 .DESCRIPTION
 On a Team or Enterprise login, and on any machine with managed settings, the built-in
@@ -31,6 +31,13 @@ Pins plugins to a release, as <plugin>=<version>: -Version pitboard=0.1.14.
 For a plugin not named here, an interactive run offers its last ten releases with the
 latest selected; a run without a console (scheduled, redirected) takes the latest.
 
+.PARAMETER Plugins
+The plugins to seat, from paceline, pitboard, pitcrew and stint; the default is
+paceline, pitboard and pitcrew. Stint's module needs no seating, so it is left out by
+default. pwsh -File passes -Plugins paceline,pitboard as one string, which fails the name
+check: run the script from a PowerShell 7 prompt, or through pwsh -Command, to name more
+than one.
+
 .PARAMETER Latest
 Takes the latest release of every plugin not pinned by -Version, without asking.
 
@@ -46,18 +53,24 @@ pwsh -NoProfile -File .\Install-AgentpitOrg.ps1
 
 .EXAMPLE
 pwsh -NoProfile -File .\Install-AgentpitOrg.ps1 -Version pitboard=0.1.14
+
+.EXAMPLE
+pwsh -NoProfile -Command "& .\Install-AgentpitOrg.ps1 -Plugins paceline,pitboard"
 #>
 [CmdletBinding()]
 param(
     [string[]]$Version = @(),
     [switch]$Latest,
     [string]$Source,
-    [string[]]$Plugins = @('paceline', 'pitboard'),
+    [ValidateSet('paceline', 'pitboard', 'pitcrew', 'stint')]
+    [string[]]$Plugins = @('paceline', 'pitboard', 'pitcrew'),
     [switch]$SkipUserPlugins,
     [switch]$Uninstall
 )
 
 $ErrorActionPreference = 'Stop'
+# ValidateSet ignores case; tags, paths and ids do not.
+$Plugins = @($Plugins | ForEach-Object ToLowerInvariant | Select-Object -Unique)
 
 $marketplace = 'agentpit-org'
 $userMarketplace = 'agentpit'
@@ -72,14 +85,14 @@ function Invoke-Claude([string[]]$Arguments) {
     [pscustomobject]@{ ExitCode = $LASTEXITCODE; Output = ($output -join "`n") }
 }
 
-function Set-UserPlugins([string]$Verb) {
+function Set-UserPlugins([string]$Verb, [string[]]$Names = $Plugins) {
     if ($SkipUserPlugins) { return }
     if (-not (Get-Command claude -ErrorAction SilentlyContinue)) {
-        Write-Warning "claude is not on PATH; $Verb $($Plugins -join ', ') @$userMarketplace by hand."
+        Write-Warning "claude is not on PATH; $Verb $($Names -join ', ') @$userMarketplace by hand."
         return
     }
     $listed = (Invoke-Claude @('plugin', 'list', '--json')).Output | ConvertFrom-Json
-    foreach ($plugin in $Plugins) {
+    foreach ($plugin in $Names) {
         $id = "$plugin@$userMarketplace"
         $entry = $listed | Where-Object { $_.id -eq $id -and $_.scope -eq 'user' }
         if (-not $entry) { continue }
@@ -160,7 +173,8 @@ $interactive = -not $Latest -and [Environment]::UserInteractive -and
 
 function Get-ReleaseTag([string]$Plugin) {
     if ($pinned.ContainsKey($Plugin)) { return "$Plugin--v$($pinned[$Plugin])" }
-    $versions = Get-ReleaseVersions $Plugin
+    # @() keeps a single release a list: a bare string would index to its first character.
+    $versions = @(Get-ReleaseVersions $Plugin)
     $chosen = if ($interactive -and $versions.Count -gt 1) { Select-Version $Plugin $versions } else { $versions[0] }
     "$Plugin--v$chosen"
 }
@@ -211,14 +225,13 @@ try {
         & robocopy (Join-Path $sources[$plugin] "plugins\$plugin") (Join-Path $target "plugins\$plugin") /MIR /XD .git /NFL /NDL /NJH /NJS /NP | Out-Null
         if ($LASTEXITCODE -ge 8) { throw "robocopy of $plugin failed with exit code $LASTEXITCODE" }
     }
-    Get-ChildItem -LiteralPath (Join-Path $target 'plugins') -Directory |
-        Where-Object Name -notin $Plugins |
-        Remove-Item -Recurse
+    $removed = @(Get-ChildItem -LiteralPath (Join-Path $target 'plugins') -Directory | Where-Object Name -notin $Plugins)
+    $removed | Remove-Item -Recurse
 
     $manifest = [ordered]@{
         name        = $marketplace
         owner       = [ordered]@{ name = 'agentpit-lab'; url = 'https://github.com/agentpit-lab' }
-        description = 'PaceLine and PitBoard seated as organization plugins from a local copy of the agentpit marketplace.'
+        description = 'AgentPit plugins seated as organization plugins from a local copy of the agentpit marketplace.'
         plugins     = @($entries)
     }
     $manifest | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $target '.claude-plugin\marketplace.json') -Encoding utf8NoBOM
@@ -253,6 +266,8 @@ try {
     }
 
     Set-UserPlugins 'disable'
+    # A plugin dropped from the set gets its user-scope copy back, which an earlier run disabled.
+    if ($removed) { Set-UserPlugins 'enable' @($removed.Name) }
 }
 finally {
     if (Test-Path -LiteralPath $work) { Remove-Item -LiteralPath $work -Recurse -Force }

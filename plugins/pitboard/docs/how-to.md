@@ -116,7 +116,7 @@ machine](../../paceline/docs/how-to.md#use-two-accounts-on-one-machine).
 The row sits above the prompt. Context and cache are pies the size of Desktop's own context ring.
 The five-hour and weekly limits are bars, and with PaceLine's week plan so is the Part block before
 `7d`. A model-scoped limit is a pie, in the row only while it is amber or red. The advisor has its
-own group between the context and the cache while an advisor is set. `ⓘ` ends the row.
+own group between the context and the cache while an advisor is set. `ⓘ` ends the row while it fits.
 
 1. Point at a reading. PitBoard shades it and shows its card: the reading's name, one row per value,
    a bar for a limit, and advice when the reading needs a decision. While the `PitBoard` pane is
@@ -135,7 +135,9 @@ own group between the context and the cache while an advisor is set. `ⓘ` ends 
 The bars change with the window's width. PitBoard keeps the row on one line where it can:
 
 - In a wide window, `5h` and `7d` show a bar, the percentage, and the time to reset.
-- When that does not fit, the bars drop the time to reset first. The card still shows it.
+- When that does not fit, the row leaves out `ⓘ` first; `/pitboard` still shows its card. When it is
+  still too wide, the bars drop the time to reset instead, and `ⓘ` returns. The card still shows the
+  time to reset.
 - When even that does not fit, `5h` and `7d` turn into pies, and show their numbers only once they
   leave calm.
 
@@ -202,16 +204,16 @@ plugin the organization's managed settings load from an administrator-only folde
 relaxes the organization's security settings, so it fits a small team whose owner decides that, and
 hardly a large organization.
 
-One script per platform seats PaceLine and PitBoard together. It fetches each plugin from the public
-agentpit repository at its release tag, copies it into an administrator-only folder, writes a
-managed settings file that enables it there, and disables your own copies, `paceline@agentpit` and
-`pitboard@agentpit`. It never edits an existing `managed-settings.json`. dbWise needs none of this:
-the guard leaves its hooks alone.
+One script per platform seats PaceLine, PitBoard and PitCrew together. It fetches each plugin from
+the public agentpit repository at its release tag, copies it into an administrator-only folder,
+writes a managed settings file that enables it there, and disables your own copies,
+`paceline@agentpit`, `pitboard@agentpit` and `pitcrew@agentpit`. It never edits an existing
+`managed-settings.json`. dbWise needs none of this: the guard leaves its hooks alone.
 
 1. Where the organization has server-managed settings (claude.ai, Organization settings > Claude
    Code > Managed settings), add `"managedSourcesBehavior": "merge"` there. Without it Claude Code
-   ignores the plugin keys of this machine's managed file, and with your own copies disabled neither
-   plugin loads.
+   ignores the plugin keys of this machine's managed file, and with your own copies disabled none of
+   the plugins loads.
 2. On Windows, download
    [Install-AgentpitOrg.ps1](https://github.com/agentpit-lab/agentpit/blob/main/tools/Install-AgentpitOrg.ps1)
    and run it in PowerShell 7 as an administrator:
@@ -231,8 +233,12 @@ the guard leaves its hooks alone.
 
    In a terminal the script lists the last ten releases of each plugin with the latest selected, and
    Enter keeps it. `-Version pitboard=0.1.14` (`--version` in sh) pins a release; `-Latest`
-   (`--latest`) takes the latest of both without asking, as a run without a terminal does.
-   Unreleased builds install only from a local folder with `-Source` (`--source`).
+   (`--latest`) takes the latest of each without asking, as a run without a terminal does. `-Plugins
+   paceline,pitboard` (`--plugins` in sh) seats another set, from `paceline`, `pitboard`, `pitcrew`
+   and `stint`; Stint's module needs no seating, and a plugin left out of the set gets your own copy
+   back. Under `pwsh -File`, `-Plugins` receives `paceline,pitboard` as one string, so run the
+   script from a PowerShell 7 prompt or through `pwsh -Command`. Unreleased builds install only from
+   a local folder with `-Source` (`--source`).
 
    The script writes two paths. Windows: `C:\Program Files\ClaudeCode\plugins\agentpit-org` and
    `C:\Program Files\ClaudeCode\managed-settings.d\50-agentpit-org.json`. macOS: the same two under

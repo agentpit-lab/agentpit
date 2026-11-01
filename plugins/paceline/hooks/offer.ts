@@ -4,6 +4,10 @@
 
 import { instant } from './watch'
 
+// How long a "pending" record (pace.py `plan offer --hold`, not yet confirmed) keeps a part from being asked
+// about: pace.py OFFER_PENDING_SEC. After it the part is asked about again.
+export const OFFER_PENDING_MS = 30_000
+
 // The one-per-part record of an account: pace.py offer_path.
 export const offerPath = (stateDir: string, key: string) => `${stateDir}/plan-offer-${key}.json`
 
@@ -19,7 +23,8 @@ const asRecord = (text: string | null): Record<string, unknown> | null => {
 }
 
 // True when the week plan file's part holds now, is an off part, and has no share or no weight (pace.py
-// offer_unplanned), and the record does not already name that part (pace.py offer_part: day, kind and week).
+// offer_unplanned), and the record does not already end the offers of that part (pace.py offer_seen: it names the
+// part with state "offered" or "refused", or "pending" for less than OFFER_PENDING_MS).
 // A true answer only means "ask the CLI": the CLI decides, and it is the one that records. A file that does
 // not parse as the plan's version 1 gives false, so a missing or odd file never costs a process.
 export function offerWorthAsking(planText: string | null, offerText: string | null, now: number): boolean {
@@ -34,7 +39,10 @@ export function offerWorthAsking(planText: string | null, offerText: string | nu
   if (!unplanned) return false
   const seen = asRecord(offerText)
   const same = seen !== null && seen.day === part.day && seen.kind === part.kind && seen.week_reset === plan.week_resets_at
-  return !same
+  if (!same) return true
+  if (seen.state !== 'pending') return false
+  const at = instant(seen.at)
+  return at === null || !(0 <= now - at && now - at < OFFER_PENDING_MS)
 }
 
 // The part the plan file names, as one key for "the offer was tried for this part in this process" (day, kind,

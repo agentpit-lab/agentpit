@@ -358,8 +358,8 @@ class SqlBindParams:
                         upper_bound = self._get_bound_values(stats, is_lower=False)
 
                 # Replace both parameters in the BETWEEN clause
-                param1_pattern = r"\$" + param1
-                param2_pattern = r"\$" + param2
+                param1_pattern = rf"\${param1}(?!\d)"
+                param2_pattern = rf"\${param2}(?!\d)"
                 modified_query = re.sub(param1_pattern, str(lower_bound), modified_query)
                 modified_query = re.sub(param2_pattern, str(upper_bound), modified_query)
 

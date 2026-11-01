@@ -77,8 +77,10 @@ events from the hooks module of a plugin you install, and context-watch runs on 
 **What you see:** no context line, no warnings at the set levels, no snapshot at a compaction, and
 no note after it to read one.
 
-**What still works:** cache-watch, which runs on command hooks. PitCrew is not covered by the tools
-that seat PaceLine as an organization's plugin yet.
+**What still works:** cache-watch, which runs on command hooks. Seated as the organization's plugin,
+PitCrew runs context-watch too: the scripts in [Seat PaceLine as your organization's
+plugin](../../paceline/docs/how-to.md#seat-paceline-as-your-organizations-plugin) seat PitCrew by
+default.
 
 ## cache-watch
 

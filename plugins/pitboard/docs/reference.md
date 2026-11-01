@@ -115,8 +115,9 @@ call in a `try`.
 ### Desktop limit styles
 
 PitBoard tries to keep the Desktop row on one line. It estimates the row's width character by
-character and picks the fullest style that fits the window with 1.5 cells to spare. The estimate can
-still be off by about a third of a cell (see [The Desktop row can wrap within about a third of a
+character and picks the fullest style that fits the window with 1.5 cells to spare. Before it drops
+from Bars to Bars without reset, it tries Bars without `ⓘ`. The estimate can still be off by about a
+third of a cell (see [The Desktop row can wrap within about a third of a
 cell](limitations.md#the-desktop-row-can-wrap-within-about-a-third-of-a-cell)):
 
 | Style | `5h` and `7d` drawn as |

@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.7.2 - 2026-11-01
+
+### Fixed
+
+- The off-hours offer counts as made only once the prompt hook holds its line: `paceline plan offer --hold` records
+  it as `pending` and `--confirm` records it as `offered`. A run the hook's time limit killed no longer costs the part
+  its offer; a pending record ends the offers of its part for 30 seconds, then the part is offered again. Plain
+  `paceline plan offer` records `offered` at once, as before.
+- `paceline doctor --bundle` includes the account's week plan file (`plan-<key>.json`).
+
+### Removed
+
+- The account reason `refused`, which nothing produced. A session entry that carries it reads as `pending`.
+
+## 0.7.1 - 2026-11-01
+
+### Fixed
+
+- `paceline profile set heavy_job_mb` refuses 0 and negative values (it must be 1 or more), because the heavy-run count divides by it. A profile file edited by hand to hold 0 or less leaves the count out of the status answer instead of dividing.
+
 ## 0.7.0 - 2026-11-01
 
 ### Changed

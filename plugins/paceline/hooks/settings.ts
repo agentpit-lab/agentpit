@@ -77,7 +77,7 @@ export const CATALOGUE: readonly Item[] = [
   p('memory_guard', 'machine', TOPIC.machine, 'Memory guard', 'bool', 'on or off', 'On: below the free memory floor a launch asks first and a Stint run stops. Off: memory is not measured before a launch.'),
   p('min_free_commit_mb', 'machine', TOPIC.machine, 'Minimum free memory', 'mb', WHOLE + ' of MB', 'Free memory below which no new work starts. Used only while the memory guard is on.'),
   p('commit_reserve_mb', 'machine', TOPIC.machine, 'Memory kept aside', 'mb', WHOLE + ' of MB', 'Memory left out when counting how many heavy runs fit. Used only while the memory guard is on.'),
-  p('heavy_job_mb', 'machine', TOPIC.machine, 'Memory per heavy run', 'mb', WHOLE + ' of MB', 'Memory one heavy run is assumed to take. Used only while the memory guard is on.'),
+  p('heavy_job_mb', 'machine', TOPIC.machine, 'Memory per heavy run', 'mb', 'a whole number, 1 or more of MB', 'Memory one heavy run is assumed to take. Used only while the memory guard is on.'),
   p('max_heavy_runs', 'machine', TOPIC.machine, 'Heavy runs at once, at most', 'count', WHOLE, 'Upper bound on parallel heavy runs, whatever the free memory. Used only while the memory guard is on.'),
   p('max_agents', 'machine', TOPIC.machine, 'Parallel agents, at most', 'count', WHOLE, 'The most parallel agents `paceline advice` gives, and so a Stint run.'),
   // Advanced

@@ -202,11 +202,11 @@ def own_session():
     return os.environ.get("CLAUDE_SESSION_ID") or os.environ.get("CLAUDE_CODE_SESSION_ID") or None
 
 
-SESSION_REASONS = ("desktop", "refused", "no-credential", "logged-out", "no-state-key")
+SESSION_REASONS = ("desktop", "no-credential", "logged-out", "no-state-key")
 SESSION_SOURCES = ("profile", "state-file")
 # Reasons whose account the session cannot name yet or any more: a reader gets no record, never the
 # newest partition of some other account.
-NO_RECORD_REASONS = ("pending", "desktop", "refused", "logged-out")
+NO_RECORD_REASONS = ("pending", "desktop", "logged-out")
 
 
 def session_entry(session, sd=None):

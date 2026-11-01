@@ -274,20 +274,22 @@ PaceLine runs in full under the guard. The seating still matters for PitBoard, w
 event the guard withholds (see [Where an organization manages Claude Code, PitBoard sees a
 compaction
 late](../../pitboard/docs/limitations.md#where-an-organization-manages-claude-code-pitboard-sees-a-compaction-late)),
-and, from the release that adds it, for PitCrew's context-watch. Seating it there relaxes the
-organization's security settings, so it fits a small team whose owner decides that, and hardly a
-large organization.
+and for PitCrew's context-watch, whose events the guard withholds too (see [Where an organization
+manages Claude Code, context-watch does not
+run](../../pitcrew/docs/limitations.md#where-an-organization-manages-claude-code-context-watch-does-not-run)).
+Seating it there relaxes the organization's security settings, so it fits a small team whose owner
+decides that, and hardly a large organization.
 
-One script per platform seats PaceLine and PitBoard together. It fetches each plugin from the public
-agentpit repository at its release tag, copies it into an administrator-only folder, writes a
-managed settings file that enables it there, and disables your own copies, `paceline@agentpit` and
-`pitboard@agentpit`. It never edits an existing `managed-settings.json`. dbWise needs none of this:
-the guard leaves its hooks alone.
+One script per platform seats PaceLine, PitBoard and PitCrew together. It fetches each plugin from
+the public agentpit repository at its release tag, copies it into an administrator-only folder,
+writes a managed settings file that enables it there, and disables your own copies,
+`paceline@agentpit`, `pitboard@agentpit` and `pitcrew@agentpit`. It never edits an existing
+`managed-settings.json`. dbWise needs none of this: the guard leaves its hooks alone.
 
 1. Where the organization has server-managed settings (claude.ai, Organization settings > Claude
    Code > Managed settings), add `"managedSourcesBehavior": "merge"` there. Without it Claude Code
-   ignores the plugin keys of this machine's managed file, and with your own copies disabled neither
-   plugin loads.
+   ignores the plugin keys of this machine's managed file, and with your own copies disabled none of
+   the plugins loads.
 2. On Windows, download
    [Install-AgentpitOrg.ps1](https://github.com/agentpit-lab/agentpit/blob/main/tools/Install-AgentpitOrg.ps1)
    and run it in PowerShell 7 as an administrator:
@@ -307,8 +309,12 @@ the guard leaves its hooks alone.
 
    In a terminal the script lists the last ten releases of each plugin with the latest selected, and
    Enter keeps it. `-Version pitboard=0.1.14` (`--version` in sh) pins a release; `-Latest`
-   (`--latest`) takes the latest of both without asking, as a run without a terminal does.
-   Unreleased builds install only from a local folder with `-Source` (`--source`).
+   (`--latest`) takes the latest of each without asking, as a run without a terminal does. `-Plugins
+   paceline,pitboard` (`--plugins` in sh) seats another set, from `paceline`, `pitboard`, `pitcrew`
+   and `stint`; Stint's module needs no seating, and a plugin left out of the set gets your own copy
+   back. Under `pwsh -File`, `-Plugins` receives `paceline,pitboard` as one string, so run the
+   script from a PowerShell 7 prompt or through `pwsh -Command`. Unreleased builds install only from
+   a local folder with `-Source` (`--source`).
 
    The script writes two paths. Windows: `C:\Program Files\ClaudeCode\plugins\agentpit-org` and
    `C:\Program Files\ClaudeCode\managed-settings.d\50-agentpit-org.json`. macOS: the same two under

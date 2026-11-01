@@ -1,4 +1,4 @@
-import { advisorView, alerts, BAR, CALM_FILL, cardFor, COLD, desktopModelColor, DIM, dim, displayModel, EFFORT_COLORS, type Gauge, GROUPS, IDLE_MARK, isKnownFamily, LABEL, label, LEVEL, limitStyle, listOrder, modelColor, ON, type Part, readings, type Row, RULE, t, TRACK, VALUE } from './cards'
+import { advisorView, alerts, BAR, CALM_FILL, cardFor, COLD, desktopModelColor, DIM, dim, displayModel, EFFORT_COLORS, type Gauge, GROUPS, IDLE_MARK, isKnownFamily, LABEL, label, LEVEL, listOrder, modelColor, ON, type Part, readings, rowFit, type Row, RULE, t, TRACK, VALUE } from './cards'
 import { barSvg, cacheIconSvg, type Card, type CardBar, DESKTOP_COLD, DESKTOP_LEVEL, DESKTOP_ON, pieSvg, ringMarksSvg, ruleSvg, type Tone, wideBarSvg } from './desktop'
 import type { View } from './view'
 import type { PitboardButton } from '../types'
@@ -210,7 +210,7 @@ const HOVER_FRAME = { backgroundColor: '#8080801f' }
 export function drawDesktop(els: Els, v: View, open: string | null, toggle: (key: string) => void, columns = Infinity, isPaneOpen = false) {
   const { Box, Button, Svg, Text } = els
   const { gauges, info, advisor, advisorOn } = readings(v)
-  const style = limitStyle(v, columns)
+  const { style, info: showInfo } = rowFit(v, columns)
   const bars = style !== 'pies'
   const name = (key: string, label: string) =>
     HOVER_CARDS ? (
@@ -366,11 +366,13 @@ export function drawDesktop(els: Els, v: View, open: string | null, toggle: (key
           ...(i > 0 && Svg ? [<Svg key={`rule-${i}`} source={rule.source} alt={rule.alt} width={rule.width} height={rule.height} />] : []),
           part,
         ])}
-        {Svg ? <Svg key="rule-info" source={rule.source} alt={rule.alt} width={rule.width} height={rule.height} /> : null}
-        <Box key="info" position="relative" flexShrink={0} paddingX={1} hover={HOVER_FRAME}>
-          {name('info', 'ⓘ')}
-          {HOVER_CARDS || open === 'info' ? popover(info) : null}
-        </Box>
+        {showInfo && Svg ? <Svg key="rule-info" source={rule.source} alt={rule.alt} width={rule.width} height={rule.height} /> : null}
+        {showInfo ? (
+          <Box key="info" position="relative" flexShrink={0} paddingX={1} hover={HOVER_FRAME}>
+            {name('info', 'ⓘ')}
+            {HOVER_CARDS || open === 'info' ? popover(info) : null}
+          </Box>
+        ) : null}
       </Box>
     </Box>
   )

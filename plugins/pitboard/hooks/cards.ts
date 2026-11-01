@@ -975,7 +975,7 @@ export const textCells = (text: string) =>
 
 // The desktop row's width in cells: each reading's parts one cell apart inside one cell of padding
 // a side, the rules between groups, the advisor group, and ⓘ with its margin.
-export function desktopCells(v: View, style: LimitStyle): number {
+export function desktopCells(v: View, style: LimitStyle, withInfo = true): number {
   const { gauges, advisorOn } = readings(v)
   const width = (items: (number | string)[]) =>
     items.reduce<number>((sum, x) => sum + (typeof x === 'number' ? x / PX_PER_CELL : textCells(x)), 0) + items.length - 1 + 2
@@ -994,14 +994,18 @@ export function desktopCells(v: View, style: LimitStyle): number {
   }
   // A rule parts ⓘ from the readings, as it parts the groups.
   // The band's own padding, about a cell a side, measured on owner screenshots.
-  return cells + parts * (RULE_PX / PX_PER_CELL) + width(['ⓘ']) + 2
+  return cells + (withInfo ? parts : parts - 1) * (RULE_PX / PX_PER_CELL) + (withInfo ? width(['ⓘ']) : 0) + 2
 }
 
-// The fullest limit style that keeps the row on one line; the time to reset goes first, since the
-// card still shows it.
-export function limitStyle(v: View, columns: number): LimitStyle {
+// The fullest row that stays on one line: ⓘ goes first, then the time to reset, both of which
+// a card still shows; the shorter styles keep ⓘ.
+export function rowFit(v: View, columns: number): { style: LimitStyle; info: boolean } {
   // The row measures its text per character (CHAR_CELLS) and the band's padding, and keeps
   // 1.5 cells spare: the row wrapped ⓘ within half a cell of the estimate.
-  const fits = (style: LimitStyle) => desktopCells(v, style) <= columns - 1.5
-  return fits('bars') ? 'bars' : fits('bare') ? 'bare' : 'pies'
+  const fits = (style: LimitStyle, withInfo = true) => desktopCells(v, style, withInfo) <= columns - 1.5
+  if (fits('bars')) return { style: 'bars', info: true }
+  if (fits('bars', false)) return { style: 'bars', info: false }
+  return { style: fits('bare') ? 'bare' : 'pies', info: true }
 }
+
+export const limitStyle = (v: View, columns: number): LimitStyle => rowFit(v, columns).style

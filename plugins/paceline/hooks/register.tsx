@@ -131,7 +131,7 @@ let loggedOut = false
 type Entry = {
   account: string | null
   source: 'profile' | 'state-file' | null
-  reason: 'desktop' | 'refused' | 'no-state-key' | 'no-credential' | 'logged-out' | null
+  reason: 'desktop' | 'no-state-key' | 'no-credential' | 'logged-out' | null
 }
 // The last entry written to session-accounts, with its session.
 let noted: { session: string; entry: Entry } | null = null
@@ -1290,15 +1290,20 @@ async function clearAway($: EngineInterface) {
 
 // The off-hours offer on the person's own prompt (spec: one line for the model, once per part, any session).
 // The cheap test reads the week plan file and the record; `paceline plan offer` decides and records, so a
-// second session or a second prompt finds the part already offered. Nothing here may delay or fail a prompt:
+// second session or a second prompt finds the part already offered. The offer counts as made only once this
+// hook holds its line: `plan offer --hold` records it as pending and prints it, and `plan offer --confirm`
+// turns the record into "offered" after that, so a run the time limit kills never costs the part its offer
+// (the pending record lapses and the part is asked about again). Nothing here may delay or fail a prompt:
 // the command skips the inbox merge and waits only briefly for the lock, the call has a hard time limit, and a
-// part is tried once per hook process, whatever the outcome (a part the plan marks explicitly, a busy lock, a
-// failure all answer nothing, and asking again on every prompt would only cost a process start each time).
+// part is tried at most OFFER_ATTEMPTS times per hook process; only a run that gave no answer at all (killed,
+// or not started) is tried again, and every other outcome (a part the plan marks explicitly, a busy lock, a
+// failure) answers nothing and is not asked again on every prompt, which would only cost a process start each time.
 const OFFER_TIMEOUT_MS = 1_500
 // A session's first prompt can come before its first profile answer; the offer waits this long for it,
 // or that prompt would never be offered (seen live: the offer came only on the second prompt).
 const OFFER_PROFILE_WAIT_MS = 1_000
-const offerTried = new Set<string>()
+const OFFER_ATTEMPTS = 2
+const offerTried = new Map<string, number>()
 async function offerLine($: EngineInterface): Promise<string | null> {
   const dir = await stateDir($)
   try {
@@ -1315,13 +1320,22 @@ async function offerLine($: EngineInterface): Promise<string | null> {
   const planText = await textAt($, weekPlanPath(dir, key))
   if (!offerWorthAsking(planText, await textAt($, offerPath(dir, key)), await $.clock.now())) return null
   const tried = offerTriedKey(key, planText)
-  if (tried === null || offerTried.has(tried)) return null
-  offerTried.add(tried)
+  if (tried === null || (offerTried.get(tried) ?? 0) >= OFFER_ATTEMPTS) return null
+  offerTried.set(tried, (offerTried.get(tried) ?? 0) + 1)
   // A writing command run through the read path on purpose: a fresh memo finds its interpreter that way, and
   // the command is idempotent under the lock (`write` true runs nothing while the memo is undefined).
-  const ran = await runPythonScript(execOf($, OFFER_TIMEOUT_MS), interpreter, `${$.plugin.root}/scripts/paceline.py`, ['plan', 'offer', '--no-merge'], false, false)
-  const line = ran !== null && ran.exitCode === 0 ? ran.stdout.trim() : ''
-  return line || null
+  const ran = await runPythonScript(execOf($, OFFER_TIMEOUT_MS), interpreter, `${$.plugin.root}/scripts/paceline.py`, ['plan', 'offer', '--no-merge', '--hold'], false, false)
+  // A run killed by the time limit (or never started) gave no answer: the part is tried again, up to the limit.
+  if (ran === null || ran.timedOut) return null
+  // A run that answered (any exit code) is not tried again.
+  offerTried.set(tried, OFFER_ATTEMPTS)
+  const line = ran.exitCode === 0 ? ran.stdout.trim() : ''
+  if (!line) return null
+  // The line is in hand: record the offer as made, without holding the prompt and under the long time limit
+  // (runPythonScript does not throw). A failure leaves the record pending, which lapses; the line is still
+  // given, and this process does not ask for the part again.
+  void runPythonScript(execOf($, RUN_TIMEOUT_MS), interpreter, `${$.plugin.root}/scripts/paceline.py`, ['plan', 'offer', '--no-merge', '--confirm'], false, false)
+  return line
 }
 
 export const register: Register = on => {

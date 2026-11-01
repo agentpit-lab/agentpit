@@ -2687,7 +2687,7 @@ const textCells = (text        ) =>
 
 // The desktop row's width in cells: each reading's parts one cell apart inside one cell of padding
 // a side, the rules between groups, the advisor group, and ⓘ with its margin.
-function desktopCells(v      , style            )         {
+function desktopCells(v      , style            , withInfo = true)         {
   const { gauges, advisorOn } = readings(v)
   const width = (items                     ) =>
     items.reduce        ((sum, x) => sum + (typeof x === 'number' ? x / PX_PER_CELL : textCells(x)), 0) + items.length - 1 + 2
@@ -2706,18 +2706,22 @@ function desktopCells(v      , style            )         {
   }
   // A rule parts ⓘ from the readings, as it parts the groups.
   // The band's own padding, about a cell a side, measured on owner screenshots.
-  return cells + parts * (RULE_PX / PX_PER_CELL) + width(['ⓘ']) + 2
+  return cells + (withInfo ? parts : parts - 1) * (RULE_PX / PX_PER_CELL) + (withInfo ? width(['ⓘ']) : 0) + 2
 }
 
-// The fullest limit style that keeps the row on one line; the time to reset goes first, since the
-// card still shows it.
-function limitStyle(v      , columns        )             {
+// The fullest row that stays on one line: ⓘ goes first, then the time to reset, both of which
+// a card still shows; the shorter styles keep ⓘ.
+function rowFit(v      , columns        )                                       {
   // The row measures its text per character (CHAR_CELLS) and the band's padding, and keeps
   // 1.5 cells spare: the row wrapped ⓘ within half a cell of the estimate.
-  const fits = (style            ) => desktopCells(v, style) <= columns - 1.5
-  return fits('bars') ? 'bars' : fits('bare') ? 'bare' : 'pies'
+  const fits = (style            , withInfo = true) => desktopCells(v, style, withInfo) <= columns - 1.5
+  if (fits('bars')) return { style: 'bars', info: true }
+  if (fits('bars', false)) return { style: 'bars', info: false }
+  return { style: fits('bare') ? 'bare' : 'pies', info: true }
 }
-return { LABEL, VALUE, DIM, RULE, LEVEL, COLD, ON, TRACK, CALM_FILL, IDLE_MARK, EFFORT_COLORS, TERMINAL_PALETTE, t, dim, label, BAR, displayModel, modelColor, DESKTOP_OTHER, COLOUR_FACTS, isKnownFamily, desktopModelColor, cacheFraction, alerts, listOrder, weekBarOf, weekEstimate, UNPLANNED_SPENT_MIN, earlyTick, PART_FORECAST_MIN_MS, partOf, pts, readings, GROUPS, cardFor, advisorView, desktopKey, textCells, desktopCells, limitStyle }
+
+const limitStyle = (v      , columns        )             => rowFit(v, columns).style
+return { LABEL, VALUE, DIM, RULE, LEVEL, COLD, ON, TRACK, CALM_FILL, IDLE_MARK, EFFORT_COLORS, TERMINAL_PALETTE, t, dim, label, BAR, displayModel, modelColor, DESKTOP_OTHER, COLOUR_FACTS, isKnownFamily, desktopModelColor, cacheFraction, alerts, listOrder, weekBarOf, weekEstimate, UNPLANNED_SPENT_MIN, earlyTick, PART_FORECAST_MIN_MS, partOf, pts, readings, GROUPS, cardFor, advisorView, desktopKey, textCells, desktopCells, rowFit, limitStyle }
 })()
 // Shared page behaviour: strings, glossary popovers, segmented switches, chips and the theme switch.
 // Pages read their data from the JSON script elements the build writes and call PB.* helpers.
