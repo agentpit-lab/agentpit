@@ -15,6 +15,7 @@ import {
   historyForAccount,
   mergeLimit,
   parseBurn,
+  parseLastRequest,
   parseWeekPlan,
   pickPartition,
   settingsEffort,
@@ -44,6 +45,8 @@ const desktopNow = atom({ plugin: 'pitboard', key: 'desktopNow' } as const, 0)
 const fiveSamples = atom({ plugin: 'pitboard', key: 'fiveSamples' } as const, [] as StatusSample[])
 const fiveBurn = atom({ plugin: 'pitboard', key: 'fiveBurn' } as const, null as StatusBurn | null)
 const weekPlan = atom({ plugin: 'pitboard', key: 'weekPlan' } as const, null as StatusWeekPlan | null)
+// When this account last made a model request on this machine (ms), for "<1".
+const requestAt = atom({ plugin: 'pitboard', key: 'requestAt' } as const, null as number | null)
 const weekSamples = atom({ plugin: 'pitboard', key: 'weekSamples' } as const, [] as StatusSample[])
 const ctxSamples = atom({ plugin: 'pitboard', key: 'ctxSamples' } as const, [] as number[])
 const detail = atom({ plugin: 'pitboard', key: 'detail' } as const, null as string | null)
@@ -304,6 +307,15 @@ async function refreshShared($: EngineInterface) {
       plan = (await $.fs.exists(planPath)) ? undefined : null
     }
   }
+  // The last model request of this account in any session on this machine, as paceline writes it.
+  let lastRequest: number | null = null
+  if (held !== null) {
+    try {
+      lastRequest = parseLastRequest(await $.fs.read(`${dir}/last-request-${held}.json`), held)
+    } catch {
+      // None yet, or mid-write: the five-hour readings alone tell a spend under one point.
+    }
+  }
   const now = await $.clock.now()
   // A newer refresh started while this one waited and may have seen another account: its result stands.
   if (round !== sharedRound) return
@@ -318,12 +330,14 @@ async function refreshShared($: EngineInterface) {
     await update($, scoped, () => [])
     await update($, fiveBurn, () => null)
     await update($, weekPlan, () => null)
+    await update($, requestAt, () => null)
     await update($, measure, m => (m ? { ...m, limits: [] } : m))
     if (changed) await restoreSamples($, key)
   }
   // The plan read needs only the held key, so an unreadable limits file does not freeze it.
   // undefined: the read failed and the file exists, so the last plan of the same key stands.
   if (plan !== undefined) await update($, weekPlan, () => plan)
+  await update($, requestAt, prev => (lastRequest !== null && (prev === null || lastRequest > prev) ? lastRequest : prev))
   if (isUnreadable) {
     await update($, account, prev => ({ key: held, isFileUnknown: prev?.key === held && prev.isFileUnknown }))
     return
@@ -335,6 +349,13 @@ async function refreshShared($: EngineInterface) {
   await update($, fiveBurn, () => burn)
   await update($, fileLimits, () => readFileLimits(partition, now))
   await recordLimits($)
+}
+
+// A request spends from the limits even when the account's whole percents still read
+// 0, so its time is kept for "<1", in memory only: paceline writes the file the other sessions read.
+async function recordRequest($: EngineInterface) {
+  const now = await $.clock.now()
+  await update($, requestAt, prev => (prev === null || now > prev ? now : prev))
 }
 
 // Keeps the five-hour readings of the last 3 hours and the weekly ones of the last 6, in
@@ -641,7 +662,7 @@ async function togglePane($: EngineInterface) {
 
 // A given time keeps the caller off nowMs, so it is not redrawn every second.
 async function currentView($: EngineInterface, at?: number) {
-  const [m, c, mt, tick, sc, fl, fs, cs, ws, who, burn, plan] = await Promise.all([
+  const [m, c, mt, tick, sc, fl, fs, cs, ws, who, burn, plan, reqAt] = await Promise.all([
     read($, measure),
     read($, cache),
     read($, meta),
@@ -654,6 +675,7 @@ async function currentView($: EngineInterface, at?: number) {
     read($, account),
     read($, fiveBurn),
     read($, weekPlan),
+    read($, requestAt),
   ])
   const now = tick || (await $.clock.now())
   return buildView({
@@ -670,6 +692,7 @@ async function currentView($: EngineInterface, at?: number) {
     burn,
     accountKey: who?.key ?? null,
     weekPlan: plan,
+    requestAt: reqAt,
   })
 }
 
@@ -849,7 +872,11 @@ export const register: Register = on => {
   })
 
   on('turn.step', async function* ($, e, next) {
-    if (e.agentId) return yield* next(e)
+    if (e.agentId) {
+      const own = yield* next(e)
+      if (own.usage) await recordRequest($)
+      return own
+    }
     const started = await $.clock.now()
     await update($, cache, c => ({ ...c, isInFlight: true }))
     try {
@@ -871,6 +898,7 @@ export const register: Register = on => {
       if (u && u.cache_creation_input_tokens > 0 && (await read($, cache)).regime === null) watchRegime($, ++regimeRound, REGIME_RETRIES)
       // session.measure fires once per turn; a long turn makes dozens of requests, so the
       // context fill follows each one.
+      if (u) await recordRequest($)
       if (u) {
         compactRound++
         const tokens = u.input_tokens + u.cache_read_input_tokens + u.cache_creation_input_tokens

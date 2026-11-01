@@ -28,7 +28,7 @@ PitBoard adds what PaceLine's limits file and the session's transcript hold.
 | Model, effort, Claude Code version, turns, session time | Claude Code. Until a request reports the effort, it comes from `modelSettings` or `effortLevel` in the settings. `/effort` in this session shows at once. |
 | Advisor | `advisorModel` in `settings.json`. `/advisor` in this session shows at once. |
 | Branch | `git branch --show-current` in the start directory. |
-| Plan, Reserve | PaceLine's week plan file, `week-plan-<key>.json`, for the signed-in account's key only, while pace is on: the current part with its share, the mode and the reserve. Without a usable file the Week card measures the week against an even pace. |
+| Part block, Reserve | PaceLine's week plan file, `week-plan-<key>.json`, for the signed-in account's key only, while pace is on: the current part with its share, the mode and the reserve. Without a usable file the row has no Part block. |
 
 `/clear`, and a resume inside a running session, drop the previous conversation's context, cache,
 and session readings at once. The limits stay, because they belong to the account. Subagents'
@@ -140,7 +140,9 @@ these hold: the five-hour limit is below the file's threshold; the file is at mo
 its account is the signed-in account; its reset is the window's reset; and its percentage used is
 the percentage on the row. Pace is then the file's rate, and Budget is the pace that reaches the
 threshold exactly at the reset. In every other case, including PaceLine off or pace off, PitBoard
-projects from its own readings to 100% and shows Runs out.
+projects from its own readings to 100% and shows Runs out. Under 15 minutes to the reset the budget
+would be a rate of no use, so Budget reads `n/a (under 15 min left)` and the burn file carries
+`null` for it.
 
 ### The even-pace tick, Week elapsed, Spare and Overspent
 
@@ -152,21 +154,23 @@ Spare or Overspent (points) = used % - Week elapsed %
 in hours of budget          = |points| / 100 x 168 h
 ```
 
-Below even pace, the card says Spare; past it, Overspent. A week spends 100% over 168 hours, so a
-day of budget is 100/7, about 14.3 points.
+The Week card compares nothing against an even pace: `Week elapsed` is the tick's share, `Pace` is
+the average rate since the reset, and `At reset` or `Runs out` is where that rate leads. `Spare` and
+`Overspent` belong to the Part card, which measures spending against the part's share; without a
+plan the week has neither.
 
-With PaceLine's plan, the Week card measures the week against the plan instead of an even pace.
-PitBoard uses PaceLine's week plan file only when all four hold: the file is readable and its
+With PaceLine's plan, the row gains the Part block, whose card measures the current part against its
+share. PitBoard uses PaceLine's week plan file only when all four hold: the file is readable and its
 version is one PitBoard knows; it is the signed-in account's and its week is the card's week (the
 reset within 10 minutes); PaceLine did not write it more than 5 minutes ahead of the clock; and its
-current part holds the present time. Otherwise the card is the even-pace card above, and so it is
-with pace off, with no file, or for about 40 seconds after a part ends, or after a weekly window
-that resets ahead of schedule or whose reset moves later, until PaceLine writes the next (see the
-limitation).
+current part holds the present time. Otherwise there is no Part block, and so it is with pace off,
+with no file, or for about 40 seconds after a part ends, or after a weekly window that resets ahead
+of schedule or whose reset moves later, until PaceLine writes the next (see the limitation). A part
+with no share shows the block only once at least 1 point of the week was spent in it.
 
-Spare, Overspent, the `Plan` row and the tick follow PaceLine's own rule, on the part the file
-holds. `used` is the week's percentage, `share` the part's share of the week and `used at start` the
-week's usage when the part began:
+Spare, Overspent and the part's level follow PaceLine's own rule, on the part the file holds. `used`
+is the week's percentage, `share` the part's share of the week and `used at start` the week's usage
+when the part began:
 
 ```
 spent   = max(0, used - used at start)
@@ -175,15 +179,16 @@ above   = spent > allowed + 1
 Spare or Overspent (points) = |spent - allowed|, Overspent when spent > allowed
 ```
 
-The tick stands at `used at start + allowed`, where the plan expects the week now; Week elapsed
-stays on the time passed, as above. A part with no share has no `Spare`, `Overspent` or tick, and
-`Plan` reads `unplanned part`. `Plan` is `above` only past the 1-point tolerance, so an overspend of
-up to 1 point reads `within`.
+The Part gauge's tick stands at the share of the part's time gone and its fill is the points spent
+over the share. The part is above its share only past the 1-point tolerance, so an overspend of up
+to 1 point shows no colour. A part with no share has no `Spare`, `Overspent`, tick or forecast: its
+gauge reads the points spent over `-`, with an empty bar.
 
-`Pace` is measured within the current part, looking back at most 6 hours, and reads `n/a (needs 1
-h)` in the part's first hour. `Budget` is what is left of the part's share over the hours left in
-the part, at most what the five-hour limit can spend in an hour in weekly points. The effective mode
-is `limit` unless PaceLine's `inform_until` is still ahead, when it is `inform`.
+`Pace` on the Part card is the part's average since its start, from 15 minutes into the part; before
+that the card reads `Forecast` with the time it starts. Under one point spent it reads as a bound
+with `<`. `Budget` is what is left of the part's share over the hours left in the part, at most what
+the five-hour limit can spend in an hour in weekly points. The effective mode is `limit` unless
+PaceLine's `inform_until` is still ahead, when it is `inform`.
 
 ### Try the formulas
 
@@ -321,15 +326,15 @@ PaceLine reports that the window would reach its threshold before the reset, and
 alone does not colour it.
 
 The weekly limit and the model-scoped limits take their colour on the row from the percentage used
-only: amber from 80%, red from 95%. Inside the Week card without a plan, Pace above Budget is amber,
-and Overspent is amber, red past a day of budget.
+only: amber from 80%, red from 95%. Inside the Week card, `At reset` is amber from 80% and `Runs
+out` is red.
 
-With PaceLine's week plan the card is coloured by the plan instead. `Plan` reads `above` in amber in
-`inform` mode and in red in `limit` mode, and `Overspent` takes the `Plan` row's colour only when
-the plan is above its share; a day of budget no longer matters. `Reserve` turns red when the week's
-usage reaches 100% minus the reserve before the release. The week's gauge on the row and the card's
-title take the highest level of `Used`, `Plan` and `Reserve`, while `Used` keeps the percentage rule
-above, so a red plan shows on the row without opening the card.
+With PaceLine's week plan the Part block is coloured by the plan. It is amber in `inform` mode and
+red in `limit` mode while the part is above its share, past the 1-point tolerance, and `Overspent`
+takes the same colour only then. `Pace` above `Budget` and `At part end` above the share are amber.
+`Reserve` turns red when the week's usage reaches 100% minus the reserve before the release. The
+week's gauge on the row and the Week card's title take the highest level of the percentage, the part
+against its share and `Reserve`, so a red plan shows on the row without opening the card.
 
 Where each reading turns amber (watch) and red (act). The [reference](reference.md#levels) lists the
 same values with the rules that add to them.

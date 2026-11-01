@@ -50,7 +50,7 @@ const INSTANT = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d+))?(?:
 const FIRST_SECOND = -62_135_596_800
 const LAST_SECOND = 253_402_300_799
 
-function instant(value: unknown): number | null {
+export function instant(value: unknown): number | null {
   if (typeof value === 'number') return Number.isFinite(value) && value >= FIRST_SECOND && value <= LAST_SECOND ? value * 1000 : null
   if (typeof value !== 'string') return null
   const m = INSTANT.exec(value)

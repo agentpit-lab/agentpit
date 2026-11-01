@@ -138,6 +138,8 @@ def fmt_local(d, tz):
 # The same lookback and minimum span as pitboard's burnRate().
 LOOKBACK = dt.timedelta(minutes=90)
 MIN_SPAN = dt.timedelta(minutes=10)
+# Under this time to the reset the per-hour budget is not meaningful and the snapshot carries none.
+BUDGET_MIN_LEFT = dt.timedelta(minutes=15)
 
 
 def samples(history, bucket):
@@ -224,6 +226,9 @@ def snapshot(now, account, five):
         budget = round(project(0.0, five["used_pct"], five["threshold_pct"], now,
                                limits_file.parse_iso(five["reset"]))["budget"], 3)
         burn = {}
+    reset_at = limits_file.parse_iso(five["reset"])
+    if reset_at is not None and reset_at - now < BUDGET_MIN_LEFT:
+        budget = None
     return {"computed_at": limits_file.iso_ms(now), "account": account, "used_pct": five["used_pct"],
             "resets_at": five["reset"], "threshold_pct": five["threshold_pct"], "budget_per_hour_pct": budget,
             "rate_per_hour_pct": burn.get("rate_per_hour_pct"), "threshold_at": burn.get("threshold_at"),

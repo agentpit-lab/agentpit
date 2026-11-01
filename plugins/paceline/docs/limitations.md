@@ -5,7 +5,9 @@
 What PaceLine cannot do, grouped by where you meet it. Each entry says what you see and what still
 works, with a link to the page that explains the workaround. For how the numbers are made, see [How
 PaceLine works](explanation.md). Type the `/paceline:` commands in a session; run the `paceline`
-commands in a session's Bash tool, or ask the agent to run them.
+commands in a session's Bash tool, or ask the agent to run them. context-watch and cache-watch moved
+to the PitCrew plugin; their limits are on [PitCrew's limitations
+page](../../pitcrew/docs/limitations.md).
 
 ## Accounts and logins
 
@@ -20,15 +22,15 @@ Amazon Bedrock or Google Vertex AI are not tested; without limit readings they g
 **What you see:** `/paceline:pace status` stops with `no usage data yet`, no `pace:` line comes
 before an Agent launch, and `/paceline:usage-watch status` shows `last attempt: never`.
 
-**What still works:** context-watch and cache-watch do not use limit readings. See [Keep usage
-current while idle](how-to.md#keep-usage-current-while-idle).
+**What still works:** PitCrew's context-watch and cache-watch do not use limit readings. See [Keep
+usage current while idle](how-to.md#keep-usage-current-while-idle).
 
 ### Two accounts in one configuration directory keep their limits apart, with gaps
 
 PaceLine tags each reading with a one-way key of the account of the session's credential, and keeps
-the readings of each account in a partition of its own in `rate-limits.json`. Pace and the night
-queue read only the partition of the session's account. The hooks module learns that account from
-Claude Code's profile endpoint (see [usage-watch reads an endpoint outside the published
+the readings of each account in a partition of its own in `rate-limits.json`. Pace reads only the
+partition of the session's account. The hooks module learns that account from Claude Code's profile
+endpoint (see [usage-watch reads an endpoint outside the published
 API](#usage-watch-reads-an-endpoint-outside-the-published-api)) at session start, after `/login` or
 `/logout`, and when the stored credential changes, so a Claude Code Desktop session, a terminal
 session, and a `claude` started from a Desktop terminal tab each file under their own login. After a
@@ -80,8 +82,8 @@ altogether. See [Use two accounts on one machine](how-to.md#use-two-accounts-on-
 The state directory sits under the Claude Code configuration directory: `$CLAUDE_CONFIG_DIR`, else
 `~/.claude`. Two configuration directories on one machine have two state directories.
 
-**What you see:** each has its own pace switch, profile, week plans, holds, night queue, usage-watch
-switch, and usage-watch schedule. Turning pace on in one does not turn it on in the other.
+**What you see:** each has its own pace switch, profile, week plans, holds, usage-watch switch, and
+usage-watch schedule. Turning pace on in one does not turn it on in the other.
 
 **What still works:** to share one state directory, set `PACELINE_STATE_DIR` to the same path for
 both. Each session then files under the account of its own credential, so the readings of the two
@@ -101,17 +103,6 @@ PaceLine needs Claude Code 2.1.287 or later, and Python 3.9 or later on `PATH` a
 **What still works:** see [A hook reports a Python
 problem](troubleshooting.md#a-hook-reports-a-python-problem).
 
-### cache-watch does nothing in non-interactive runs
-
-cache-watch keeps no cache in `claude -p` runs. Its wake is a background `Stop` hook, and Claude
-Code kills a background hook that is still running when a `-p` run ends. Ending the session also
-removes the session's cache-watch state. Sessions of the Agent SDK are not tested.
-
-**What you see:** the run ends after its turn, and no wake comes.
-
-**What still works:** cache-watch in an interactive session, in the CLI or in Desktop. See [Hold the
-cache while away](how-to.md#hold-the-cache-while-away).
-
 ### A hard limit refuses a launch in non-interactive runs
 
 At a hard limit, at the weekly reserve's stop line, or in `limit` mode over the current part's
@@ -125,15 +116,16 @@ over the part's share in `limit` mode, fails in the run. `paceline mode inform` 
 removes the plan question.
 
 **What still works:** below the stops and, in `limit` mode, within the part's share, a launch goes
-ahead and nothing asks; in `limit` mode the model reads the `pace:` line. A night queue checks
-`paceline auto` before each item, and `auto` waits or stops at the same limits. See [The
-confirmation at a hard limit](explanation.md#the-confirmation-at-a-hard-limit).
+ahead and nothing asks; in `limit` mode the model reads the `pace:` line. An unattended run, such as
+Stint's, checks `paceline advice` before each item, and the advice waits or stops at the same
+limits. See [The confirmation at a hard limit](explanation.md#the-confirmation-at-a-hard-limit).
 
 ### The settings pane needs the hooks module and is read-only on a phone
 
 `/paceline:settings pane` opens an editable pane that PaceLine's hooks module draws. On a phone,
 Claude Code has no input or select, so the pane is read-only there. Where the module does not run,
-for example where an organization manages Claude Code, there is no pane.
+there is no pane. An organization's `sec-default` guard does not stop the module, so the pane works
+where an organization manages Claude Code.
 
 **What you see:** on a phone, values with no editors and no switch buttons. Where the module does
 not run, `/paceline:settings` reaches the model as the skill's text, which runs `paceline settings`,
@@ -154,165 +146,6 @@ the update.
 **What still works:** `paceline settings` in the Bash tool, and every other PaceLine command and
 skill. A new session lists `/paceline:settings`. See [Change a profile
 setting](how-to.md#change-a-profile-setting).
-
-## context-watch
-
-### context-watch leaves subagent compactions alone and gives no warnings with auto-compaction off
-
-context-watch leaves subagent compactions alone: it writes a snapshot only for the main
-conversation. With auto-compaction off, the context line, if you turned it on, measures against the
-context window, and no warnings come.
-
-**What you see:** no snapshot for a subagent's compaction, and no warning at 85% or 95% while
-auto-compaction is off.
-
-**What still works:** the line, if you turned it on, and a snapshot at each compaction of the main
-conversation. See [Recover after a compaction](how-to.md#recover-after-a-compaction).
-
-### Where an organization manages Claude Code, context-watch does not run
-
-On a Team or Enterprise login, and on a machine with managed settings, Claude Code seats its
-built-in `sec-default` guard. The guard keeps the prompt, tool-batch, session-start and compaction
-events from the hooks module of a plugin you install, and context-watch runs on those events. A fix
-is planned for a later version.
-
-**What you see:** no context line, no warnings at the set levels, no snapshot at a compaction, and
-no note after it to read one.
-
-**What still works:** pace, usage-watch and cache-watch. Naming `paceline@agentpit` in managed
-`appendPlugins` does not lift the guard while you install PaceLine yourself from the public agentpit
-marketplace: a plugin you install is not the organization's plugin, so the guard still skips its
-hooks. An administrator can seat PaceLine as the organization's plugin, which the guard does not
-skip: see [Seat PaceLine as your organization's
-plugin](how-to.md#seat-paceline-as-your-organizations-plugin).
-
-## cache-watch
-
-### cache-watch keeps only one-hour cache entries
-
-cache-watch holds the one-hour prompt cache. A session whose main thread writes five-minute cache
-entries is refused.
-
-**What you see:** `on` prints `not started: this session writes five-minute cache entries;
-cache-watch keeps only one-hour entries`.
-
-**What still works:** the main thread's TTL is Claude Code's setting for the session. See [Hold the
-cache while away](how-to.md#hold-the-cache-while-away).
-
-### cache-watch keeps only the main thread's cache
-
-cache-watch keeps only the main thread's cache. It reads the session's own transcript and skips
-subagent rows; subagents write their rows to separate files. A wake refreshes the main thread's
-cache and never a subagent's.
-
-**What you see:** a finished subagent that you resume after its cache expired starts cold, whatever
-its TTL.
-
-**What still works:** the main conversation stays warm while cache-watch is on.
-
-### A five-minute main thread is refused even with one-hour subagents
-
-Only the main thread's cache entries decide. A session whose main thread writes five-minute entries
-is refused even when its subagents write one-hour entries.
-
-**What you see:** `on` prints `not started: this session writes five-minute cache entries`.
-
-**What still works:** the main thread's TTL is Claude Code's setting for the session; subagent TTL
-settings do not change the decision. See [Hold the cache while
-away](how-to.md#hold-the-cache-while-away).
-
-### cache-watch needs a cache entry first
-
-cache-watch starts only after the main thread has written a cache entry, which tells it the TTL.
-
-**What you see:** `on` in a session with no cache entry yet prints `not started: this session has no
-one-hour cache entry yet`.
-
-**What still works:** take one turn in the session, then run `on` again.
-
-### A computer that sleeps past the cache's expiry loses the cache
-
-The wake runs in a hook process on this computer. A computer that sleeps past the cache's expiry
-misses the wake. cache-watch then turns itself off for the session, and your next message brings a
-one-line notice.
-
-**What you see:** after the computer wakes, your next turn writes the whole context to the cache
-again, and the agent tells you in one line that the cache expired before the wake and cache-watch is
-off. `/paceline:cache-watch status` shows `off (cache expired before the wake)`.
-
-**What still works:** run `/paceline:cache-watch on` to watch the session again, or keep the
-computer awake while you are away, as [Run a night queue](how-to.md#run-a-night-queue) describes in
-its first step.
-
-### Each wake counts against the five-hour limit
-
-Each wake is one turn: it reads the context from the cache and sends a one-line push. The read costs
-far less than the rewrite of the whole context that the first turn after the cache's expiry would
-make (at least 20 times less by [Anthropic's API
-prices](https://platform.claude.com/docs/en/about-claude/pricing#prompt-caching)), but the turn
-still counts against the five-hour limit. How much a cache read weighs in subscription limits is not
-published.
-
-**What you see:** at most `max` (5) wake turns per absence, with the default settings.
-
-**What still works:** lower `--max`, or raise `--lead`, with `/paceline:cache-watch config`. See
-[Hold the cache while away](how-to.md#hold-the-cache-while-away).
-
-### The push reaches a phone only with Remote Control
-
-The wake sends its one-line message as a push only when the session has the push tool: with Remote
-Control on and "Push when Claude decides" enabled in `/config`.
-
-**What you see:** without them, no push on your phone.
-
-**What still works:** without the push tool, the wake posts the line in the session as a reply
-instead.
-
-### cache-watch stops itself when the main thread switches to five-minute entries
-
-When the main thread starts writing five-minute cache entries while cache-watch is on, watching
-stops.
-
-**What you see:** one wake tells you in one line that cache-watch stopped, and
-`/paceline:cache-watch status` shows `off (five-minute cache)`.
-
-**What still works:** once the main thread writes one-hour entries again, run `on` again.
-
-### cache-watch shows times in the machine's time zone
-
-The `Cache kept until` line and the times in `status` use the machine's time zone.
-
-**What you see:** they can differ from pace's times when the profile counts in another zone.
-
-**What still works:** pace's commands keep the profile's zone.
-
-### Idle compaction can run after cache-watch's last wake
-
-In a terminal session whose context is at or above the idle compaction threshold, Claude Code is
-expected to compact the conversation about 54 minutes after the last request ([Claude Code, settings
-reference](https://code.claude.com/docs/en/settings-reference#idlecompaction), read 2026-10-15).
-cache-watch wakes the session no later than 52.5 minutes after the last request, and each wake, as a
-new request, restarts Claude Code's idle count. When the wakes run out, cache-watch turns itself off
-and Claude Code can compact about 54 minutes after the last wake. The threshold is 200,000 tokens
-unless `CLAUDE_CODE_IDLE_COMPACT_MIN_TOKENS` sets it, and idle compaction also needs Claude Code to
-fetch feature flags from Anthropic, so a given session may differ.
-
-**What you see:** `/paceline:cache-watch status` shows `off (no reply after N wakes)`. If Claude
-Code compacted the session in the meantime, the next message in the session sends a summary instead
-of the full history.
-
-**What still works:** run `/paceline:cache-watch on` to watch the session again, or raise the number
-of wakes with `--max`. Setting `idleCompaction` to `false` keeps Claude Code v2.1.290 or later from
-compacting while idle; on an earlier version, setting `autoCompactEnabled` to `false` does.
-
-### cache-watch depends on Claude Code's private transcript format
-
-cache-watch reads the session transcript, a private file of Claude Code, for the main thread's cache
-writes and their TTL.
-
-**What you see:** if the format changes, `on` can report no one-hour cache entry, or wakes can stop.
-
-**What still works:** the rest of PaceLine does not read the transcript.
 
 ## pace
 
@@ -343,12 +176,12 @@ At session end, a hook records the end and releases the session's holds in its o
 Code gives all `SessionEnd` hooks 1.5 seconds together by default, and a plugin's own timeout does
 not raise it, according to Claude Code's documentation. When that budget cuts the release off, or
 another `paceline` call holds the state lock, the next pace call releases them: the hook before a
-launch, `paceline auto`, or a session start. Only a hook stopped before it records the end leaves
+launch, `paceline advice`, or a session start. Only a hook stopped before it records the end leaves
 them until their process is gone or their lease ends.
 
 **What you see:** the holds of an ended session stay active until the next pace call. When the hook
-was stopped before it recorded the end, the night queue counts them as outstanding until the lease
-ends (30 minutes, or 240 minutes for a subagent) or pace finds the owning process gone.
+was stopped before it recorded the end, the advice counts them as outstanding until the lease ends
+(30 minutes, or 240 minutes for a subagent) or pace finds the owning process gone.
 
 **What still works:** `CLAUDE_CODE_SESSIONEND_HOOKS_TIMEOUT_MS`, set where Claude Code starts,
 raises the budget for all `SessionEnd` hooks. `paceline hold list` shows the active holds, and
@@ -370,7 +203,7 @@ minutes. The base reading must lie at least 10 minutes back; until then there is
 that has just reset, and a machine with no history yet, start without one.
 
 **What you see:** `paceline status --json` shows `"burn": null` under `five_hour`, and `paceline
-auto` does not cap its agents by the burn, however fast the percentage rises.
+advice` does not cap its agents by the burn, however fast the percentage rises.
 
 **What still works:** the hard limits and the budget per hour work without the burn rule, and the
 burn rule starts once 10 minutes of readings exist. See [The five-hour burn
@@ -432,7 +265,7 @@ built-in European zones.
 
 ### The settings pane has no switch element
 
-Claude Code gives the pane no switch or checkbox element, so each of the four switches is a button
+Claude Code gives the pane no switch or checkbox element, so each of the three switches is a button
 that reads `● pace` while it is on and `○ pace` while it is off (likewise for each switch).
 
 **What you see:** a button where a switch would be.
@@ -468,9 +301,9 @@ counts inside the part. A part fixed from a reading taken after its start is mar
 was read after the start. The share and the allowed spend of that part can be off by what was spent
 between the start and the reading.
 
-**What still works:** the share is fixed once: a mark set for the running part changes nothing this
-week, while a mark set for a part that has not started moves the shares of the later parts at once.
-See [Plan a week](how-to.md#plan-a-week).
+**What still works:** the share is fixed once: a mark set for the running part splits it at that
+moment (the rest starts with a new share), while a mark set for a part that has not started moves
+the shares of the later parts at once. See [Plan a week](how-to.md#plan-a-week).
 
 ### The reserve stop reads whole points
 
@@ -543,8 +376,8 @@ HTTP 429. PitBoard's model-scoped limits disappear 15 minutes after the last goo
 pace's model-scoped rules stop applying.
 
 **What still works:** the limits writer, the five-hour and weekly readings from each session's own
-turns, pace's budget and recommendation, the night queue (with the data ageing while sessions are
-idle), and PitBoard's five-hour and weekly readings. See [usage-watch shows
+turns, pace's budget and recommendation, the advice (with the data ageing while sessions are idle),
+and PitBoard's five-hour and weekly readings. See [usage-watch shows
 nothing](troubleshooting.md#usage-watch-shows-nothing).
 
 ### usage-watch needs an open session
@@ -561,11 +394,11 @@ idle](how-to.md#keep-usage-current-while-idle).
 usage-watch runs in the session process, so it pauses while the computer sleeps.
 
 **What you see:** no readings while the computer sleeps. When that lasts longer than 30 minutes, the
-data turns `STALE`: the hard limits are skipped and the night queue waits. Readings resume within
+data turns `STALE`: the hard limits are skipped and the advice says wait. Readings resume within
 about 10 seconds of waking.
 
-**What still works:** keep the computer awake, as [Run a night queue](how-to.md#run-a-night-queue)
-describes in its first step.
+**What still works:** keep the computer awake, for example with `caffeinate -i -s claude` on macOS
+or `systemd-inhibit --what=sleep claude` on Linux; Stint's how-to guide covers Windows too.
 
 ### `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC` blocks usage-watch
 
@@ -592,7 +425,7 @@ usage-watch, the data is as of the last turn of any session on this machine.
 
 ### Measured costs and the forecast need care
 
-The measured cost of a hold or queue item is a change in account-wide weekly usage, so parallel work
+The measured cost of a hold or Stint item is a change in account-wide weekly usage, so parallel work
 inflates it. A hold that overlapped another is marked `overlapped`, and `paceline calibrate` leaves
 it out. The forecast and `paceline calibrate` need history: 3 hours of the last day for the
 forecast, and 14 days for calibration.

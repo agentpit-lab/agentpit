@@ -15,16 +15,13 @@ export type Kind =
   | 'num'
   | 'count'
   | 'mb'
-  | 'min'
-  | 'days'
   | 'bool'
-  | 'levels'
   | 'workhours'
   | 'weekday'
   | 'text'
 
-export type Source = 'profile' | 'context_watch' | 'cache_watch' | 'plan'
-export type Tier = 'day' | 'machine' | 'watchers' | 'advanced'
+export type Source = 'profile' | 'plan'
+export type Tier = 'day' | 'machine' | 'advanced'
 
 export type Item = {
   id: string
@@ -43,8 +40,6 @@ export const TOPIC = {
   holds: 'Holds',
   machine: 'This machine',
   zone: 'Time zone',
-  context: 'context-watch',
-  cache: 'cache-watch',
   reserve: 'Weekly reserve',
 } as const
 
@@ -54,8 +49,6 @@ const make =
   (id, tier, topic, label, kind, range, meaning) => ({ id, source, tier, topic, label, kind, range, meaning })
 // One catalogue line per setting; tests/test_settings_catalogue.py reads the `p('<key>'` lines.
 const p = make('profile')
-const c = make('context_watch')
-const w = make('cache_watch')
 // The settings kept in the week plan file of the session's account (not profile keys).
 const h = make('plan')
 
@@ -81,18 +74,12 @@ export const CATALOGUE: readonly Item[] = [
   h('reserve_name', 'day', TOPIC.reserve, 'Reserve name', 'text', '1-32 printable characters, empty: none', 'What the reserve is for; shown in its text. Empty removes the name.'),
   p('five_hour_stop_pct', 'day', TOPIC.five, 'Five-hour stop', 'pct', PCT, 'Five-hour usage from which each Agent or Workflow launch asks first, in working hours and off-hours alike.'),
   // This machine
-  p('memory_guard', 'machine', TOPIC.machine, 'Memory guard', 'bool', 'on or off', 'On: below the free memory floor a launch asks first and the night queue stops. Off: memory is not measured before a launch.'),
+  p('memory_guard', 'machine', TOPIC.machine, 'Memory guard', 'bool', 'on or off', 'On: below the free memory floor a launch asks first and a Stint run stops. Off: memory is not measured before a launch.'),
   p('min_free_commit_mb', 'machine', TOPIC.machine, 'Minimum free memory', 'mb', WHOLE + ' of MB', 'Free memory below which no new work starts. Used only while the memory guard is on.'),
   p('commit_reserve_mb', 'machine', TOPIC.machine, 'Memory kept aside', 'mb', WHOLE + ' of MB', 'Memory left out when counting how many heavy runs fit. Used only while the memory guard is on.'),
   p('heavy_job_mb', 'machine', TOPIC.machine, 'Memory per heavy run', 'mb', WHOLE + ' of MB', 'Memory one heavy run is assumed to take. Used only while the memory guard is on.'),
   p('max_heavy_runs', 'machine', TOPIC.machine, 'Heavy runs at once, at most', 'count', WHOLE, 'Upper bound on parallel heavy runs, whatever the free memory. Used only while the memory guard is on.'),
-  p('max_agents', 'machine', TOPIC.machine, 'Parallel agents, at most', 'count', WHOLE, 'The most parallel agents `paceline auto` gives a queue item.'),
-  // Watchers
-  c('line', 'watchers', TOPIC.context, 'Context gauge on every prompt', 'bool', 'on or off', 'One-line context gauge added to every prompt.'),
-  c('levels', 'watchers', TOPIC.context, 'Warn at', 'levels', 'whole percentages 50-99, rising', 'Context fill, against the auto-compaction point, that triggers a warning.'),
-  c('snapshot_days', 'watchers', TOPIC.context, 'Keep snapshots for', 'days', '1-90 days', 'Days a session snapshot is kept.'),
-  w('lead_minutes', 'watchers', TOPIC.cache, 'Wake before cache expiry', 'min', '1-30 min', 'How long before the one-hour cache expires an idle session wakes.'),
-  w('max_wakes', 'watchers', TOPIC.cache, 'Stop after unanswered wakes', 'count', '1-20', 'Wakes without a reply before watching stops.'),
+  p('max_agents', 'machine', TOPIC.machine, 'Parallel agents, at most', 'count', WHOLE, 'The most parallel agents `paceline advice` gives, and so a Stint run.'),
   // Advanced
   p('five_hour_to_week_pct', 'advanced', TOPIC.five, 'Cost of a full five-hour window', 'pctw', PCT, 'Sets the most any hour can get. paceline calibrate proposes a measured value.'),
   p('subagent_estimate_pct', 'advanced', TOPIC.holds, 'Expected cost of one subagent', 'pctw', PCT, 'What one subagent hold keeps back.'),
@@ -101,7 +88,6 @@ export const CATALOGUE: readonly Item[] = [
 export const TIERS: readonly { tier: Exclude<Tier, 'advanced'>; name: string; color: string }[] = [
   { tier: 'day', name: 'You and your day', color: '#4C8DF0' },
   { tier: 'machine', name: 'This machine', color: '#3BAF6B' },
-  { tier: 'watchers', name: 'Watchers', color: '#B06FE8' },
 ]
 export const ADVANCED_COLOR = 'subtle'
 
@@ -127,7 +113,6 @@ export type Switches = {
   pace: boolean
   usage_watch: boolean
   away: { on: boolean; set_at?: string | null }
-  context_watch: boolean
 }
 export type ZoneInfo = {
   mode: unknown
@@ -140,8 +125,6 @@ export type ZoneInfo = {
 export type Settings = {
   profile: Record<string, Entry>
   plan: Record<string, Entry>
-  context_watch: Record<string, Entry>
-  cache_watch: Record<string, Entry>
   switches: Switches
   timezone: ZoneInfo
   files: Record<string, string | null>
@@ -170,10 +153,6 @@ const num = (n: number) => String(Math.round(n * 100) / 100)
 // MB shown as GiB with one decimal, a trailing ".0" dropped: 2048 -> "2 GiB", 6000 -> "5.9 GiB".
 export const gib = (mb: number) => `${Number((mb / 1024).toFixed(1))} GiB`
 
-const daysText = (n: number) => `${num(n)} ${n === 1 ? 'day' : 'days'}`
-
-export const minutesText = (m: number) => (m >= 60 && m % 60 === 0 ? `${m / 60} h` : `${m} min`)
-
 // The text of one value, or null when its type does not suit the setting (a hand edit).
 function shown(kind: Kind, v: unknown): string | null {
   switch (kind) {
@@ -196,14 +175,8 @@ function shown(kind: Kind, v: unknown): string | null {
       return isNum(v) ? num(v) : null
     case 'mb':
       return isNum(v) ? gib(v) : null
-    case 'min':
-      return isNum(v) ? minutesText(v) : null
-    case 'days':
-      return isNum(v) ? daysText(v) : null
     case 'bool':
       return typeof v === 'boolean' ? (v ? 'on' : 'off') : null
-    case 'levels':
-      return Array.isArray(v) && v.length > 0 && v.every(isNum) ? v.map(n => `${num(n)} %`).join(', ') : null
     case 'workhours': {
       const parsed = parseWorkHours(v)
       return parsed ? formatWorkHours(parsed[0], parsed[1]) : null
@@ -285,14 +258,13 @@ export const detailLine = (s: Settings, item: Item): string => {
 // ---------------------------------------------------------------------------------------------
 // Switches and Advanced.
 
-export const SWITCH_NAMES = ['pace', 'usage-watch', 'away', 'context-watch'] as const
+export const SWITCH_NAMES = ['pace', 'usage-watch', 'away'] as const
 
 export function switchStates(sw: Switches): { name: (typeof SWITCH_NAMES)[number]; on: boolean }[] {
   return [
     { name: 'pace', on: sw.pace === true },
     { name: 'usage-watch', on: sw.usage_watch === true },
     { name: 'away', on: sw.away?.on === true },
-    { name: 'context-watch', on: sw.context_watch === true },
   ]
 }
 
@@ -316,14 +288,13 @@ export const topicLabel = (s: Settings, topic: string): string => {
 
 const table = (rows: string[][]): string[] => ['| Setting | Value |', '|---|---|', ...rows.map(r => `| ${r.join(' | ')} |`)]
 
-// The two context-watch rows read as general settings without their owner, so the summary names it.
-const summaryLabel = (i: Item): string =>
-  i.source === 'context_watch' && (i.id === 'levels' || i.id === 'snapshot_days') ? `${i.label} (context-watch)` : i.label
+// The line that tells where the two watchers went; the text report, the summary and the pane carry it alike.
+export const MOVED_LINE = 'context-watch and cache-watch moved to the PitCrew plugin: /pitcrew:context-watch, /pitcrew:cache-watch.'
 
 export function summary(s: Settings, plugin: string): string {
   const out = [`PaceLine settings · ${switchLine(s.switches)}`, '']
   for (const { tier, name } of TIERS) {
-    out.push(`### ${name}`, '', ...table(rowsOf(tier).map(i => [summaryLabel(i), cell(s, i)])), '')
+    out.push(`### ${name}`, '', ...table(rowsOf(tier).map(i => [i.label, cell(s, i)])), '')
   }
   const changed = advancedChanged(s)
   const names = changed.length ? `: ${changed.map(i => i.label).join(', ')}` : ''
@@ -331,6 +302,7 @@ export function summary(s: Settings, plugin: string): string {
   out.push(`Topics: ${ADVANCED_TOPICS.join(', ')}.`, '')
   out.push('A ● marks a value that differs from the default.')
   out.push(`\`/${plugin}:settings advanced [topic]\` lists the Advanced settings; \`/${plugin}:settings pane\` changes a value.`)
+  out.push('', MOVED_LINE)
   return out.join('\n')
 }
 
@@ -363,12 +335,10 @@ export function parseSettings(text: string): Settings | null {
   if (typeof raw !== 'object' || raw === null) return null
   const o = raw as Record<string, unknown>
   const isObj = (v: unknown) => typeof v === 'object' && v !== null && !Array.isArray(v)
-  if (!isObj(o.profile) || !isObj(o.context_watch) || !isObj(o.cache_watch) || !isObj(o.switches) || !isObj(o.timezone)) return null
+  if (!isObj(o.profile) || !isObj(o.switches) || !isObj(o.timezone)) return null
   return {
     profile: o.profile as Settings['profile'],
     plan: (isObj(o.plan) ? o.plan : {}) as Settings['plan'],
-    context_watch: o.context_watch as Settings['context_watch'],
-    cache_watch: o.cache_watch as Settings['cache_watch'],
     switches: o.switches as Switches,
     timezone: o.timezone as ZoneInfo,
     files: (isObj(o.files) ? o.files : {}) as Record<string, string | null>,
@@ -386,19 +356,18 @@ export type ZoneDraft = { mode: 'machine' | 'fixed'; zone: string }
 export const DAYS_SHORT: readonly string[] = DAYS
 
 // How far − and + move a number, in the unit the row shows.
-export const STEP: Partial<Record<Kind, number>> = { mb: 1024, count: 1, min: 5, days: 1, pct: 1, pctw: 1, num: 0.1 }
+export const STEP: Partial<Record<Kind, number>> = { mb: 1024, count: 1, pct: 1, pctw: 1, num: 0.1 }
 
 const round2 = (n: number) => Math.round(n * 100) / 100
 
 export const stepped = (kind: Kind, value: number, direction: 1 | -1): number =>
   Math.max(0, round2(value + direction * (STEP[kind] ?? 1)))
 
-// The text an editor's Input shows for a value: MB as GiB, levels as a list, none as empty.
+// The text an editor's Input shows for a value: MB as GiB, none as empty.
 export function toEdit(kind: Kind, v: unknown): string {
   if (v === null || v === undefined) return ''
   if (kind === 'mb' && isNum(v)) return String(Number((v / 1024).toFixed(2)))
   if (kind === 'text' && typeof v !== 'string') return ''
-  if (kind === 'levels' && Array.isArray(v)) return v.join(', ')
   return String(v)
 }
 
@@ -408,10 +377,6 @@ export type Parsed = { ok: true; value: unknown } | { ok: false }
 export function fromEdit(kind: Kind, text: string): Parsed {
   const t = text.trim()
   if (kind === 'text') return { ok: true, value: t }
-  if (kind === 'levels') {
-    const parts = t.split(/[,\s]+/).filter(Boolean).map(Number)
-    return parts.length > 0 && parts.every(Number.isFinite) ? { ok: true, value: parts } : { ok: false }
-  }
   if (t === '') return { ok: false }
   const n = Number(t.replace(',', '.'))
   if (!Number.isFinite(n)) return { ok: false }
@@ -451,15 +416,7 @@ export function writeArgs(item: Item, value: unknown, ctx: WriteContext = {}): s
     if (item.id === 'reserve_name') return ['reserve', `--name=${value === null || value === undefined ? '' : String(value)}`, '--json']
     return null
   }
-  if (item.source === 'context_watch') {
-    if (item.id === 'line') return ['context-watch', 'config', '--line', value === true ? 'on' : 'off']
-    if (item.id === 'levels' && Array.isArray(value)) return ['context-watch', 'config', '--levels', value.join(',')]
-    if (item.id === 'snapshot_days') return ['context-watch', 'config', '--days', String(value)]
-    return null
-  }
-  const flag = item.id === 'lead_minutes' ? '--lead' : item.id === 'max_wakes' ? '--max' : null
-  if (!flag) return null
-  return ['cache-watch', 'config', flag, String(value)]
+  return null
 }
 
 // The write that turns a time-zone draft into the profile's mode and zone.
@@ -468,13 +425,6 @@ export function zoneWriteArgs(draft: ZoneDraft, z: ZoneInfo): string[] {
   // A fixed zone equal to the one in use only switches the mode off; another name sets the zone, which also fixes the mode.
   if (draft.zone === z.effective && z.mode !== 'fixed') return ['profile', 'set', 'timezone_mode', JSON.stringify('fixed'), '--json']
   return ['profile', 'set', 'timezone', JSON.stringify(draft.zone), '--json']
-}
-
-// The watcher values the CLIs take as integers; a fraction is refused here, before anything is written.
-export function wholeOnly(item: Item, value: unknown): boolean {
-  if (item.source === 'profile' || item.source === 'plan') return true
-  const whole = (n: unknown) => typeof n === 'number' && Number.isInteger(n)
-  return item.id === 'levels' ? Array.isArray(value) && value.every(whole) : item.id === 'line' ? true : whole(value)
 }
 
 // What a run that ran into its timeout shows; a write may have been applied before the cut.
@@ -493,8 +443,6 @@ export function switchArgs(name: (typeof SWITCH_NAMES)[number], on: boolean, ses
       return ['usage-watch', on ? 'on' : 'off']
     case 'away':
       return on ? ['away', 'on', ...(sessionId ? ['--session', sessionId] : [])] : ['away', 'off']
-    case 'context-watch':
-      return ['context-watch', 'config', on ? '--on' : '--off']
   }
 }
 
@@ -819,9 +767,10 @@ export const unplannedLine = (view: PlanView): string | null =>
   isNum(view.unplanned_pct) ? `${one(view.unplanned_pct)} % unplanned, expires at ${resetText(view)}` : null
 
 const NO_EFFECT_TEXT: Record<string, string> = {
-  current: 'is the current part, fixed at its start',
+  current: 'is the current part, not split now',
   ended: 'has ended',
   'outside-week': 'lies outside this week',
+  unchanged: 'already has that mark',
 }
 
 // What a `paceline plan set --json` answer reports, and the view it carries.
@@ -842,6 +791,10 @@ export function calendarChange(stdout: string, date: string, kind: 'work' | 'off
       text += ` · ${glyph(item.kind)} ${why}: stored, this week's plan does not change`
     }
   }
+  // A change to the current part splits it at the moment of the change: the rest starts with a new share.
+  if (isRec(raw.split)) text += ` · ${glyph(raw.split.kind)} is the current part: the change applies from now`
+  // While the away marker is on the part is not split: the mark is stored for later parts only.
+  if (isRec(raw.split_refused)) text += ` · ${glyph(raw.split_refused.kind)} is the current part and the away marker is on: not split`
   if (raw.written === false) text += ' · clock is ahead of the wall clock: nothing written'
   // A clock ahead of the wall clock wrote nothing: the carried plan is not the stored one, so the pane reads again.
   return { text, plan: raw.written === false ? null : parsePlan(raw.plan) }

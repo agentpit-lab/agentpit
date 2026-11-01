@@ -55,6 +55,19 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 try:
+    import advice
+    from advice import UNKNOWN_NOTE, floor_gb, stop_figures  # noqa: F401 - one chokepoint: advice.py owns them
+except Exception:  # noqa: BLE001 - an import error must not crash the hook; only the memory floor is left
+    advice = None
+    UNKNOWN_NOTE = ""
+
+    def floor_gb(mb):
+        return f"{mb / 1024:.1f}".removesuffix(".0")
+
+    def stop_figures(_status):
+        return None, ""
+ADVICE_VERSION = advice.VERSION if advice else 1
+try:
     import limits_file
 except Exception:  # noqa: BLE001 - the hook still works, untraced, when the module can't load
     limits_file = None
@@ -125,53 +138,57 @@ def release_launch(session, launch_key):
         note_failure("hook.pre_agent.release", exit_code=out.returncode, stderr=out.stderr.strip()[-300:])
 
 
-def floor_gb(mb):
-    """A floor in GB with one decimal, dropped when whole: 2048 gives 2, 1500 gives 1.5 (never a whole number
-    above a fractional free figure, which would make a hold read as a mistake)."""
-    return f"{mb / 1024:.1f}".removesuffix(".0")
+def advice_of(status):
+    """The unattended-work advice the stops are read from.
 
-
-UNKNOWN_NOTE = " (highest of the accounts on this machine; this session's account is unknown)"
-
-
-def stop_figures(status):
-    """(figures, note): where the five-hour and weekly stops read their numbers.
-
-    The status itself, or, while this session's account has no weekly record (the data is stale), the most
-    restrictive fresh figures of any account that the status carries as `stops` (pace.restrictive_stops) with
-    a note saying so; None when it carries none, and there is nothing to stop on. The one place that makes
-    the choice, for the gates and the hold text."""
-    if not (status.get("data") or {}).get("stale"):
-        return status, ""
-    unknown = status.get("stops")
-    return (unknown, UNKNOWN_NOTE) if isinstance(unknown, dict) else (None, "")
+    Built from the status in hand: the build is pure and cheap, and it reads the very fields the gates and the
+    hold text read, so the stops can never disagree with them (a status edited after pace.py attached its
+    `advice`, as the tests do, would otherwise leave the attached one behind). When the build fails, the advice
+    pace.py attached (format version 1) is used; failing that, the safety reasons of the status itself, then of the
+    hook's own status (the memory floor only), neither through `advice.build`; failing that, the floor is
+    checked here."""
+    try:
+        return advice.build(status)
+    except Exception as error:  # noqa: BLE001 - the hook must never fail a launch
+        note_failure("hook.pre_agent.advice", error=error)
+    try:
+        given = status.get("advice")
+        if (isinstance(given, dict) and given.get("advice_version") == ADVICE_VERSION
+                and isinstance(given.get("reasons"), list)):
+            return given
+    except Exception as error:  # noqa: BLE001
+        note_failure("hook.pre_agent.advice", error=error)
+    try:
+        # Neither goes through `advice.build`: the section-guarded safety rows read the status in hand.
+        return {"advice_version": ADVICE_VERSION, "reasons": advice.safety_reasons(status)}
+    except Exception as error:  # noqa: BLE001
+        note_failure("hook.pre_agent.advice", error=error)
+    own = None
+    try:
+        own = own_status() or {}
+        return {"advice_version": ADVICE_VERSION, "reasons": advice.safety_reasons(own)}
+    except Exception as error:  # noqa: BLE001
+        note_failure("hook.pre_agent.advice", error=error)
+    reasons = []
+    try:
+        host = (own or {}).get("host") or {}
+        free, floor = host.get("free_commit_mb"), host.get("min_free_commit_mb")
+        if free is not None and floor is not None and free < floor:
+            reasons.append({"code": "memory", "effect": "stop",
+                            "text": f"free memory {free / 1024:.1f} GB < {floor_gb(floor)} GB, "
+                                    "a runaway process can crash the host"})
+    except Exception as error:  # noqa: BLE001
+        note_failure("hook.pre_agent.advice", error=error)
+    return {"advice_version": ADVICE_VERSION, "reasons": reasons}
 
 
 def hard_stops(status):
     """The hard stops that hold, as (kind, reason) pairs: kind is memory, five_hour, weekly or weekly_scoped.
 
-    One chokepoint for the gates and the hold text: `weekly` is week used at 100, `weekly_scoped` is only the
-    session's model's bucket at 100 (`effective_pct` tests the higher of the two)."""
-    stops = []
-    host = status.get("host") or {}
-    commit, floor = host.get("free_commit_mb"), host.get("min_free_commit_mb")
-    if commit is not None and floor is not None and commit < floor:
-        stops.append(("memory", f"free memory {commit / 1024:.1f} GB < {floor_gb(floor)} GB, "
-                                "a runaway process can crash the host"))
-    figures, note = stop_figures(status)
-    if figures is None:
-        return stops
-    five = figures.get("five_hour") or {}
-    used, threshold = five.get("used_pct"), five.get("threshold_pct")
-    if used is not None and threshold is not None and used >= threshold:
-        stops.append(("five_hour", f"5h window {used:.0f}% >= {threshold:.0f}% stop, "
-                                   f"resets {five.get('reset_local') or 'later'}{note}"))
-    weekly = figures.get("weekly") or {}
-    if (weekly.get("effective_pct") or 0) >= 100:
-        week = weekly.get("seven_day_pct")
-        plain = isinstance(week, (int, float)) and week >= 100
-        stops.append(("weekly" if plain else "weekly_scoped", f"weekly limit exhausted{note}"))
-    return stops
+    One chokepoint for the gates and the hold text, read from the advice (advice.py owns the rules and the
+    texts): `weekly` is week used at 100, `weekly_scoped` is only the session's model's bucket at 100."""
+    return [(r["code"], r["text"]) for r in advice_of(status)["reasons"]
+            if r["code"] in ("memory", "five_hour", "weekly", "weekly_scoped")]
 
 
 def hard_limits(status):
@@ -230,14 +247,10 @@ def plan_limits(status):
 def reserve_limits(status):
     """The reserve reason (a list of one text, or none): the week's spend is past the reserve's stop line.
 
-    One reason only when `status["reserve"]["over"]` is True. A missing or malformed object, a missing
-    field or any exception gives none, so the hard limits never depend on it."""
+    The text of the advice's `reserve` reason. A failure of any kind gives none, so the hard limits never
+    depend on it."""
     try:
-        reserve = status.get("reserve")
-        if not isinstance(reserve, dict) or reserve.get("over") is not True:
-            return []
-        return [f"weekly {reserve['label']} kept until {reserve['release_text']}: "
-                f"week used {reserve['used_pct']:.0f} % >= {reserve['stop_at_pct']:.0f} %"]
+        return [r["text"] for r in advice_of(status)["reasons"] if r["code"] == "reserve"]
     except Exception:  # noqa: BLE001 - a broken reserve object must not change the verdict
         return []
 
@@ -453,6 +466,15 @@ def hold_text(status, verdict, reasons, why=None):
     return " ".join([hold_lead(verdict, why)] + sentences + [tail])
 
 
+def guarded(gate, status):
+    """A gate's reasons, or none when it raises: a failing gate is logged and never fails the launch."""
+    try:
+        return gate(status)
+    except Exception as error:  # noqa: BLE001 - the hook must never fail a launch
+        note_failure("hook.pre_agent.gate", gate=gate.__name__, error=error)
+        return []
+
+
 def main():
     if not pace_on():
         return 0
@@ -470,11 +492,11 @@ def main():
     if not status:
         # Whatever went wrong with status, the memory floor does not depend on it.
         status = own_status()
-        if not status or not hard_limits(status):
+        if not status or not guarded(hard_limits, status):
             return 0
-    limits = hard_limits(status)
-    reserve = reserve_limits(status)
-    plan_reasons = plan_limits(status)
+    limits = guarded(hard_limits, status)
+    reserve = guarded(reserve_limits, status)
+    plan_reasons = guarded(plan_limits, status)
     verdict = None
     why = None
     if limits or reserve or plan_reasons:

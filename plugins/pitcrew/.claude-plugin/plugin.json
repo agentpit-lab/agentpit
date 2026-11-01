@@ -1,0 +1,8 @@
+{
+  "name": "pitcrew",
+  "version": "0.1.0",
+  "description": "Keeps a Claude Code session's context and prompt cache in shape. context-watch (on by default): warns the agent before auto-compaction and snapshots the session at each compaction; can also show its context against the auto-compaction point on every prompt (off by default). cache-watch (per session, on request): wakes an idle session before its one-hour prompt cache expires. Reads the settings PaceLine kept for the same watchers until PitCrew writes its own, in state/pitcrew under $CLAUDE_CONFIG_DIR, else ~/.claude. Requires Claude Code 2.1.287+ and Python 3.9+.",
+  "types": "./types/index.d.ts",
+  "author": {"name": "agentpit-lab", "url": "https://github.com/agentpit-lab"},
+  "keywords": ["prompt-cache", "context", "compaction", "usage-limits", "hooks"]
+}

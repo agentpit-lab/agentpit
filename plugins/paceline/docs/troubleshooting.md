@@ -90,8 +90,8 @@ kept, and against the memory floor with the guard on.
 
 **Cause:** the newest reading is older than 30 minutes. Without usage-watch, readings refresh only
 when a session on this machine takes a model turn, so the data ages while no session works. While
-the data is stale, the hard limits on the five-hour and weekly windows are skipped, and the night
-queue waits.
+the data is stale, the hard limits on the five-hour and weekly windows are skipped, and the advice
+says wait.
 
 **Check:**
 
@@ -173,58 +173,11 @@ without the debug flag.
 **Fix:** install Python 3.9 or later and put it on the `PATH` as `python3` or `python`, then start a
 new session.
 
-## The night queue waits all night
+## The night queue waits or stops
 
-`paceline auto` keeps exiting 10 (`wait`), and no item starts.
-
-**Cause:** `auto` waits when one of these holds:
-
-- The usage data is stale. If the agent only waits between calls, no session takes a turn, and
-  without usage-watch the data does not refresh.
-- Five-hour usage is at the five-hour stop (95% by default).
-- The five-hour burn rate would reach the five-hour stop (95% by default) before the window resets,
-  and the burn leaves room for no agent (`max_parallel_agents` is 0). `reasons` then holds the burn
-  reason, for example `5h burn 42.7%/h vs budget 13.9%/h: 95% at <time>, before reset <time>`.
-- An item is still `running`, or the next item's dependencies are not done. An item that was started
-  and never marked done keeps the queue waiting.
-- There is no usage data at all.
-
-**Check:**
-
-```
-paceline auto --json
-paceline queue list
-```
-
-`reasons` in the JSON names the cause, and `wait_until` is set while the five-hour window is full or
-burning too fast. `paceline queue list` shows items stuck in `running`.
-
-**Fix:** for stale data, turn on usage-watch before the night. For an item stuck in `running`, run
-`paceline queue done <id>`, `paceline queue fail <id>`, or `paceline queue defer <id>`. For a full
-five-hour window, the queue resumes after `wait_until`. For a burn, run `paceline auto` again later:
-the queue starts as soon as the rate falls.
-
-## The night queue stops at once
-
-`paceline auto` exits 11 (`stop`) with `night budget exhausted` before any item starts.
-
-**Cause:** the night queue spends tonight's off-hours share, and off-hours are marked 0 until you
-mark them, so the share and the allowance are 0. A mark set while tonight's off-hours are already
-running changes nothing until the next night, because a part's share is fixed when it starts.
-
-**Check:**
-
-```
-paceline plan
-paceline auto --json
-```
-
-`paceline plan` shows tonight's ☾ part with `off` and 0 %; in `paceline status --json`,
-`night.allowance_pct` is 0.
-
-**Fix:** mark the night before it starts, for example `paceline plan set today --off-hours 0.5`, or
-every Monday night with `paceline plan template set mon --off-hours 0.5`. `paceline queue add`
-prints the command when tonight's share is 0.
+The night queue moved to the Stint plugin, with its troubleshooting: see Stint's documentation.
+`paceline advice` keeps the reasons it gives, and `paceline queue` and `paceline auto` print where
+they went and exit with status 2.
 
 ## Status says account unknown
 
@@ -253,8 +206,8 @@ again or allow the request. `no-credential` is a different case: the session has
 no first-party credential, and its readings are untagged. `no-state-key` means the profile request
 failed outside the desktop app and `.claude.json` names no account either; PaceLine then writes
 readings with no account, as for `no-account`. With `no-file`, `unreadable`, or `no-account`,
-PaceLine reads the top level of the limits file, which mirrors the newest partition. The night queue
-waits with `account unknown` while a running night cannot name its account.
+PaceLine reads the top level of the limits file, which mirrors the newest partition. In the Stint
+plugin, `stint next` waits with `account unknown` while a running night cannot name its account.
 
 **Check:**
 

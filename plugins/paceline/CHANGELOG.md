@@ -1,5 +1,81 @@
 # Changelog
 
+## 0.7.0 - 2026-11-01
+
+### Changed
+
+- `paceline advice` merges the sessions' latest readings once more before it answers when the five-hour window is
+  at 85 % or more and the data is 125 seconds old or older, as `paceline auto` did for the night queue.
+
+### Removed
+
+- The night queue moved to the new Stint plugin (`/plugin install stint@agentpit`): `stint add|list|report|start|done|fail|defer|retry|remove|clear-done`
+  take the place of `paceline queue ...`, `stint next [--start-run]` the place of `paceline auto [--start-run]`, and
+  `/stint:run` and `/stint:queue` the place of `/paceline:night-queue`. Stint obeys `paceline advice`, and without
+  PaceLine stops at its own week and five-hour limits. `paceline queue ...` and `paceline auto ...` now print where
+  they went and exit with status 2.
+- The `night-queue` skill, the morning report template (`templates/morning-report.md`) and `scripts/night-power.ps1`
+  moved to Stint with the queue.
+- `night-queue.json` is no longer read or written by PaceLine; Stint reads it once, until it has a queue of its own.
+- The leftover pool (`paceline queue --pool`, `leftover-pool.json`) is gone, and its items are not carried over:
+  queue such items as ordinary items on the last night. Under the week plan the last part's share takes what is left
+  of the week.
+- `paceline hold acquire --kind queue` and `--item` stay: Stint takes its holds with them, and `calibrate` still
+  counts a `queue` hold with an actual.
+- The budget simulator page shows `paceline advice` (the answer Stint obeys) in off-hours, in place of `paceline auto`.
+- context-watch and cache-watch moved to the PitCrew plugin: use `/pitcrew:context-watch` and
+  `/pitcrew:cache-watch`. PitCrew reads the settings of the two watchers from PaceLine's files until it writes its
+  own, so the values carry over. `paceline cache-watch` and `paceline context-watch` now print where they went
+  and exit with status 2; `paceline settings` no longer shows the context-watch switch or the two watchers'
+  settings and names where they went (`--json` gains `moved`).
+- Updating PaceLine without installing PitCrew stops context-watch, which was on by default, with no warning.
+  Install PitCrew with `/plugin install pitcrew@agentpit`.
+- A session that cache-watch watched is no longer watched until `/pitcrew:cache-watch on`.
+- `paceline settings --json` drops `context_watch`, `cache_watch`, `switches.context_watch`,
+  `files.context_watch` and `files.cache_watch`, and gains `moved`.
+- The settings summary and the settings pane drop the Watchers tier and the context-watch switch.
+
+### Added
+
+- `paceline advice [--json]`: the unattended-work advice, at any hour. It says `start`, `wait` or `stop` (exit 0, 10
+  or 11) with the budget (what is left of the current part's share, less the outstanding holds), the agent count,
+  `wait_until` and coded reasons (`memory`, `five_hour`, `weekly`, `weekly_scoped`, `reserve`, `no_usage`, `stale`,
+  `plan_error`, `unplanned`, `share_zero`, `share_used`, `five_hour_burn`). A part with no share waits and the reason
+  `share_zero` names the command that plans one. The format is versioned (`advice_version` 1; a later version adds
+  fields, a changed meaning raises it), `status --json` and `auto --json` carry it as `advice`, and the command writes
+  `<state>/advice-<key>.json` for a known account. It takes no hold. See the reference page.
+- `status --json` gains `budget_part.next_planned` (the first later part with weight) and `stops.five_hour.reset`.
+- `paceline plan offer [--refuse]` and the off-hours offer. On the operator's own prompt in an off-hours
+  part that has no share and whose mark the operator did not set, with pace on, PaceLine adds one line for the
+  model, once for each part: it asks whether to plan the part (`light`, `normal` or `heavy`). `--refuse` records a
+  no, and no offer follows until the part ends. The record is `<state>/plan-offer-<key>.json`.
+- The last-request file, `<state>/last-request-<key>.json` (`version`, `account`, `requested_at`), written after
+  every model step that returned usage, main agent and subagents alike, for a known account. PitBoard reads it to
+  tell whether anything was spent in a period when the account's whole percent has not moved. See the reference page.
+
+### Changed
+
+- `paceline auto` builds on the advice. Its budget is the advice's: what is left of the current part's share, less
+  the outstanding holds, instead of the night allowance capped by the five-hour windows and memory; those caps now
+  act as reasons. The agent count, `wait_until` and the reasons come from the advice, and a wait that reaches past
+  the end of the night becomes a stop with `nothing can start before the night ends`. `--start-run` records the
+  advice's budget as `allowance_pct`. The JSON keeps its keys and gains `advice`.
+- The pre-agent hook takes its memory, five-hour, weekly and reserve stops from the advice; its verdicts and texts are
+  unchanged.
+- A plan change that gives the running part another mark (`paceline plan set`, `plan reset`,
+  `plan template set` or `reset`, or the Calendar's - and +) splits the part at that moment: the first piece keeps
+  its share and spending, and the rest starts now with a share from what is left of the week. While the away marker is
+  on the part is not split and the command says so.
+- The Calendar shows - and + on every part that has not ended, the running one included.
+- The night queue's hint for tonight's running off-hours part names the command that plans the rest of the night.
+- The five-hour burn file carries `budget_per_hour_pct: null` in the last 15 minutes before the reset.
+
+### Fixed
+
+- A usage reading is kept only when the profile endpoint confirms the account it was tagged with, so a reading of
+  one account is no longer filed under another, including right after a weekly reset.
+- `paceline plan` shows a split part as one part with its pieces, not as the later piece alone.
+
 ## 0.6.0 - 2026-10-31
 
 ### Added

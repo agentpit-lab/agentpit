@@ -1,0 +1,73 @@
+{
+  "modules": [
+    "./register.tsx"
+  ],
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "asyncRewake": true,
+            "timeout": 3900,
+            "command": "if python3 -c \"\" </dev/null >/dev/null 2>&1; then exec python3 \"${CLAUDE_PLUGIN_ROOT}/scripts/cache_watch.py\" hook stop; fi; exec python \"${CLAUDE_PLUGIN_ROOT}/scripts/cache_watch.py\" hook stop"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "timeout": 5,
+            "command": "if python3 -c \"\" </dev/null >/dev/null 2>&1; then exec python3 \"${CLAUDE_PLUGIN_ROOT}/scripts/cache_watch.py\" hook prompt; fi; exec python \"${CLAUDE_PLUGIN_ROOT}/scripts/cache_watch.py\" hook prompt"
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "timeout": 5,
+            "command": "if python3 -c \"\" </dev/null >/dev/null 2>&1; then exec python3 \"${CLAUDE_PLUGIN_ROOT}/scripts/cache_watch.py\" hook session-end; fi; exec python \"${CLAUDE_PLUGIN_ROOT}/scripts/cache_watch.py\" hook session-end"
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "timeout": 5,
+            "command": "if python3 -c \"\" </dev/null >/dev/null 2>&1; then exec python3 \"${CLAUDE_PLUGIN_ROOT}/scripts/context_watch.py\" hook session-start; fi; exec python \"${CLAUDE_PLUGIN_ROOT}/scripts/context_watch.py\" hook session-start"
+          }
+        ]
+      },
+      {
+        "matcher": "compact",
+        "hooks": [
+          {
+            "type": "command",
+            "timeout": 5,
+            "command": "if python3 -c \"\" </dev/null >/dev/null 2>&1; then exec python3 \"${CLAUDE_PLUGIN_ROOT}/scripts/cache_watch.py\" hook compact; fi; exec python \"${CLAUDE_PLUGIN_ROOT}/scripts/cache_watch.py\" hook compact"
+          }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "timeout": 5,
+            "command": "if python3 -c \"\" </dev/null >/dev/null 2>&1; then exec python3 \"${CLAUDE_PLUGIN_ROOT}/scripts/cache_watch.py\" hook compact; fi; exec python \"${CLAUDE_PLUGIN_ROOT}/scripts/cache_watch.py\" hook compact"
+          }
+        ]
+      }
+    ]
+  }
+}

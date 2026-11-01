@@ -1,0 +1,975 @@
+<!doctype html>
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<meta name="pb-twin" content="../how-to.html">
+<script>
+// Language choice: remembered per viewer, followed from the browser on the first visit.
+// Inlined as the first script in <head>, so it runs before the body exists: the counterpart
+// comes from <meta name="pb-twin">, which the build writes before this script and omits when the
+// other language is a placeholder.
+;(() => {
+  const KEY = 'pb:lang'
+  const meta = name => {
+    const m = document.querySelector(`meta[name="${name}"]`)
+    return m ? m.getAttribute('content') : null
+  }
+  const valid = v => (v === 'uk' || v === 'en' ? v : null)
+
+  // A read alone cannot tell blocked storage from empty storage, and a redirect without a working
+  // store would bounce the reader back on every page.
+  let works = false
+  try {
+    localStorage.setItem(KEY + '-probe', '1')
+    localStorage.removeItem(KEY + '-probe')
+    works = true
+  } catch { /* storage blocked */ }
+
+  function preferred() {
+    try {
+      const stored = valid(localStorage.getItem(KEY))
+      if (stored) return stored
+    } catch { /* storage blocked */ }
+    for (const tag of navigator.languages || []) {
+      const primary = valid(String(tag).toLowerCase().split('-')[0])
+      if (primary) return primary
+    }
+    return 'en'
+  }
+
+  // A redirect carries ?pb-lang=<language>. Where each file has its own storage (some browsers
+  // scope localStorage per file:// file) the two pages can disagree forever; a page that arrives
+  // through a hop trusts it, stores it and never redirects, so a hop happens at most once.
+  const hop = (/[?&]pb-lang=([^&#]*)/.exec(location.search || '') || [])[1]
+  const hopped = valid(hop)
+  const marked = (href, code) => href.split('#')[0].split('?')[0] + '?pb-lang=' + code + location.hash
+
+  const twin = meta('pb-twin')
+  if (hop !== undefined) {
+    if (hopped && works) {
+      try { localStorage.setItem(KEY, hopped) } catch { /* storage blocked */ }
+    }
+    try {
+      if (typeof history !== 'undefined' && history.replaceState) {
+        const rest = (location.search || '').slice(1).split('&').filter(p => p && !p.startsWith('pb-lang='))
+        history.replaceState(history.state, '', location.pathname + (rest.length ? '?' + rest.join('&') : '') + location.hash)
+      }
+    } catch { /* a refused rewrite must not stop the click listener below */ }
+  }
+
+  // Going Back to the page the reader just left reruns this script with the stored choice, which
+  // would send the reader forward again and make Back unusable.
+  let traversal = false
+  try {
+    const entry = performance.getEntriesByType && performance.getEntriesByType('navigation')[0]
+    traversal = !!entry && entry.type === 'back_forward'
+  } catch { /* no navigation timing */ }
+
+  if (!hopped && !traversal && works && twin && preferred() !== document.documentElement.getAttribute('lang')) {
+    location.replace(marked(twin, preferred()))
+  }
+
+  document.addEventListener('click', event => {
+    const link = event.target && event.target.closest && event.target.closest('nav[data-pb-lang] a')
+    if (!link) return
+    const code = valid(link.getAttribute('hreflang'))
+    const href = link.getAttribute('href')
+    // The English page of a placeholder is a way out of an empty page, not a choice of language.
+    if (code && !(code === 'en' && meta('pb-placeholder'))) {
+      try { localStorage.setItem(KEY, code) } catch { /* storage blocked */ }
+      if (href) link.setAttribute('href', marked(href, code))
+    } else if (href) {
+      link.setAttribute('href', href.split('#')[0].split('?')[0] + location.hash)
+    }
+  })
+})()
+</script>
+<title>Практичні інструкції PitCrew</title>
+<style>
+/* Layout: page sections on the left, the reading column in the middle, the glossary on the right;
+   the column opens with a TL;DR and an instrument (the thing explained, live), then sections that
+   each answer one question. Page chrome stays quiet: the plugins' own signal
+   colours (calm, watch, act) are the only loud colours on a page. */
+:root {
+  --bg: #f8f7f3;
+  --surface: #ffffff;
+  --surface-2: #f1efe8;
+  --ink: #1d1f1c;
+  --muted: #67695f;
+  --line: #e2dfd5;
+  --accent: #0b6a88;
+  --accent-ink: #ffffff;
+  --accent-soft: #e1eef2;
+  --focus: #0b6a88;
+
+  /* Signal colours as Claude Code Desktop draws them (plugins/pitboard/hooks/desktop.ts). */
+  --calm: #8a8a85;
+  --watch: #c4841d;
+  --act: #e0483e;
+  --cold: #2a9db5;
+  --on: #3d9a5c;
+  --watch-soft: #f6ead6;
+  --act-soft: #fadedb;
+
+  /* The specimen surfaces: a terminal and the Desktop app, each in its own theme. */
+  --term-bg: #fbfbf9;
+  --term-fg: #000000;
+  --term-line: #dcdcd6;
+  /* Claude Code's theme keys as its light and dark themes resolve them: the terminal row draws in
+     these keys, so a specimen shows the colours a reader's own terminal would. */
+  --term-text: #000000;
+  --term-inactive: #666666;
+  --term-subtle: #afafaf;
+  --term-warning: #966c1e;
+  --term-error: #ab2b3f;
+  --term-success: #2c7a39;
+  --term-planMode: #006666;
+  --term-suggestion: #5769f7;
+  --term-autoAccept: #8700ff;
+  --term-bashBorder: #ff0087;
+  --desk-bg: #ffffff;
+  --desk-fg: #2b2b29;
+  --desk-line: #e4e4df;
+
+  /* System faces only: a page loads nothing from outside its file. */
+  --font-display: "Iowan Old Style", Charter, "Bitstream Charter", "Sitka Text", Cambria, Georgia, serif;
+  --font-ui: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "Cascadia Mono", "JetBrains Mono", "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+
+  --step--1: 0.8125rem;
+  --step-0: 1rem;
+  --step-1: 1.1875rem;
+  --step-2: 1.5rem;
+  --step-3: 2.125rem;
+
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2.25rem;
+  --space-7: 3.5rem;
+
+  --radius: 6px;
+  --measure: 720px;
+  --page: 1120px;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #121413;
+    --surface: #1a1d1b;
+    --surface-2: #20231f;
+    --ink: #e8e6df;
+    --muted: #9d9f96;
+    --line: #30332e;
+    --accent: #55b6d3;
+    --accent-ink: #0b1a20;
+    --accent-soft: #173039;
+    --focus: #55b6d3;
+    --watch-soft: #3a2d15;
+    --act-soft: #3d1c19;
+    --desk-bg: #1e1f1d;
+    --desk-fg: #e6e5df;
+    --desk-line: #33342f;
+    --term-bg: #15181b;
+    --term-fg: #ffffff;
+    --term-line: #2c3136;
+    --term-text: #ffffff;
+    --term-inactive: #999999;
+    --term-subtle: #505050;
+    --term-warning: #ffc107;
+    --term-error: #ff6b80;
+    --term-success: #4eba65;
+    --term-planMode: #48968c;
+    --term-suggestion: #b1b9f9;
+    --term-autoAccept: #af87ff;
+    --term-bashBorder: #fd5db1;
+    color-scheme: dark;
+  }
+}
+
+:root[data-theme="dark"] {
+  --bg: #121413;
+  --surface: #1a1d1b;
+  --surface-2: #20231f;
+  --ink: #e8e6df;
+  --muted: #9d9f96;
+  --line: #30332e;
+  --accent: #55b6d3;
+  --accent-ink: #0b1a20;
+  --accent-soft: #173039;
+  --focus: #55b6d3;
+  --watch-soft: #3a2d15;
+  --act-soft: #3d1c19;
+  --desk-bg: #1e1f1d;
+  --desk-fg: #e6e5df;
+  --desk-line: #33342f;
+  --term-bg: #15181b;
+  --term-fg: #ffffff;
+  --term-line: #2c3136;
+  --term-text: #ffffff;
+  --term-inactive: #999999;
+  --term-subtle: #505050;
+  --term-warning: #ffc107;
+  --term-error: #ff6b80;
+  --term-success: #4eba65;
+  --term-planMode: #48968c;
+  --term-suggestion: #b1b9f9;
+  --term-autoAccept: #af87ff;
+  --term-bashBorder: #fd5db1;
+  color-scheme: dark;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font: 400 var(--step-0)/1.6 var(--font-ui);
+}
+img, svg { max-width: 100%; }
+[hidden] { display: none !important; }
+
+
+h1, h2, h3 { line-height: 1.2; text-wrap: balance; overflow-wrap: break-word; margin: 0; }
+h1, h2 { font-family: var(--font-display); font-weight: 500; letter-spacing: -0.005em; }
+h1 { font-size: var(--step-3); }
+h2 { font-size: var(--step-2); }
+h3 { font-size: var(--step-1); font-weight: 600; }
+p { margin: 0; }
+a { color: var(--accent); text-underline-offset: 2px; }
+code, kbd, .mono { font-family: var(--font-mono); font-size: 0.92em; }
+code { background: var(--surface-2); border: 1px solid var(--line); border-radius: 4px; padding: 0 0.3em; overflow-wrap: anywhere; }
+td code, th code { overflow-wrap: normal; }
+.card-quote { font-family: var(--font-mono); font-size: var(--step--1); background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--radius); padding: var(--space-2) var(--space-3); overflow-wrap: anywhere; }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 3px; }
+
+.eyebrow { font: 500 0.6875rem/1.4 var(--font-mono); letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+.lede { font-size: var(--step-1); color: var(--muted); }
+.muted { color: var(--muted); }
+.stack { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-4); }
+.stack-lg { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-6); }
+.row { display: flex; flex-wrap: wrap; gap: var(--space-3); align-items: center; }
+
+
+
+section { scroll-margin-top: var(--space-4); }
+.section-head { display: grid; gap: var(--space-2); margin-bottom: var(--space-4); }
+
+/* Panels: used only where an element is a separate object (an instrument, a card). */
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: var(--space-4); min-width: 0; }
+.grid-auto { display: grid; gap: var(--space-4); grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); }
+.split { display: grid; gap: var(--space-5); }
+
+/* Segmented switch. */
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface-2); padding: 2px; gap: 2px; }
+.seg button { font: inherit; font-size: var(--step--1); border: 0; background: transparent; color: var(--muted); padding: 0.3em 0.8em; border-radius: 4px; cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--surface); color: var(--ink); box-shadow: 0 0 0 1px var(--line); font-weight: 600; }
+.control { display: grid; gap: var(--space-1); }
+.control > .label { font-size: var(--step--1); color: var(--muted); }
+
+/* Chips: a choice among named states. */
+.chips { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.chip { font: inherit; font-size: var(--step--1); border: 1px solid var(--line); background: var(--surface); color: var(--ink); padding: 0.3em 0.75em; border-radius: 999px; cursor: pointer; display: inline-flex; gap: 0.4em; align-items: center; }
+.chip[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); }
+.dot { width: 0.6em; height: 0.6em; border-radius: 50%; background: var(--calm); display: inline-block; flex: none; }
+.dot.watch { background: var(--watch); }
+.dot.act { background: var(--act); }
+.dot.cold { background: var(--cold); }
+
+/* Level pill: state in form as well as words. */
+.pill { display: inline-flex; align-items: center; gap: 0.35em; font-size: var(--step--1); font-weight: 600; padding: 0.05em 0.6em; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); }
+.pill.watch { color: var(--watch); border-color: var(--watch); background: var(--watch-soft); }
+.pill.act { color: var(--act); border-color: var(--act); background: var(--act-soft); }
+
+/* Glossary terms: dotted underline, popover on hover, focus or tap. */
+.term { border-bottom: 1px dotted currentColor; cursor: help; }
+.popover { position: absolute; z-index: 20; max-width: min(340px, calc(100vw - 32px)); background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: 0 8px 24px rgb(0 0 0 / 0.18); padding: var(--space-3); font-size: var(--step--1); line-height: 1.5; }
+.popover strong { display: block; margin-bottom: var(--space-1); }
+
+/* Disclosure: what to do first, detail on demand. */
+details.more { border-top: 1px solid var(--line); padding-block: var(--space-3); }
+details.more > summary { cursor: pointer; font-weight: 600; list-style: none; display: flex; gap: var(--space-2); align-items: center; }
+details.more > summary::-webkit-details-marker { display: none; }
+details.more > summary::before { content: "+"; font-family: var(--font-mono); color: var(--accent); width: 1ch; }
+details.more[open] > summary::before { content: "\2212"; }
+details.more > .body { padding-top: var(--space-3); display: grid; gap: var(--space-3); }
+
+/* Key-value lists aligned on one column. */
+.kv { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: var(--space-1) var(--space-4); font-size: var(--step--1); margin: 0; }
+.kv dt { color: var(--muted); }
+.kv dd { margin: 0; font-variant-numeric: tabular-nums; }
+
+/* Range slider. */
+input[type="range"] { width: 100%; accent-color: var(--accent); }
+.slider { display: grid; gap: var(--space-1); }
+.slider .readout { display: flex; justify-content: space-between; font-size: var(--step--1); color: var(--muted); font-variant-numeric: tabular-nums; }
+.slider .readout b { color: var(--ink); font-weight: 600; }
+
+/* Tables that may run wider than a phone scroll inside their own box. */
+.table-wrap { overflow-x: auto; }
+.facts-list { columns: 9rem; column-gap: var(--space-4); list-style: none; margin: 0; padding: 0; }
+.facts-list li { break-inside: avoid; }
+table { border-collapse: collapse; width: 100%; font-size: var(--step--1); }
+th, td { text-align: left; padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--line); vertical-align: top; }
+th { color: var(--muted); font-weight: 600; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+
+/* A transcript of what Claude Code shows: monospace on the terminal surface. */
+.transcript { background: var(--term-bg); color: var(--term-fg); border-radius: var(--radius); padding: var(--space-3) var(--space-4); font: 0.875rem/1.55 var(--font-mono); overflow-x: auto; white-space: pre; }
+.transcript .dim { color: var(--term-inactive); }
+.transcript .hl { color: #e0b000; }
+
+.callout { display: grid; gap: var(--space-1); border-left: 3px solid var(--accent); padding: var(--space-1) var(--space-3); }
+
+footer.page-foot { margin-top: var(--space-7); padding-top: var(--space-4); border-top: 1px solid var(--line); font-size: var(--step--1); color: var(--muted); display: flex; flex-wrap: wrap; gap: var(--space-4); justify-content: space-between; }
+
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; scroll-behavior: auto !important; } }
+
+/* Steps: a real sequence, so numbered. */
+.steps { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-6); counter-reset: step; }
+.steps > li { display: grid; grid-template-columns: 2.25rem minmax(0, 1fr); gap: var(--space-4); counter-increment: step; }
+.steps > li::before { content: counter(step); width: 2.25rem; height: 2.25rem; border-radius: 50%; display: grid; place-items: center; font-weight: 700; color: var(--accent-ink); background: var(--accent); font-variant-numeric: tabular-nums; }
+.steps > li > div { display: grid; gap: var(--space-3); min-width: 0; }
+.cmd { display: flex; gap: var(--space-2); align-items: center; background: var(--term-bg); color: var(--term-fg); border-radius: var(--radius); padding: var(--space-2) var(--space-3); font: 0.9375rem/1.4 var(--font-mono); overflow-x: auto; }
+.cmd::before { content: "›"; color: var(--term-inactive); }
+
+.annot { display: grid; gap: var(--space-2); font-size: var(--step--1); }
+.annot { margin: 0; padding-left: 1.2em; }
+
+/* One grid for the whole series: sections, a content column of one width, the glossary column.
+   Every block in the content column spans it, so all edges line up on every page. */
+.doc { max-width: calc(190px + var(--measure) + 260px + 2 * var(--space-6) + 2 * var(--space-6)); margin: 0 auto; padding-inline: 16px; padding-block: var(--space-5) var(--space-7); display: grid; gap: var(--space-6); }
+.doc > * { min-width: 0; }
+.doc > main { width: 100%; max-width: var(--measure); }
+@media (min-width: 1180px) { .doc { grid-template-columns: 190px var(--measure) 260px; padding-inline: var(--space-6); justify-content: center; } }
+@media (min-width: 900px) and (max-width: 1179px) { .doc { grid-template-columns: 180px minmax(0, var(--measure)); padding-inline: var(--space-5); } }
+.side { display: grid; gap: var(--space-5); align-content: start; font-size: var(--step--1); }
+@media (min-width: 900px) { .side { position: sticky; top: var(--space-4); max-height: calc(100vh - 2rem); overflow-y: auto; } }
+.side nav ol { list-style: none; margin: 0; padding: 0 0 0 var(--space-3); border-left: 1px solid var(--line); display: grid; gap: var(--space-2); }
+.side nav a { color: var(--muted); text-decoration: none; }
+.side nav a:hover, .side nav a[aria-current="true"] { color: var(--ink); }
+.side nav a[aria-current="true"] { font-weight: 600; }
+.sources { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-1); font: 0.75rem/1.4 var(--font-mono); color: var(--muted); word-break: break-all; }
+@media (max-width: 899px) { .side nav ol { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-4); border: 0; padding: 0; } .side .sources-block { display: none; } }
+
+.glossary { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: var(--space-4); display: grid; gap: var(--space-3); align-content: start; }
+.glossary dl { margin: 0; display: grid; gap: var(--space-3); }
+.glossary dt { font: 500 var(--step-0)/1.3 var(--font-display); }
+.glossary dd { margin: 0; font-size: var(--step--1); color: var(--muted); line-height: 1.5; }
+.glossary .entry { border-radius: 4px; padding: var(--space-1) var(--space-2); margin-inline: calc(-1 * var(--space-2)); transition: background-color 0.15s; }
+.glossary .entry.is-hot { background: var(--accent-soft); }
+.glossary .entry.is-hot dd { color: var(--ink); }
+
+/* TL;DR: the page's answer before its detail. */
+.tldr { border: 1px solid var(--line); border-left: 3px solid var(--accent); background: var(--surface); border-radius: var(--radius); padding: var(--space-3) var(--space-4); }
+.tldr strong:first-child { margin-right: 0.35em; }
+.brand { display: grid; gap: var(--space-2); }
+/* Navigation uses the interface face; the serif belongs to the document's own headings. */
+.brand .mono { font: 500 0.6875rem/1.4 var(--font-mono); letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+.series { display: grid; gap: 2px; }
+.series a { font-size: var(--step--1); color: var(--muted); text-decoration: none; padding: 0.15em 0 0.15em var(--space-3); border-left: 2px solid transparent; }
+.series a:hover { color: var(--ink); }
+.series a[aria-current="page"] { color: var(--ink); font-weight: 600; border-left-color: var(--accent); }
+.page-head { display: grid; gap: var(--space-4); padding-bottom: var(--space-2); }
+.changed { font-size: var(--step--1); color: var(--muted); min-height: 1.5em; }
+.changed b { color: var(--ink); font-weight: 600; }
+
+/* Theme switch: icons, named for screen readers and on hover. */
+.theme-switch button { display: grid; place-items: center; width: 2rem; height: 1.75rem; padding: 0; }
+.theme-switch svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* A pair of specimens: the same moment in the CLI and in Desktop. */
+.pair { display: grid; gap: var(--space-2); }
+.pair .surface-label { font: 500 0.6875rem/1 var(--font-mono); letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+
+/* The specimen: a terminal or the Desktop app, in its own theme whatever the page's. */
+.specimen { display: grid; gap: var(--space-2); }
+.specimen-frame { overflow-x: auto; border-radius: var(--radius); }
+.specimen-hint { font-size: var(--step--1); color: var(--muted); }
+.cli { background: var(--term-bg); color: var(--term-fg); font: 0.9375rem/1.5 var(--font-mono); padding: var(--space-3) var(--space-4); white-space: pre; width: max-content; min-width: 100%; }
+
+.desk { background: var(--desk-bg); color: var(--desk-fg); border: 1px solid var(--desk-line); border-radius: var(--radius); padding: var(--space-2) var(--space-3); width: max-content; min-width: 100%; }
+.svg { display: inline-flex; line-height: 0; }
+.svg svg { display: block; }
+
+.specimen, .specimen-frame, .pair { min-width: 0; }
+
+/* Terms with their meaning, read down one column. */
+.term-list { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: var(--space-3) var(--space-5); margin: 0; }
+.term-list dt { font: 500 var(--step-1)/1.3 var(--font-display); }
+.term-list dd { margin: 0; display: grid; gap: var(--space-1); }
+@media (max-width: 600px) { .term-list { grid-template-columns: minmax(0, 1fr); gap: var(--space-1); } .term-list dd { margin-bottom: var(--space-3); } }
+.side .theme-switch { justify-self: start; }
+
+/* Language switch: two plain links that look like the theme segment, current one pressed. */
+[data-pb-lang] { display: inline-flex; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface-2); padding: 2px; gap: 2px; }
+.side [data-pb-lang] { justify-self: start; }
+.side [data-pb-lang] a { font-size: var(--step--1); color: var(--muted); text-decoration: none; padding: 0.3em 0.8em; border-radius: 4px; }
+.side [data-pb-lang] a:hover { color: var(--ink); }
+.side [data-pb-lang] a[aria-current="page"] { background: var(--surface); color: var(--ink); box-shadow: 0 0 0 1px var(--line); font-weight: 600; }
+
+/* List and detail: moments in order on the left, the chosen one in full on the right. */
+.md { display: grid; gap: var(--space-4); }
+@media (min-width: 640px) { .md { grid-template-columns: 172px minmax(0, 1fr); align-items: start; } }
+.md-list, .md-detail { display: grid; gap: var(--space-3); min-width: 0; }
+.sit-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; border-left: 1px solid var(--line); }
+.sit-item { display: grid; gap: 1px; padding: var(--space-2) var(--space-3); margin-left: -1px; border-left: 2px solid transparent; cursor: pointer; border-radius: 0 4px 4px 0; }
+.sit-item:hover { background: var(--surface-2); }
+.sit-item[aria-selected="true"] { border-left-color: var(--accent); background: var(--accent-soft); }
+.sit-time { font: 500 0.6875rem/1.2 var(--font-mono); color: var(--muted); font-variant-numeric: tabular-nums; }
+.sit-name { display: flex; gap: 0.45em; align-items: baseline; font-size: var(--step--1); line-height: 1.35; }
+.sit-name .dot { flex: none; transform: translateY(-1px); }
+.md-panel { display: grid; gap: var(--space-3); }
+.surface-head { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-3); align-items: center; justify-content: space-between; }
+.desk-fit { overflow: hidden; }
+.desk-fit > .desk { transform-origin: left top; width: max-content; }
+.small-seg button { font-size: 0.75rem; padding: 0.15em 0.6em; }
+/* Specimen trees: the plugin's boxes and runs. */
+.tbox { display: flex; min-width: 0; }
+.cli .tbox, .cli span { white-space: pre; }
+.cli .dim { opacity: 0.62; }
+.desk .dim { opacity: 0.62; }
+.cli .italic, .desk .italic { font-style: italic; }
+.cli .strike, .desk .strike { text-decoration: line-through; }
+.btn { cursor: pointer; }
+.reading { cursor: pointer; border-radius: 3px; }
+.reading[aria-pressed="true"] { outline: 1px solid var(--accent); outline-offset: 1px; }
+.reading:hover { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+/* Wide figures: text keeps the content column; a live row or a chart also takes the empty column on
+   its right, the same on every page of the series. */
+@media (min-width: 1180px) { .wide { margin-right: calc(-1 * (260px + var(--space-6))); } }
+
+/* The glossary drawer: over the page's right side, on demand. */
+.drawer { position: fixed; top: 0; right: 0; bottom: 0; width: min(360px, 100vw); z-index: 30; border-radius: 0; border-width: 0 0 0 1px; box-shadow: -12px 0 32px rgb(0 0 0 / 0.16); overflow-y: auto; padding-block: calc(var(--space-4) + env(safe-area-inset-top, 0px)) var(--space-6); }
+.drawer-head { display: flex; justify-content: space-between; align-items: center; }
+.drawer-close { font: 400 1.5rem/1 var(--font-ui); background: transparent; border: 0; color: var(--muted); cursor: pointer; padding: 0 var(--space-1); }
+.drawer-open { justify-self: start; font: 500 var(--step--1) var(--font-ui); color: var(--accent); background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 0.35em 0.9em; cursor: pointer; }
+.drawer-open[aria-expanded="true"] { border-color: var(--accent); background: var(--accent-soft); }
+
+/* Document components. Each works from its markup alone; the script only adds controls
+   (filter bar, copy buttons, walker, panel tabs), and every one of them is absent without scripts. */
+
+/* Entry card: one symptom, one limit, one term; parts carry their label as data-label. */
+article.entry { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-3); background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: var(--space-4); min-width: 0; }
+article.entry h3 { overflow-wrap: anywhere; }
+article.entry > .part { display: grid; gap: var(--space-1); min-width: 0; }
+.part[data-label]::before, .callout[data-label]::before, .seg-panel[data-label]::before { content: attr(data-label); font: 500 0.6875rem/1.4 var(--font-mono); letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+.part > ul, .part > ol { margin: 0; padding-left: 1.2em; }
+
+/* Filter bar over a list of entries: a search box, tag chips, a live count. */
+.filter-bar { display: grid; gap: var(--space-3); }
+.filter-box { font: inherit; font-size: var(--step--1); color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 0.4em 0.75em; width: 100%; max-width: 24rem; }
+.filter-count { font-size: var(--step--1); color: var(--muted); }
+
+/* Copy button over a block of commands or text. */
+.copy-wrap { position: relative; min-width: 0; }
+.copy-btn { position: absolute; top: var(--space-1); right: var(--space-1); font: 500 0.75rem/1 var(--font-ui); color: var(--term-fg); background: transparent; border: 1px solid var(--term-inactive); border-radius: 4px; padding: 0.35em 0.6em; cursor: pointer; opacity: 0.8; }
+.copy-btn:hover, .copy-btn:focus-visible { opacity: 1; }
+pre[data-lang] { background: var(--term-bg); color: var(--term-fg); border-radius: var(--radius); padding: var(--space-3) var(--space-4); font: 0.875rem/1.55 var(--font-mono); overflow-x: auto; margin: 0; }
+.copy-wrap > .cmd, .copy-wrap > pre, .copy-wrap > .transcript { padding-right: 5rem; }
+
+/* Figure: an inline SVG coloured through the theme tokens, its caption and its text form. */
+figure.diagram { margin: 0; display: grid; gap: var(--space-3); }
+figure.diagram svg { width: 100%; height: auto; }
+figure.diagram figcaption { font-size: var(--step--1); color: var(--muted); }
+figure.diagram .text-form { margin: 0; padding-left: 1.4em; font-size: var(--step--1); color: var(--muted); display: grid; gap: var(--space-1); }
+figure.diagram .node { fill: var(--surface); stroke: var(--line); stroke-width: 1.5; }
+figure.diagram .node.accent { stroke: var(--accent); fill: var(--accent-soft); }
+figure.diagram .edge { fill: none; stroke: var(--muted); stroke-width: 1.5; }
+figure.diagram text { fill: var(--ink); font: 400 13px var(--font-ui); }
+figure.diagram text.muted { fill: var(--muted); }
+
+/* Decision walker: the nested list stays for readers without scripts; with scripts one node at a time. */
+ol.walker, ol.walker ol { padding-left: 1.4em; display: grid; gap: var(--space-2); }
+.walker-view { display: grid; gap: var(--space-3); border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); padding: var(--space-4); }
+.walker-view:focus { outline: none; }
+.walker-text { display: grid; gap: var(--space-2); font-size: var(--step-1); }
+.walker-options, .walker-controls { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.walker-controls button { font: inherit; font-size: var(--step--1); color: var(--accent); background: transparent; border: 0; padding: 0.2em 0; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
+.walker-controls button:disabled { color: var(--muted); cursor: default; text-decoration: none; }
+
+/* Segmented panels: every panel shows without scripts, headed by its label; with scripts one at a time. */
+.seg-panels { display: grid; gap: var(--space-3); }
+.seg-panel { display: grid; gap: var(--space-2); min-width: 0; }
+.seg-panels.is-tabbed > .seg-panel::before { display: none; }
+.seg-panels > .seg { justify-self: start; }
+
+/* A decision walker's outcome takes the colour of its exit: start, wait or stop. */
+.walker-view[data-outcome] { border-left: 4px solid var(--outcome, var(--line)); }
+.walker-view[data-outcome="start"] { --outcome: var(--on); }
+.walker-view[data-outcome="wait"] { --outcome: var(--watch); }
+.walker-view[data-outcome="stop"] { --outcome: var(--act); }
+
+/* Count bar: one link per group, as wide as the group has entries. */
+.count-bar { display: flex; flex-wrap: wrap; gap: 2px; }
+.count-seg { flex-basis: 6rem; min-width: 0; display: grid; gap: 1px; padding: var(--space-2) var(--space-3); background: var(--accent-soft); border-bottom: 3px solid var(--accent); border-radius: 4px 4px 0 0; color: var(--ink); text-decoration: none; font-size: var(--step--1); line-height: 1.3; }
+.count-seg:hover { background: var(--surface-2); }
+.count-n { font: 600 var(--step-1)/1.1 var(--font-display); font-variant-numeric: tabular-nums; }
+.count-name { overflow-wrap: anywhere; }
+
+/* Level scale: a track per reading, zones calm, watch and act, the values where it changes marked under it. */
+.scale-list { display: grid; gap: var(--space-3); }
+.scale-row { display: grid; gap: var(--space-2); }
+@media (min-width: 720px) { .scale-row { grid-template-columns: 200px minmax(0, 1fr); align-items: center; } }
+.scale-name { font-size: var(--step--1); }
+.scale-track { position: relative; height: 34px; margin-right: 1.5rem; }
+.scale-zone { position: absolute; top: 0; height: 12px; }
+.scale-zone.calm { background: color-mix(in srgb, var(--calm) 35%, transparent); border-radius: 3px 0 0 3px; }
+.scale-zone.watch { background: var(--watch); }
+.scale-zone.act { background: var(--act); border-radius: 0 3px 3px 0; }
+.scale-mark { position: absolute; top: 14px; transform: translateX(-50%); font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.scale-mark::before { content: ""; position: absolute; left: 50%; top: -14px; height: 14px; border-left: 1px solid var(--ink); }
+.scale-legend { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-4); font-size: var(--step--1); color: var(--muted); }
+.scale-legend li { display: flex; align-items: center; gap: var(--space-2); }
+</style>
+</head>
+<body>
+<div class="doc">
+  <aside class="side">
+    <div class="brand"><span class="mono" translate="no">PitCrew</span><nav class="series" aria-label="сторінки цієї серії"><a href="getting-started.html">Початок роботи</a><a href="how-to.html" aria-current="page">Практичні інструкції</a><a href="reference.html">Довідник</a><a href="troubleshooting.html">Усунення проблем</a><a href="limitations.html">Обмеження</a></nav></div>
+    <nav data-pb-nav aria-label="Розділи"><ol><li><a href="#hold-the-cache-while-away">Утримання кешу на час відсутності</a></li><li><a href="#recover-after-a-compaction">Відновлення після стиснення</a></li><li><a href="#change-context-watchs-levels-line-and-snapshot-days">Зміна рівнів, рядка і днів знімків context-watch</a></li><li><a href="#choose-between-cache-watch-and-idle-compaction">Вибір між cache-watch і стисненням у простої</a></li><li><a href="#run-only-one-copy-of-the-watchers-while-paceline-has-its-own">Запуск лише однієї копії наглядачів, коли PaceLine має власну</a></li></ol></nav>
+    <nav data-pb-lang aria-label="Мова"><a href="../how-to.html" hreflang="en" lang="en">En</a><a href="how-to.html" hreflang="uk" lang="uk" aria-current="page">Uk</a></nav>
+    <div data-pb-theme></div>
+  </aside>
+
+  <main class="stack-lg">
+    <header class="page-head stack">
+      <h1 id="pitcrew-how-to-guides">Практичні інструкції PitCrew</h1>
+      <p>Інструкції до задач PitCrew. Кожна описує, коли вона потрібна, кроки і як перевірити результат. Для кожної команди, параметра і файлу див. <a href="reference.html">довідник</a>.</p>
+    </header>
+    <section class="stack" id="hold-the-cache-while-away">
+      <h2>Утримання кешу на час відсутності</h2>
+    <div class="callout" data-label="Коли потрібно"><p>коли сесію з довгим контекстом залишають, а при поверненні потрібен теплий кеш. Коли сесія простоює годину, термін її годинного кешу промпту минає, і наступний хід знову записує весь контекст у кеш.</p></div>
+    <ol class="steps"><li><div><p>У цій сесії виконати:</p><pre data-lang="">/pitcrew:cache-watch on</pre><p>Команда стартує, лише коли головний потік сесії записує годинні записи кешу. Вона відмовляє в сесії з п&#x27;ятихвилинними записами або без жодного запису кешу і пояснює чому. cache-watch утримує лише кеш головного потоку: сесію, головний потік якої записує п&#x27;ятихвилинні записи, відмовляють навіть тоді, коли її субагенти записують годинні. TTL головного потоку є налаштуванням Claude Code для сесії; налаштування TTL субагентів рішення не змінюють.</p></div></li><li><div><p>Залишити сесію без активності. Після кожного ходу <code>Stop</code> hook чекає у фоні і будить сесію за <code>lead</code> хвилин (типово 5) до спливу кешу, але не пізніше ніж через 52,5 хвилини після останнього запиту. Пробуджений хід утримує кеш ще на одну годину.</p><p>Агент надсилає один рядок, наприклад <code>Cache kept until 15:30 · wake 1 of 5 · reply stop to stop keeping it</code>, як push-сповіщення і завершує хід без відповіді, тож рядок з&#x27;являється один раз. Push доходить до телефона, коли в сесії ввімкнено Remote Control і “Push when Claude decides” у <code>/config</code>. Лише сесія без інструмента push отримує рядок як відповідь. Коли <code>lead</code> до 7, пробудження відбуваються кожні 52,5 хвилини; при більшому <code>lead</code> — кожні <code>60 - lead</code> хвилин.</p></div></li><li><div><p>Будь-яке повідомлення в сесії скидає лічильник. Після <code>max</code> пробуджень (типово 5) поспіль без повідомлення від власника нагляд зупиняється. Щоб зупинити раніше, відповісти <code>stop</code> або виконати <code>/pitcrew:cache-watch off</code>. Завершення сесії теж зупиняє нагляд, як і стиснення, ручне чи автоматичне: стиснений контекст починає новий кеш, тож пробудження нічого б не утримало. Тоді <code>status</code> показує <code>off (compacted)</code>; щоб наглядати за стиснутою сесією, виконати <code>on</code> знову.</p></div></li></ol>
+    <p>Чого він не робить:</p>
+    <ul><li>Утримує лише записи годинного кешу. Коли головний потік переходить на п&#x27;ятихвилинні записи, нагляд зупиняється, одне пробудження про це повідомляє, а <code>status</code> показує <code>off (five-minute cache)</code>. Див. <a href="limitations.html#cache-watch-keeps-only-one-hour-cache-entries">лише годинні записи</a> і <a href="limitations.html#cache-watch-stops-itself-when-the-main-thread-switches-to-five-minute-entries">самозупинку</a>.</li><li>Утримує лише кеш головного потоку. Завершений субагент, якого відновлюють після спливу його кешу, починається з холодного кешу. Див. <a href="limitations.html#cache-watch-keeps-only-the-main-threads-cache">лише головний потік</a>.</li><li>Відмовляє в сесії без жодного запису кешу. Див. <a href="limitations.html#cache-watch-needs-a-cache-entry-first">спочатку запис кешу</a>.</li><li>Комп&#x27;ютер, який засинає довше, ніж спливає кеш, пропускає пробудження і втрачає кеш. Тоді cache-watch вимикається, <code>status</code> показує <code>off (cache expired before the wake)</code>, а наступне повідомлення показує однорядкове сповіщення. Див. <a href="limitations.html#a-computer-that-sleeps-past-the-caches-expiry-loses-the-cache">сон</a>.</li><li>У запусках <code>claude -p</code> кеш не утримується. Див. <a href="limitations.html#cache-watch-does-nothing-in-non-interactive-runs">неінтерактивні запуски</a>.</li><li>Без Remote Control і “Push when Claude decides” push не доходить до телефона. Див. <a href="limitations.html#the-push-reaches-a-phone-only-with-remote-control">push</a>.</li><li>У сесії в терміналі, контекст якої дорівнює порогу стиснення в простої або перевищує його, Claude Code, як очікується, стискає розмову приблизно через 54 хвилини після останнього запиту. Коли пробудження вичерпуються, Claude Code може стиснути сесію приблизно через 54 хвилини після останнього пробудження. Див. <a href="limitations.html#idle-compaction-can-run-after-cache-watchs-last-wake">стиснення в простої після останнього пробудження</a> і <a href="#choose-between-cache-watch-and-idle-compaction">Вибір між cache-watch і стисненням у простої</a>.</li></ul>
+    <p>Пробудження утримує кеш на набагато менший строк, ніж коштує його втрата. Пробуджений хід читає контекст з кешу; перший хід після спливу кешу записує весь контекст знову, і за <a href="https://platform.claude.com/docs/en/about-claude/pricing#prompt-caching">цінами API Anthropic</a> це щонайменше в 20 разів дорожче за читання (запис годинного кешу коштує 2 ціни вхідних токенів, читання кешу 0,1 або менше). Кожне пробудження все одно зараховується до п&#x27;ятигодинного ліміту; скільки важить читання кешу в ліміті підписки, не опубліковано. За типових значень це щонайбільше п&#x27;ять пробуджень на одну відсутність. Див. <a href="limitations.html#each-wake-counts-against-the-five-hour-limit">кожне пробудження зараховується до п&#x27;ятигодинного ліміту</a>.</p>
+    <p>Типові значення зберігаються в <code>&lt;state&gt;/cache-watch.json</code> і однакові в кожній сесії на цій машині. Щоб їх змінити, виконати <code>/pitcrew:cache-watch config --lead 10 --max 3</code>; щоб змінити для однієї сесії, передати ті самі параметри <code>on</code>.</p>
+    <div class="callout" data-label="Як перевірити результат"><p><code>/pitcrew:cache-watch status</code> показує сесію як <code>on</code> з терміном кешу і наступним пробудженням, наприклад <code>&lt;session id&gt; · on · lead 5 min · wakes 0/5 · cache 1h · expires 15:30 · next wake 15:22</code>.</p></div>
+    </section>
+    <section class="stack" id="recover-after-a-compaction">
+      <h2>Відновлення після стиснення</h2>
+    <div class="callout" data-label="Коли потрібно"><p>сесію стиснуто, і власникові або агентові потрібне те, що відкинув підсумок. context-watch увімкнено від встановлення, тож це працює без налаштування.</p></div>
+    <ol class="steps"><li><div><p>До стиснення context-watch стежить за контекстом. Коли контекст уперше перевищує 85%, а потім 95% точки автоматичного стиснення, агенту один раз на кожен рівень нагадують записати точку відновлення у файл статусу задачі. Рівні скидаються після кожного стиснення. З <code>--line on</code> context-watch також виводить на кожному промпті рядок на кшталт <code>context: 612k / 967k auto-compact point (63%)</code>; типово рядок вимкнено.</p></div></li><li><div><p>При кожному стисненні основної розмови, автоматичному чи через <code>/compact</code>, PitCrew записує <code>.claude/pitcrew/&lt;session id&gt;.md</code> у проєкті. Він містить останні 3 промпти, останні 2 відповіді агента, останні 5 викликів інструментів з вхідними даними, обрізаними до 200 символів (без результатів), і кожен файл, який агент записав або змінив у сесії.</p></div></li><li><div><p>У підсумку стиснення зазначено зберегти шлях до знімка. Одразу після стиснення агенту нагадують прочитати знімок і файли статусу задачі перед наступним кроком.</p></div></li><li><div><p>Щоб прочитати знімок самостійно, відкрити файл. <code>/pitcrew:context-watch status</code> виводить теку знімків проєкту.</p></div></li></ol>
+    <p>context-watch ніколи не блокує, не відкладає і не запускає стиснення, а стиснення субагентів залишає без змін. Помилка в context-watch залишає хід таким, яким був. Коли автоматичне стиснення вимкнено, рядок вимірює відносно вікна контексту, і попереджень не буде. Знімки старші за 14 днів видаляються при старті сесії в проєкті; так само видаляються <code>*.md</code> старші за цей строк у <code>.claude/paceline/</code>, де PaceLine зберігав свої знімки. Нічого іншого в обох теках не змінюється.</p>
+    <div class="callout" data-label="Як перевірити результат"><p>після стиснення <code>/pitcrew:context-watch status</code> враховує знімок, наприклад <code>snapshots: /home/me/project/.claude/pitcrew (1 file)</code>, а наступний крок агента починається з його читання.</p></div>
+    </section>
+    <section class="stack" id="change-context-watchs-levels-line-and-snapshot-days">
+      <h2>Зміна рівнів, рядка і днів знімків context-watch</h2>
+    <div class="callout" data-label="Коли потрібно"><p>попередження приходять занадто рано або занадто пізно для того, як ведеться робота, потрібна цифра контексту на кожному промпті або знімки мають зберігатися коротший чи довший час.</p></div>
+    <ol class="steps"><li><div><p>Переглянути, що задано зараз:</p><pre data-lang="">/pitcrew:context-watch status</pre><p>Перший рядок показує перемикач, рядок, рівні попереджень і дні знімків. <code>settings:</code> називає файл, до якого записано налаштування. Коли налаштування ще читаються з файлу PaceLine, останній рядок містить <code>(from PaceLine)</code>.</p></div></li><li><div><p>Змінити потрібне. Кожен параметр діє окремо:</p><pre data-lang="">/pitcrew:context-watch config --levels 80,90
+/pitcrew:context-watch config --line on
+/pitcrew:context-watch config --days 30
+/pitcrew:context-watch config --off</pre><p>Рівні — це зростаючі цілі відсотки від 50 до 99, а знімки зберігаються від 1 до 90 днів. <code>--off</code> вимикає попередження, рядок і знімки; <code>--on</code> вмикає їх знову.</p></div></li><li><div><p>Надіслати наступний промпт. Зміна діє з наступного промпту.</p></div></li></ol>
+    <p>Зміна записує весь об&#x27;єкт налаштувань у власний файл PitCrew, <code>&lt;state&gt;/context-watch.json</code>, а значення, які не змінено, беруться з прочитаних, зокрема з PaceLine. Файли PaceLine ніколи не записуються, не переміщуються і не видаляються.</p>
+    <div class="callout" data-label="Як перевірити результат"><p><code>config</code> виводить один рядок з новими значеннями, наприклад <code>context-watch on · line off · warn at 80%, 90% of the auto-compact point · snapshots kept 14 days</code>, а <code>status</code> показує <code>settings:</code> з файлом PitCrew і без рядка <code>(from PaceLine)</code>.</p></div>
+    </section>
+    <section class="stack" id="choose-between-cache-watch-and-idle-compaction">
+      <h2>Вибір між cache-watch і стисненням у простої</h2>
+    <div class="callout" data-label="Коли потрібно"><p>коли сесію з довгим контекстом залишають і треба вирішити, чи утримувати її кеш через cache-watch, чи дати Claude Code стиснути її в простої, чи не робити ні того, ні іншого.</p></div>
+    <p>Два варіанти працюють по-різному. cache-watch будить сесію до спливу її годинного кешу, тож уся історія лишається теплою і нічого не підсумовується. Стиснення в простої є поведінкою самого Claude Code: у сесії в терміналі, контекст якої дорівнює порогу або перевищує його, Claude Code, як очікується, стискає розмову приблизно через 54 хвилини після останнього запиту (<a href="https://code.claude.com/docs/en/settings-reference#idlecompaction">Claude Code, довідник налаштувань</a>, прочитано 2026-10-15). Поріг становить 200 000 токенів, якщо його не задає <code>CLAUDE_CODE_IDLE_COMPACT_MIN_TOKENS</code>, а стиснення в простої також потребує, щоб Claude Code отримував прапорці функцій (feature flags) від Anthropic, тож окрема сесія може поводитися інакше.</p>
+    <p>Вони зустрічаються в кінці пробуджень. cache-watch будить сесію не пізніше ніж через 52,5 хвилини після останнього запиту, тобто раніше за стиснення в простої, а кожне пробудження як новий запит перезапускає відлік простою в Claude Code. Коли пробудження вичерпуються і ніхто не відповідає, cache-watch вимикається сам, і Claude Code може стиснути сесію приблизно через 54 хвилини після останнього пробудження.</p>
+    <div class="table-wrap"><table><thead><tr><th scope="col">Тривалість відсутності</th><th scope="col">Кращий вибір</th><th scope="col">Чому</th></tr></thead><tbody><tr><td>Повернення відбувається в межах пробуджень, і потрібна вся історія, а не підсумок.</td><td>cache-watch</td><td>Історія лишається в теплому кеші. За типових значень 5 пробуджень з інтервалом близько 52,5 хвилини покривають близько 4,4 години.</td></tr><tr><td>Відсутність довша, ніж покривають пробудження.</td><td>Стиснення в простої або нічого</td><td>Коли пробудження вичерпуються, cache-watch вимикається і кеш спливає. Стиснення в простої, де воно застосовується, тоді замінює історію підсумком; без нього наступний хід знову записує весь контекст у кеш.</td></tr><tr><td>Для роботи, яку відновлюють, достатньо підсумку історії.</td><td>Стиснення в простої або нічого</td><td>Одне стиснення коштує одного підсумку замість п&#x27;яти пробуджень, а кожне пробудження зараховується до п&#x27;ятигодинного ліміту.</td></tr><tr><td>П&#x27;ятигодинний ліміт обмежений.</td><td>Нічого або менше пробуджень</td><td>Кожне пробудження є ходом. Знизити <code>--max</code> або не вмикати cache-watch.</td></tr></tbody></table></div>
+    <ol class="steps"><li><div><p>Щоб утримати кеш, виконати <code>/pitcrew:cache-watch on</code> у сесії. Щоб покрити довшу відсутність, збільшити кількість пробуджень, наприклад:</p><pre data-lang="">/pitcrew:cache-watch on --max 8</pre><p>Кожне пробудження зараховується до п&#x27;ятигодинного ліміту.</p></div></li><li><div><p>Щоб залишити сесію стисненню в простої, не вмикати cache-watch. Там, де застосовується стиснення в простої, воно не потребує налаштування.</p></div></li><li><div><p>Щоб нічого не стискало сесію, поки вона простоює, не вмикати cache-watch і встановити <code>idleCompaction</code> у <code>false</code> у налаштуваннях Claude Code (Claude Code v2.1.290 або новіша); у ранішій версії встановити <code>autoCompactEnabled</code> у <code>false</code>. Обидва параметри описано в тому самому джерелі, прочитано 2026-10-15. Вимкнене автоматичне стиснення також зупиняє попередження context-watch.</p></div></li></ol>
+    <div class="callout" data-label="Як перевірити результат"><p>коли cache-watch увімкнено, <code>/pitcrew:cache-watch status</code> показує наступне пробудження. Коли пробудження вичерпалися, він показує <code>off (no reply after 5 wakes)</code>, і Claude Code може стиснути сесію приблизно через 54 хвилини після цього. Див. <a href="limitations.html#idle-compaction-can-run-after-cache-watchs-last-wake">стиснення в простої після останнього пробудження</a>.</p></div>
+    </section>
+    <section class="stack" id="run-only-one-copy-of-the-watchers-while-paceline-has-its-own">
+      <h2>Запуск лише однієї копії наглядачів, коли PaceLine має власну</h2>
+    <div class="callout" data-label="Коли потрібно"><p>PaceLine 0.6.0 або раніша версія встановлена поруч із PitCrew. Обидва несуть context-watch, тож кожен промпт понад рівень попередження отримує два попередження, а кожне стиснення записує два знімки.</p></div>
+    <p>PitCrew читає <code>context-watch.json</code> і <code>cache-watch.json</code> з PaceLine, лише доки в нього немає власного файлу з такою назвою. Тож вимкнення копії PaceLine спершу вимкне й копію PitCrew, тому порядок важливий.</p>
+    <ol class="steps"><li><div><p>Коли в примітках до релізу PaceLine сказано, що він переніс наглядачів до PitCrew, оновити PaceLine, і на цьому зупинитися.</p></div></li><li><div><p>Інакше записати власний файл налаштувань PitCrew, який копіює значення, що були в PaceLine:</p><pre data-lang="">/pitcrew:context-watch config --on</pre></div></li><li><div><p>Потім вимкнути копію PaceLine:</p><pre data-lang="">/paceline:context-watch config --off</pre></div></li><li><div><p>Для кешу почати нагляд за сесією лише з одного з <code>/pitcrew:cache-watch on</code> або <code>/paceline:cache-watch on</code>. Сесія, за якою наглядають обидві, має два hook, які чекають пробудження.</p></div></li></ol>
+    <div class="callout" data-label="Як перевірити результат"><p><code>/pitcrew:context-watch status</code> виводить <code>settings:</code> з файлом PitCrew і без рядка <code>(from PaceLine)</code>, <code>/paceline:context-watch status</code> показує <code>context-watch off</code>, а стиснення записує один знімок у <code>.claude/pitcrew/</code>. Див. <a href="limitations.html#paceline-060-or-earlier-runs-its-own-copy">PaceLine 0.6.0 або раніша версія запускає власну копію</a>.</p></div>
+    </section>
+  </main>
+</div>
+<script type="application/json" id="pb-strings">{"change-context-watchs-levels-line-and-snapshot-days.heading":"Зміна рівнів, рядка і днів знімків context-watch","change-context-watchs-levels-line-and-snapshot-days.p1":"попередження приходять занадто рано або занадто пізно для того, як ведеться робота, потрібна цифра контексту на кожному промпті або знімки мають зберігатися коротший чи довший час.","change-context-watchs-levels-line-and-snapshot-days.p2":"Переглянути, що задано зараз:","change-context-watchs-levels-line-and-snapshot-days.p3":"Перший рядок показує перемикач, рядок, рівні попереджень і дні знімків. `settings:` називає файл, до якого записано налаштування. Коли налаштування ще читаються з файлу PaceLine, останній рядок містить `(from PaceLine)`.","change-context-watchs-levels-line-and-snapshot-days.p4":"Змінити потрібне. Кожен параметр діє окремо:","change-context-watchs-levels-line-and-snapshot-days.p5":"Рівні — це зростаючі цілі відсотки від 50 до 99, а знімки зберігаються від 1 до 90 днів. `--off` вимикає попередження, рядок і знімки; `--on` вмикає їх знову.","change-context-watchs-levels-line-and-snapshot-days.p6":"Надіслати наступний промпт. Зміна діє з наступного промпту.","change-context-watchs-levels-line-and-snapshot-days.p7":"Зміна записує весь об'єкт налаштувань у власний файл PitCrew, `<state>/context-watch.json`, а значення, які не змінено, беруться з прочитаних, зокрема з PaceLine. Файли PaceLine ніколи не записуються, не переміщуються і не видаляються.","change-context-watchs-levels-line-and-snapshot-days.p8":"`config` виводить один рядок з новими значеннями, наприклад `context-watch on · line off · warn at 80%, 90% of the auto-compact point · snapshots kept 14 days`, а `status` показує `settings:` з файлом PitCrew і без рядка `(from PaceLine)`.","choose-between-cache-watch-and-idle-compaction.heading":"Вибір між cache-watch і стисненням у простої","choose-between-cache-watch-and-idle-compaction.p1":"коли сесію з довгим контекстом залишають і треба вирішити, чи утримувати її кеш через cache-watch, чи дати Claude Code стиснути її в простої, чи не робити ні того, ні іншого.","choose-between-cache-watch-and-idle-compaction.p10":"Відсутність довша, ніж покривають пробудження.","choose-between-cache-watch-and-idle-compaction.p11":"Стиснення в простої або нічого","choose-between-cache-watch-and-idle-compaction.p12":"Коли пробудження вичерпуються, cache-watch вимикається і кеш спливає. Стиснення в простої, де воно застосовується, тоді замінює історію підсумком; без нього наступний хід знову записує весь контекст у кеш.","choose-between-cache-watch-and-idle-compaction.p13":"Для роботи, яку відновлюють, достатньо підсумку історії.","choose-between-cache-watch-and-idle-compaction.p14":"Стиснення в простої або нічого","choose-between-cache-watch-and-idle-compaction.p15":"Одне стиснення коштує одного підсумку замість п'яти пробуджень, а кожне пробудження зараховується до п'ятигодинного ліміту.","choose-between-cache-watch-and-idle-compaction.p16":"П'ятигодинний ліміт обмежений.","choose-between-cache-watch-and-idle-compaction.p17":"Нічого або менше пробуджень","choose-between-cache-watch-and-idle-compaction.p18":"Кожне пробудження є ходом. Знизити `--max` або не вмикати cache-watch.","choose-between-cache-watch-and-idle-compaction.p19":"Щоб утримати кеш, виконати `/pitcrew:cache-watch on` у сесії. Щоб покрити довшу відсутність, збільшити кількість пробуджень, наприклад:","choose-between-cache-watch-and-idle-compaction.p2":"Два варіанти працюють по-різному. cache-watch будить сесію до спливу її годинного кешу, тож уся історія лишається теплою і нічого не підсумовується. Стиснення в простої є поведінкою самого Claude Code: у сесії в терміналі, контекст якої дорівнює порогу або перевищує його, Claude Code, як очікується, стискає розмову приблизно через 54 хвилини після останнього запиту ([Claude Code, довідник налаштувань](https://code.claude.com/docs/en/settings-reference#idlecompaction), прочитано 2026-10-15). Поріг становить 200 000 токенів, якщо його не задає `CLAUDE_CODE_IDLE_COMPACT_MIN_TOKENS`, а стиснення в простої також потребує, щоб Claude Code отримував прапорці функцій (feature flags) від Anthropic, тож окрема сесія може поводитися інакше.","choose-between-cache-watch-and-idle-compaction.p20":"Кожне пробудження зараховується до п'ятигодинного ліміту.","choose-between-cache-watch-and-idle-compaction.p21":"Щоб залишити сесію стисненню в простої, не вмикати cache-watch. Там, де застосовується стиснення в простої, воно не потребує налаштування.","choose-between-cache-watch-and-idle-compaction.p22":"Щоб нічого не стискало сесію, поки вона простоює, не вмикати cache-watch і встановити `idleCompaction` у `false` у налаштуваннях Claude Code (Claude Code v2.1.290 або новіша); у ранішій версії встановити `autoCompactEnabled` у `false`. Обидва параметри описано в тому самому джерелі, прочитано 2026-10-15. Вимкнене автоматичне стиснення також зупиняє попередження context-watch.","choose-between-cache-watch-and-idle-compaction.p23":"коли cache-watch увімкнено, `/pitcrew:cache-watch status` показує наступне пробудження. Коли пробудження вичерпалися, він показує `off (no reply after 5 wakes)`, і Claude Code може стиснути сесію приблизно через 54 хвилини після цього. Див. [стиснення в простої після останнього пробудження](limitations.html#idle-compaction-can-run-after-cache-watchs-last-wake).","choose-between-cache-watch-and-idle-compaction.p3":"Вони зустрічаються в кінці пробуджень. cache-watch будить сесію не пізніше ніж через 52,5 хвилини після останнього запиту, тобто раніше за стиснення в простої, а кожне пробудження як новий запит перезапускає відлік простою в Claude Code. Коли пробудження вичерпуються і ніхто не відповідає, cache-watch вимикається сам, і Claude Code може стиснути сесію приблизно через 54 хвилини після останнього пробудження.","choose-between-cache-watch-and-idle-compaction.p4":"Тривалість відсутності","choose-between-cache-watch-and-idle-compaction.p5":"Кращий вибір","choose-between-cache-watch-and-idle-compaction.p6":"Чому","choose-between-cache-watch-and-idle-compaction.p7":"Повернення відбувається в межах пробуджень, і потрібна вся історія, а не підсумок.","choose-between-cache-watch-and-idle-compaction.p8":"cache-watch","choose-between-cache-watch-and-idle-compaction.p9":"Історія лишається в теплому кеші. За типових значень 5 пробуджень з інтервалом близько 52,5 хвилини покривають близько 4,4 години.","copied_label":"Скопійовано","copy_label":"Копіювати","hold-the-cache-while-away.heading":"Утримання кешу на час відсутності","hold-the-cache-while-away.p1":"коли сесію з довгим контекстом залишають, а при поверненні потрібен теплий кеш. Коли сесія простоює годину, термін її годинного кешу промпту минає, і наступний хід знову записує весь контекст у кеш.","hold-the-cache-while-away.p10":"Відмовляє в сесії без жодного запису кешу. Див. [спочатку запис кешу](limitations.html#cache-watch-needs-a-cache-entry-first).","hold-the-cache-while-away.p11":"Комп'ютер, який засинає довше, ніж спливає кеш, пропускає пробудження і втрачає кеш. Тоді cache-watch вимикається, `status` показує `off (cache expired before the wake)`, а наступне повідомлення показує однорядкове сповіщення. Див. [сон](limitations.html#a-computer-that-sleeps-past-the-caches-expiry-loses-the-cache).","hold-the-cache-while-away.p12":"У запусках `claude -p` кеш не утримується. Див. [неінтерактивні запуски](limitations.html#cache-watch-does-nothing-in-non-interactive-runs).","hold-the-cache-while-away.p13":"Без Remote Control і “Push when Claude decides” push не доходить до телефона. Див. [push](limitations.html#the-push-reaches-a-phone-only-with-remote-control).","hold-the-cache-while-away.p14":"У сесії в терміналі, контекст якої дорівнює порогу стиснення в простої або перевищує його, Claude Code, як очікується, стискає розмову приблизно через 54 хвилини після останнього запиту. Коли пробудження вичерпуються, Claude Code може стиснути сесію приблизно через 54 хвилини після останнього пробудження. Див. [стиснення в простої після останнього пробудження](limitations.html#idle-compaction-can-run-after-cache-watchs-last-wake) і [Вибір між cache-watch і стисненням у простої](#choose-between-cache-watch-and-idle-compaction).","hold-the-cache-while-away.p15":"Пробудження утримує кеш на набагато менший строк, ніж коштує його втрата. Пробуджений хід читає контекст з кешу; перший хід після спливу кешу записує весь контекст знову, і за [цінами API Anthropic](https://platform.claude.com/docs/en/about-claude/pricing#prompt-caching) це щонайменше в 20 разів дорожче за читання (запис годинного кешу коштує 2 ціни вхідних токенів, читання кешу 0,1 або менше). Кожне пробудження все одно зараховується до п'ятигодинного ліміту; скільки важить читання кешу в ліміті підписки, не опубліковано. За типових значень це щонайбільше п'ять пробуджень на одну відсутність. Див. [кожне пробудження зараховується до п'ятигодинного ліміту](limitations.html#each-wake-counts-against-the-five-hour-limit).","hold-the-cache-while-away.p16":"Типові значення зберігаються в `<state>/cache-watch.json` і однакові в кожній сесії на цій машині. Щоб їх змінити, виконати `/pitcrew:cache-watch config --lead 10 --max 3`; щоб змінити для однієї сесії, передати ті самі параметри `on`.","hold-the-cache-while-away.p17":"`/pitcrew:cache-watch status` показує сесію як `on` з терміном кешу і наступним пробудженням, наприклад `<session id> · on · lead 5 min · wakes 0/5 · cache 1h · expires 15:30 · next wake 15:22`.","hold-the-cache-while-away.p2":"У цій сесії виконати:","hold-the-cache-while-away.p3":"Команда стартує, лише коли головний потік сесії записує годинні записи кешу. Вона відмовляє в сесії з п'ятихвилинними записами або без жодного запису кешу і пояснює чому. cache-watch утримує лише кеш головного потоку: сесію, головний потік якої записує п'ятихвилинні записи, відмовляють навіть тоді, коли її субагенти записують годинні. TTL головного потоку є налаштуванням Claude Code для сесії; налаштування TTL субагентів рішення не змінюють.","hold-the-cache-while-away.p4":"Залишити сесію без активності. Після кожного ходу `Stop` hook чекає у фоні і будить сесію за `lead` хвилин (типово 5) до спливу кешу, але не пізніше ніж через 52,5 хвилини після останнього запиту. Пробуджений хід утримує кеш ще на одну годину.","hold-the-cache-while-away.p5":"Агент надсилає один рядок, наприклад `Cache kept until 15:30 · wake 1 of 5 · reply stop to stop keeping it`, як push-сповіщення і завершує хід без відповіді, тож рядок з'являється один раз. Push доходить до телефона, коли в сесії ввімкнено Remote Control і “Push when Claude decides” у `/config`. Лише сесія без інструмента push отримує рядок як відповідь. Коли `lead` до 7, пробудження відбуваються кожні 52,5 хвилини; при більшому `lead` — кожні `60 - lead` хвилин.","hold-the-cache-while-away.p6":"Будь-яке повідомлення в сесії скидає лічильник. Після `max` пробуджень (типово 5) поспіль без повідомлення від власника нагляд зупиняється. Щоб зупинити раніше, відповісти `stop` або виконати `/pitcrew:cache-watch off`. Завершення сесії теж зупиняє нагляд, як і стиснення, ручне чи автоматичне: стиснений контекст починає новий кеш, тож пробудження нічого б не утримало. Тоді `status` показує `off (compacted)`; щоб наглядати за стиснутою сесією, виконати `on` знову.","hold-the-cache-while-away.p7":"Чого він не робить:","hold-the-cache-while-away.p8":"Утримує лише записи годинного кешу. Коли головний потік переходить на п'ятихвилинні записи, нагляд зупиняється, одне пробудження про це повідомляє, а `status` показує `off (five-minute cache)`. Див. [лише годинні записи](limitations.html#cache-watch-keeps-only-one-hour-cache-entries) і [самозупинку](limitations.html#cache-watch-stops-itself-when-the-main-thread-switches-to-five-minute-entries).","hold-the-cache-while-away.p9":"Утримує лише кеш головного потоку. Завершений субагент, якого відновлюють після спливу його кешу, починається з холодного кешу. Див. [лише головний потік](limitations.html#cache-watch-keeps-only-the-main-threads-cache).","intro.p1":"Інструкції до задач PitCrew. Кожна описує, коли вона потрібна, кроки і як перевірити результат. Для кожної команди, параметра і файлу див. [довідник](reference.html).","label_when":"Коли потрібно","label_worked":"Як перевірити результат","lang_en":"En","lang_label":"Мова","lang_uk":"Uk","nav_label":"Практичні інструкції","recover-after-a-compaction.heading":"Відновлення після стиснення","recover-after-a-compaction.p1":"сесію стиснуто, і власникові або агентові потрібне те, що відкинув підсумок. context-watch увімкнено від встановлення, тож це працює без налаштування.","recover-after-a-compaction.p2":"До стиснення context-watch стежить за контекстом. Коли контекст уперше перевищує 85%, а потім 95% точки автоматичного стиснення, агенту один раз на кожен рівень нагадують записати точку відновлення у файл статусу задачі. Рівні скидаються після кожного стиснення. З `--line on` context-watch також виводить на кожному промпті рядок на кшталт `context: 612k / 967k auto-compact point (63%)`; типово рядок вимкнено.","recover-after-a-compaction.p3":"При кожному стисненні основної розмови, автоматичному чи через `/compact`, PitCrew записує `.claude/pitcrew/<session id>.md` у проєкті. Він містить останні 3 промпти, останні 2 відповіді агента, останні 5 викликів інструментів з вхідними даними, обрізаними до 200 символів (без результатів), і кожен файл, який агент записав або змінив у сесії.","recover-after-a-compaction.p4":"У підсумку стиснення зазначено зберегти шлях до знімка. Одразу після стиснення агенту нагадують прочитати знімок і файли статусу задачі перед наступним кроком.","recover-after-a-compaction.p5":"Щоб прочитати знімок самостійно, відкрити файл. `/pitcrew:context-watch status` виводить теку знімків проєкту.","recover-after-a-compaction.p6":"context-watch ніколи не блокує, не відкладає і не запускає стиснення, а стиснення субагентів залишає без змін. Помилка в context-watch залишає хід таким, яким був. Коли автоматичне стиснення вимкнено, рядок вимірює відносно вікна контексту, і попереджень не буде. Знімки старші за 14 днів видаляються при старті сесії в проєкті; так само видаляються `*.md` старші за цей строк у `.claude/paceline/`, де PaceLine зберігав свої знімки. Нічого іншого в обох теках не змінюється.","recover-after-a-compaction.p7":"після стиснення `/pitcrew:context-watch status` враховує знімок, наприклад `snapshots: /home/me/project/.claude/pitcrew (1 file)`, а наступний крок агента починається з його читання.","run-only-one-copy-of-the-watchers-while-paceline-has-its-own.heading":"Запуск лише однієї копії наглядачів, коли PaceLine має власну","run-only-one-copy-of-the-watchers-while-paceline-has-its-own.p1":"PaceLine 0.6.0 або раніша версія встановлена поруч із PitCrew. Обидва несуть context-watch, тож кожен промпт понад рівень попередження отримує два попередження, а кожне стиснення записує два знімки.","run-only-one-copy-of-the-watchers-while-paceline-has-its-own.p2":"PitCrew читає `context-watch.json` і `cache-watch.json` з PaceLine, лише доки в нього немає власного файлу з такою назвою. Тож вимкнення копії PaceLine спершу вимкне й копію PitCrew, тому порядок важливий.","run-only-one-copy-of-the-watchers-while-paceline-has-its-own.p3":"Коли в примітках до релізу PaceLine сказано, що він переніс наглядачів до PitCrew, оновити PaceLine, і на цьому зупинитися.","run-only-one-copy-of-the-watchers-while-paceline-has-its-own.p4":"Інакше записати власний файл налаштувань PitCrew, який копіює значення, що були в PaceLine:","run-only-one-copy-of-the-watchers-while-paceline-has-its-own.p5":"Потім вимкнути копію PaceLine:","run-only-one-copy-of-the-watchers-while-paceline-has-its-own.p6":"Для кешу почати нагляд за сесією лише з одного з `/pitcrew:cache-watch on` або `/paceline:cache-watch on`. Сесія, за якою наглядають обидві, має два hook, які чекають пробудження.","run-only-one-copy-of-the-watchers-while-paceline-has-its-own.p7":"`/pitcrew:context-watch status` виводить `settings:` з файлом PitCrew і без рядка `(from PaceLine)`, `/paceline:context-watch status` показує `context-watch off`, а стиснення записує один знімок у `.claude/pitcrew/`. Див. [PaceLine 0.6.0 або раніша версія запускає власну копію](limitations.html#paceline-060-or-earlier-runs-its-own-copy).","series_label":"сторінки цієї серії","theme_dark":"Темна","theme_label":"Тема сторінки","theme_light":"Світла","theme_system":"Системна","title":"Практичні інструкції PitCrew","toc_label":"Розділи"}</script>
+<script type="application/json" id="pb-glossary">{}</script>
+<script type="application/json" id="pb-facts">{"commands":[{"command":"pitcrew context-watch","help":"warnings before auto-compaction, snapshots at each compaction"},{"command":"pitcrew context-watch config","help":"show or change context-watch's settings"},{"command":"pitcrew context-watch status","help":"show the settings, the snapshot folder and the settings file"},{"command":"pitcrew cache-watch","help":"keep an idle session's one-hour prompt cache alive"},{"command":"pitcrew cache-watch on","help":"watch one session"},{"command":"pitcrew cache-watch off","help":"stop watching one session"},{"command":"pitcrew cache-watch status","help":"list the watched sessions"},{"command":"pitcrew cache-watch config","help":"show or change the defaults for every session"}],"env":["CLAUDE_CONFIG_DIR","CLAUDE_PLUGIN_DATA","CLAUDE_PROJECT_DIR","HOME","PACELINE_STATE_DIR","PITCREW_STATE_DIR","USERPROFILE"],"settings":[{"default":true,"group":"context-watch","key":"on","kind":"bool","range":null},{"default":false,"group":"context-watch","key":"line","kind":"bool","range":null},{"default":[85,95],"group":"context-watch","key":"levels","kind":"list","range":[50,99]},{"default":14,"group":"context-watch","key":"snapshot_days","kind":"int","range":[1,90]},{"default":5,"group":"cache-watch","key":"lead_minutes","kind":"int","range":[1,30]},{"default":5,"group":"cache-watch","key":"max_wakes","kind":"int","range":[1,20]}]}</script>
+<script type="application/json" id="pb-data">{}</script>
+<script>
+const __m = {}
+// Shared page behaviour: strings, glossary popovers, segmented switches, chips and the theme switch.
+// Pages read their data from the JSON script elements the build writes and call PB.* helpers.
+const PB = (() => {
+  const json = id => {
+    const el = document.getElementById(id)
+    return el ? JSON.parse(el.textContent) : {}
+  }
+  const strings = json('pb-strings')
+  const glossary = json('pb-glossary')
+  const facts = json('pb-facts')
+  const data = json('pb-data')
+
+  const t = (key, vars = {}) => {
+    const s = strings[key]
+    if (s === undefined) return `{{${key}}}`
+    return s.replace(/\{(\w+)\}/g, (_, k) => (vars[k] === undefined ? `{${k}}` : String(vars[k])))
+  }
+
+  const el = (tag, attrs = {}, ...children) => {
+    const node = document.createElement(tag)
+    for (const [k, v] of Object.entries(attrs)) {
+      if (v === null || v === undefined || v === false) continue
+      if (k === 'class') node.className = v
+      else if (k === 'text') node.textContent = v
+      else if (k === 'html') node.innerHTML = v
+      else if (k.startsWith('on')) node.addEventListener(k.slice(2), v)
+      else node.setAttribute(k, v === true ? '' : v)
+    }
+    for (const c of children.flat()) if (c !== null && c !== undefined && c !== false) node.append(c instanceof Node ? c : document.createTextNode(String(c)))
+    return node
+  }
+
+  // Text with backtick spans as nodes: code spans become <code>, the rest stays text, never markup.
+  // An unbalanced backtick leaves the whole string as text.
+  const rich = text => {
+    const s = text === undefined || text === null ? '' : String(text)
+    if (s === '') return []
+    const parts = s.split('`')
+    if (parts.length % 2 === 0) return [document.createTextNode(s)]
+    return parts.flatMap((part, i) => {
+      if (part === '') return []
+      return [i % 2 ? el('code', { text: part }) : document.createTextNode(part)]
+    })
+  }
+
+  const store = {
+    get(key) { try { return localStorage.getItem(`pb:${key}`) } catch { return null } },
+    set(key, value) { try { localStorage.setItem(`pb:${key}`, value) } catch { /* storage blocked */ } },
+  }
+
+  // Theme: system (no attribute), light or dark, remembered per viewer; an icon switch.
+  const ICONS = {
+    system: '<rect x="2.5" y="3.5" width="11" height="8" rx="1"/><path d="M6 14h4M8 11.5V14"/>',
+    light: '<circle cx="8" cy="8" r="3"/><path d="M8 1.5v1.5M8 13v1.5M1.5 8H3M13 8h1.5M3.4 3.4l1 1M11.6 11.6l1 1M3.4 12.6l1-1M11.6 4.4l1-1"/>',
+    dark: '<path d="M13 9.5A5.5 5.5 0 0 1 6.5 3a5.5 5.5 0 1 0 6.5 6.5z"/>',
+  }
+  function initTheme() {
+    const apply = v => {
+      if (v === 'light' || v === 'dark') document.documentElement.setAttribute('data-theme', v)
+      else document.documentElement.removeAttribute('data-theme')
+    }
+    apply(store.get('theme'))
+    for (const seg of document.querySelectorAll('[data-pb-theme]')) {
+      seg.classList.add('seg', 'theme-switch')
+      seg.setAttribute('role', 'group')
+      seg.setAttribute('aria-label', t('theme_label'))
+      // innerHTML parses the icon in the SVG namespace; createElement('svg') would not.
+      seg.replaceChildren(...['system', 'light', 'dark'].map(v => {
+        const b = el('button', { type: 'button', 'data-value': v, title: t(`theme_${v}`), html: `<svg viewBox="0 0 16 16" aria-hidden="true">${ICONS[v]}</svg>` })
+        b.append(el('span', { class: 'visually-hidden', text: t(`theme_${v}`) }))
+        return b
+      }))
+      seg.addEventListener('pb:change', e => { apply(e.detail); store.set('theme', e.detail); document.dispatchEvent(new CustomEvent('pb:theme')) })
+      setSeg(seg, store.get('theme') || 'system', false)
+    }
+  }
+
+  // Segmented switches and chip groups: one pressed button; a 'pb:change' event with its value.
+  function setSeg(group, value, notify = true) {
+    for (const b of group.querySelectorAll('button[data-value]')) b.setAttribute('aria-pressed', String(b.dataset.value === value))
+    group.dataset.current = value
+    if (notify) group.dispatchEvent(new CustomEvent('pb:change', { detail: value }))
+  }
+  function initSegs(root = document) {
+    for (const group of root.querySelectorAll('.seg, .chips[data-choice]')) {
+      if (group.dataset.bound) continue
+      group.dataset.bound = '1'
+      group.addEventListener('click', e => {
+        const b = e.target.closest('button[data-value]')
+        if (b && group.contains(b)) setSeg(group, b.dataset.value)
+      })
+      const pressed = group.querySelector('button[aria-pressed="true"]') || group.querySelector('button[data-value]')
+      if (pressed) setSeg(group, pressed.dataset.value, false)
+    }
+  }
+
+  // Glossary popovers: any element with data-term; hover and focus show it, a tap toggles it.
+  let pop = null
+  let owner = null
+  function hide() {
+    if (pop) pop.remove()
+    for (const hot of document.querySelectorAll('.glossary .is-hot')) hot.classList.remove('is-hot')
+    pop = null
+    owner = null
+  }
+  // With the glossary drawer open a term lights its entry there; otherwise it opens a popover.
+  function sideEntry(key) {
+    const entry = document.querySelector(`.glossary [data-entry="${CSS.escape(key)}"]`)
+    if (!entry) return null
+    return entry.closest('.glossary').hidden ? null : entry
+  }
+  function show(target) {
+    const key = target.dataset.term
+    const entry = glossary[key]
+    if (!entry) return
+    hide()
+    owner = target
+    const side = sideEntry(key)
+    if (side) {
+      side.classList.add('is-hot')
+      side.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+      return
+    }
+    pop = el('div', { class: 'popover', role: 'tooltip' }, el('strong', { text: entry.name || key }), el('span', {}, rich(entry.short || entry)))
+    document.body.append(pop)
+    const r = target.getBoundingClientRect()
+    const w = pop.offsetWidth
+    const left = Math.max(16, Math.min(window.scrollX + r.left, window.scrollX + document.documentElement.clientWidth - w - 16))
+    pop.style.left = `${left}px`
+    pop.style.top = `${window.scrollY + r.bottom + 6}px`
+  }
+  function initTerms() {
+    document.addEventListener('mouseover', e => { const x = e.target.closest('[data-term]'); if (x && x !== owner) show(x) })
+    document.addEventListener('mouseout', e => { const x = e.target.closest('[data-term]'); if (x && !x.contains(e.relatedTarget)) hide() })
+    document.addEventListener('focusin', e => { const x = e.target.closest('[data-term]'); if (x) show(x) })
+    document.addEventListener('focusout', e => { if (e.target.closest('[data-term]')) hide() })
+    document.addEventListener('click', e => {
+      const x = e.target.closest('[data-term]')
+      if (x) { if (owner === x) hide(); else show(x) } else if (!e.target.closest('.popover')) hide()
+    })
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') hide() })
+  }
+
+  function term(key, label) {
+    return el('span', { class: 'term', 'data-term': key, tabindex: '0', text: label ?? key })
+  }
+
+  // Section navigation with the current section marked. The build writes the list into the
+  // markup; a page built without one gets it here from its own section headings.
+  function initNav() {
+    const nav = document.querySelector('[data-pb-nav]')
+    if (!nav) return
+    if (!nav.querySelector('a')) {
+      const found = [...document.querySelectorAll('main section[id]')].filter(s => s.querySelector('h1, h2'))
+      const made = found.map(s => el('a', { href: `#${s.id}`, text: s.dataset.nav || s.querySelector('h1, h2').textContent }))
+      nav.replaceChildren(el('ol', {}, made.map(a => el('li', {}, a))))
+    }
+    const links = [...nav.querySelectorAll('a[href^="#"]')]
+    const sections = links.map(a => document.getElementById(a.getAttribute('href').slice(1))).filter(Boolean)
+    const mark = id => { for (const a of links) a.setAttribute('aria-current', String(a.getAttribute('href') === `#${id}`)) }
+    // A click names its target at once, and the scroll it starts (smooth, and often stopped short by the
+    // page end) must not move the mark until it has settled.
+    let locked = false
+    let settle = 0
+    const hold = () => { locked = true; clearTimeout(settle); settle = setTimeout(() => { locked = false }, 200) }
+    nav.addEventListener('click', e => {
+      const a = e.target.closest('a[href^="#"]')
+      if (a && nav.contains(a)) { mark(a.getAttribute('href').slice(1)); hold() }
+    })
+    // The last heading cannot reach the top of a page that ends first, so the page end marks it.
+    const last = sections[sections.length - 1]
+    const atEnd = () => window.scrollY + window.innerHeight >= document.documentElement.scrollHeight - 2
+    window.addEventListener('scroll', () => {
+      if (locked) { hold(); return }
+      if (last && atEnd()) mark(last.id)
+    }, { passive: true })
+    if (!('IntersectionObserver' in window)) return
+    const seen = new IntersectionObserver(entries => {
+      if (locked || (last && atEnd())) return
+      for (const e of entries) if (e.isIntersecting) mark(e.target.id)
+    }, { rootMargin: '-10% 0px -70% 0px' })
+    for (const s of sections) seen.observe(s)
+  }
+
+  // Filter bar (data-pb-filter="<selector of the items>"): items carry data-tags (single words); the bar shows a
+  // search box, one chip per tag and a live count. Its texts come from the bar's own attributes: data-label (search
+  // box), data-all (the chip for every item), data-count ("{shown} of {total}"). A tag's chip reads as the text of the
+  // bar's own [data-tag="<tag>"] element when it holds one (the markup a reader without scripts sees as a list of
+  // the groups), else as the tag. data-group="<selector>" also hides the group that holds no visible item.
+  function initFilters() {
+    for (const bar of document.querySelectorAll('[data-pb-filter]')) {
+      const items = [...document.querySelectorAll(bar.dataset.pbFilter)]
+      if (!items.length) continue
+      const names = new Map([...bar.querySelectorAll('[data-tag]')].map(x => [x.dataset.tag, x.textContent.trim()]))
+      const tagsOf = item => (item.dataset.tags || '').split(/\s+/).filter(Boolean)
+      const found = new Set(items.flatMap(tagsOf))
+      const tags = [...names.keys()].filter(x => found.has(x)).concat([...found].filter(x => !names.has(x)))
+      const box = el('input', { type: 'search', class: 'filter-box', 'aria-label': bar.dataset.label || '', placeholder: bar.dataset.label || '' })
+      const chips = el('div', { class: 'chips', 'data-choice': '', role: 'group' },
+        [['', bar.dataset.all || ''], ...tags.map(x => [x, names.get(x) || x])].map(([v, label]) => el('button', { type: 'button', class: 'chip', 'data-value': v, text: label })))
+      const count = el('p', { class: 'filter-count', 'aria-live': 'polite' })
+      bar.classList.add('filter-bar')
+      bar.replaceChildren(...[box, tags.length ? chips : null, count].filter(Boolean))
+      const groups = bar.dataset.group ? [...new Set(items.map(item => item.closest(bar.dataset.group)).filter(Boolean))] : []
+      const apply = () => {
+        const query = box.value.trim().toLowerCase()
+        const tag = chips.dataset.current || ''
+        let shown = 0
+        for (const item of items) {
+          const ok = (!tag || tagsOf(item).includes(tag)) && (!query || item.textContent.toLowerCase().includes(query))
+          item.hidden = !ok
+          if (ok) shown++
+        }
+        for (const g of groups) g.hidden = items.every(item => !g.contains(item) || item.hidden)
+        count.textContent = (bar.dataset.count || '').replace('{shown}', shown).replace('{total}', items.length)
+      }
+      initSegs(bar)
+      box.addEventListener('input', apply)
+      chips.addEventListener('pb:change', apply)
+      // A link to an entry or group the filter hides clears the filter, so the target can be shown. A link to the
+      // hash already in the address bar fires no hashchange, so a click covers it.
+      const reveal = hash => {
+        const target = hash.length > 1 ? document.getElementById(decodeURIComponent(hash.slice(1))) : null
+        if (!target || !target.closest('[hidden]') || ![...items, ...groups].some(x => x.contains(target))) return
+        box.value = ''
+        setSeg(chips, '')
+        target.scrollIntoView()
+      }
+      window.addEventListener('hashchange', () => reveal(location.hash))
+      document.addEventListener('click', e => {
+        const a = e.target.closest && e.target.closest('a[href^="#"]')
+        if (a && a.hash === location.hash) reveal(a.hash)
+      })
+      apply()
+    }
+  }
+
+  // Count bar (data-pb-counts="<selector of the items>"): one segment per group (the nearest section) in
+  // proportion to its items, each a link to the group with its heading and count.
+  function initCounts() {
+    for (const bar of document.querySelectorAll('[data-pb-counts]')) {
+      const groups = new Map()
+      for (const item of document.querySelectorAll(bar.dataset.pbCounts)) {
+        const g = item.closest('section[id]')
+        if (g) groups.set(g, (groups.get(g) || 0) + 1)
+      }
+      bar.classList.add('count-bar')
+      bar.replaceChildren(...[...groups].map(([g, n]) => el('a', { class: 'count-seg', href: `#${g.id}`, 'aria-label': `${g.querySelector('h2').textContent}: ${n}`, style: `flex-grow: ${n}` },
+        el('span', { class: 'count-n', text: String(n) }), el('span', { class: 'count-name', text: g.querySelector('h2').textContent }))))
+    }
+  }
+
+  // Copy button on commands, code blocks and transcripts, where the page defines copy_label and copied_label.
+  function initCopy() {
+    if (!navigator.clipboard || !strings.copy_label || !strings.copied_label) return
+    for (const block of document.querySelectorAll('main .cmd, main pre, main .transcript')) {
+      const wrap = el('div', { class: 'copy-wrap' })
+      block.replaceWith(wrap)
+      const button = el('button', { type: 'button', class: 'copy-btn', 'aria-live': 'polite', text: t('copy_label') })
+      button.addEventListener('click', () => {
+        navigator.clipboard.writeText(block.textContent.trim()).then(() => {
+          button.textContent = t('copied_label')
+          setTimeout(() => { button.textContent = t('copy_label') }, 1600)
+        }, () => {})
+      })
+      wrap.append(block, button)
+    }
+  }
+
+  // Decision walker (ol.walker): a question with its answers as a nested list. With scripts one node shows
+  // at a time, the answers as buttons (the answer's data-label, else its own text), with back and restart
+  // (walker_back, walker_restart). A node's data-outcome names its colour. Where the page lacks those strings the
+  // list stays as written.
+  function initWalkers() {
+    if (!strings.walker_back || !strings.walker_restart) return
+    for (const list of document.querySelectorAll('ol.walker')) {
+      const root = list.querySelector(':scope > li')
+      if (!root) continue
+      const trail = [root]
+      const view = el('div', { class: 'walker-view', tabindex: '-1', 'aria-live': 'polite' })
+      const own = li => {
+        const copy = li.cloneNode(true)
+        for (const inner of copy.querySelectorAll('ol')) inner.remove()
+        return copy
+      }
+      const go = change => { change(); render(); view.focus() }
+      const render = () => {
+        const li = trail[trail.length - 1]
+        view.dataset.outcome = li.dataset.outcome || ''
+        const options = [...li.querySelectorAll(':scope > ol > li')]
+        const answers = options.map(o => el('button', {
+          type: 'button', class: 'chip', text: o.dataset.label || own(o).textContent.trim(), onclick: () => go(() => trail.push(o)),
+        }))
+        view.replaceChildren(...[
+          el('div', { class: 'walker-text' }, el('p', {}, [...own(li).childNodes])),
+          answers.length ? el('div', { class: 'walker-options' }, answers) : null,
+          el('div', { class: 'walker-controls' },
+            el('button', { type: 'button', text: t('walker_back'), disabled: trail.length < 2, onclick: () => go(() => trail.pop()) }),
+            el('button', { type: 'button', text: t('walker_restart'), disabled: trail.length < 2, onclick: () => go(() => { trail.length = 1 }) })),
+        ].filter(Boolean))
+      }
+      list.hidden = true
+      list.after(view)
+      render()
+    }
+  }
+
+  // Segmented panels (div.seg-panels > div.seg-panel[data-label]): every panel shows without scripts; with
+  // scripts a segmented switch picks one.
+  function initPanels() {
+    for (const box of document.querySelectorAll('.seg-panels')) {
+      const panels = [...box.querySelectorAll(':scope > .seg-panel')]
+      if (panels.length < 2) continue
+      const seg = el('div', { class: 'seg', role: 'group' }, panels.map((p, i) => el('button', { type: 'button', 'data-value': String(i), text: p.dataset.label })))
+      seg.addEventListener('pb:change', e => panels.forEach((p, i) => { p.hidden = String(i) !== e.detail }))
+      box.classList.add('is-tabbed')
+      box.prepend(seg)
+      initSegs(box)
+      panels.forEach((p, i) => { p.hidden = i !== 0 })
+    }
+  }
+
+  // The glossary column: the entries a page lists in data-terms, or all of them.
+  function initGlossary() {
+    for (const aside of document.querySelectorAll('[data-pb-glossary]')) {
+      const keys = aside.dataset.terms ? aside.dataset.terms.split(',').map(k => k.trim()) : Object.keys(glossary)
+      aside.append(el('dl', {}, keys.filter(k => glossary[k]).map(k =>
+        el('div', { class: 'entry', 'data-entry': k }, el('dt', { text: glossary[k].name || k }), el('dd', {}, rich(glossary[k].short))))))
+    }
+  }
+
+  // List and detail built in markup (data-pb-md): an option shows the panel with the same data-panel.
+  function initMasterDetail() {
+    for (const box of document.querySelectorAll('[data-pb-md]')) {
+      const items = [...box.querySelectorAll('.sit-item[data-panel]')]
+      const panels = [...box.querySelectorAll('.md-panel[data-panel]')]
+      const choose = (i, focus) => {
+        items.forEach((it, j) => { it.setAttribute('aria-selected', String(i === j)); it.tabIndex = i === j ? 0 : -1 })
+        for (const p of panels) p.hidden = p.dataset.panel !== items[i].dataset.panel
+        if (focus) items[i].focus()
+      }
+      items.forEach((it, i) => it.addEventListener('click', () => choose(i, true)))
+      box.addEventListener('keydown', e => {
+        const at = items.findIndex(it => it.getAttribute('aria-selected') === 'true')
+        const next = { ArrowDown: at + 1, ArrowUp: at - 1, Home: 0, End: items.length - 1 }[e.key]
+        if (next === undefined || !e.target.closest('.sit-item')) return
+        e.preventDefault()
+        choose(Math.max(0, Math.min(items.length - 1, next)), true)
+      })
+      choose(0, false)
+    }
+  }
+
+  // Drawers: a button with data-pb-drawer opens the panel with that id; the close button, Escape
+  // or a second press closes it, and focus returns to the button.
+  function initDrawers() {
+    for (const opener of document.querySelectorAll('[data-pb-drawer]')) {
+      const panel = document.getElementById(opener.dataset.pbDrawer)
+      if (!panel) continue
+      const set = open => {
+        panel.hidden = !open
+        opener.setAttribute('aria-expanded', String(open))
+        document.body.classList.toggle('drawer-is-open', open)
+        if (open) panel.querySelector('button')?.focus()
+        else opener.focus()
+      }
+      opener.addEventListener('click', () => set(panel.hidden))
+      panel.querySelector('[data-pb-drawer-close]')?.addEventListener('click', () => set(false))
+      document.addEventListener('keydown', e => { if (e.key === 'Escape' && !panel.hidden) set(false) })
+    }
+  }
+
+  document.addEventListener('DOMContentLoaded', () => { initTheme(); initSegs(); initGlossary(); initNav(); initTerms(); initMasterDetail(); initDrawers(); initFilters(); initCounts(); initCopy(); initWalkers(); initPanels() })
+  return { t, el, rich, strings, glossary, facts, data, store, setSeg, initSegs, term }
+})()
+</script>
+</body>
+</html>

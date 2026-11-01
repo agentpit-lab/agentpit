@@ -31,6 +31,18 @@ export function limitsKey(limits: readonly RateLimit[]): string | null {
   return JSON.stringify([five ?? null, week ?? null])
 }
 
+// The two windows' reset times to the minute, `-` for an absent or unparseable one; null when both windows are absent.
+export function windowsKey(limits: readonly RateLimit[]): string | null {
+  const five = pick(limits, 'five_hour')
+  const week = pick(limits, 'seven_day')
+  if (!five && !week) return null
+  const minute = (l: RateLimit | undefined) => {
+    const at = l?.resetsAt ? Date.parse(l.resetsAt) : NaN
+    return Number.isNaN(at) ? '-' : new Date(at).toISOString().slice(0, 16)
+  }
+  return `${minute(five)}|${minute(week)}`
+}
+
 // What a write is compared by: the windows and the account, so a switch of account writes at once.
 export function inboxKey(limits: readonly RateLimit[], account: string | null): string | null {
   const key = limitsKey(limits)

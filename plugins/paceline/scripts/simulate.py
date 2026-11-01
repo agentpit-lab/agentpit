@@ -94,7 +94,7 @@ def simulate_week(pace, hook, profile, tz, reset, shape, night_queue, plan):
                   "scoped": [], "_at": now}
         history.append({"seven_day": dict(record["seven_day"]), "_at": now, "scoped": []})
         usage = {"record": record, "source": PINS["data_source"], "error": None, "history": list(history)}
-        calc = pace.compute(now, profile, usage, None, PINS["commit_mb"], 0.0, [], plan=plan, entry=None)
+        calc = pace.compute(now, profile, usage, None, PINS["commit_mb"], 0.0, plan=plan, entry=None)
         if calc.get("plan_error"):
             raise pace.PaceError(f"the simulation could not build its plan: {calc['plan_error']}")
         rec = pace.recommend(calc)

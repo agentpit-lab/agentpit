@@ -52,6 +52,11 @@ export function readGate(text: string | null): Gate {
   return { last_attempt: num(s.last_attempt), last_success: num(s.last_success), last_error: typeof s.last_error === 'string' ? s.last_error : null }
 }
 
+// A reading counts for an account only when the profile endpoint, asked with the reading's own credential, names the same key.
+export function isConfirmed(before: string | null, answered: string | null): boolean {
+  return before !== null && answered === before
+}
+
 // The inbox file's own time stands in for a lost gate file, so deleting it cannot cause a burst.
 export function inboxObservedAt(text: string | null): number | null {
   const s = parse(text)

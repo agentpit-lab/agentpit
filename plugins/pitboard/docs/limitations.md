@@ -103,6 +103,21 @@ row while the inline survey shows.
 
 **What still works:** `/pitboard` shows every card meanwhile.
 
+### The Desktop row can wrap within about a third of a cell
+
+Claude Code gives a plugin the width of the Desktop row in whole columns and no way to read back how
+the row was laid out. PitBoard therefore estimates the width character by character (digits 0.97 of
+a cell, the others 0.9, a few wider signs more, plus 2 cells of band padding) and picks the fullest
+limit style that fits within 1.5 cells of the window ([Desktop limit
+styles](reference.md#desktop-limit-styles)). The estimate can be off by about a third of a cell, so
+the row can still wrap in a window whose width lies that close to the edge of a style.
+
+**What you see:** in a window within about a third of a cell of the edge between two styles, the row
+can wrap onto a second line.
+
+**What still works:** every reading and card; a slightly wider or narrower window, or `/pitboard`,
+avoids the wrap.
+
 ## Data PitBoard cannot see
 
 ### Limits while every session is idle
@@ -221,20 +236,20 @@ plugin](how-to.md#seat-pitboard-as-your-organizations-plugin).
 
 ### The plan rows need PaceLine's week plan file
 
-The `Plan` and `Reserve` rows, and the plan's `Spare`, `Overspent` and `Budget`, need PaceLine's
-week plan file of the signed-in account, `week-plan-<key>.json`. PaceLine writes it only while pace
-is on, once the current part has been fixed, and for the account PitBoard shows. At each boundary of
-the plan (09:00 and 18:00 by default) the part in the file ends, and the card shows the even pace
-until PaceLine writes the new part: about 40 seconds (PaceLine's module tick, a Python start and
-PitBoard's 20-second refresh), longer while another process holds PaceLine's pace lock. A weekly
-window that resets ahead of schedule, or whose reset moves later, does the same: the file's week no
-longer matches the card's, and the card shows the even pace until PaceLine's limits merge or a
-PaceLine command writes the new week, normally within the same time. A `claude` started from a
-Desktop terminal tab reads the plan of the Desktop account, as it shows that account's figures.
+The Part block (the `☼` or `☾` gauge and its card) and `Reserve` need PaceLine's week plan file of
+the signed-in account, `week-plan-<key>.json`. PaceLine writes it only while pace is on, once the
+current part has been fixed, and for the account PitBoard shows. At each boundary of the plan (09:00
+and 18:00 by default) the part in the file ends, and the Part block is gone until PaceLine writes
+the new part: about 40 seconds (PaceLine's module tick, a Python start and PitBoard's 20-second
+refresh), longer while another process holds PaceLine's pace lock. A weekly window that resets ahead
+of schedule, or whose reset moves later, does the same: the file's week no longer matches the
+card's, and the block is gone until PaceLine's limits merge or a PaceLine command writes the new
+week, normally within the same time. A `claude` started from a Desktop terminal tab reads the plan
+of the Desktop account, as it shows that account's figures.
 
-**What you see:** with pace off, no usable file or another account's file, the Week card is the
-even-pace card, without `Plan` and `Reserve`; for about 40 seconds at each boundary, and when the
-weekly window resets ahead of schedule or its reset moves later, it falls back the same way.
+**What you see:** with pace off, no usable file or another account's file, the row has no Part block
+and the Week card is unchanged; for about 40 seconds at each boundary, and when the weekly window
+resets ahead of schedule or its reset moves later, it falls back the same way.
 
 **What still works:** every other card and reading of the row. See [Use PitBoard with
 PaceLine](how-to.md#use-pitboard-with-paceline) and [PaceLine's week plan

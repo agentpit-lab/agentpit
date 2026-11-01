@@ -1,26 +1,11 @@
 import { atom, read, update } from 'claude-code'
 import type { CommandRunResult, EngineInterface, Register } from 'claude-code'
 
-import type { CalendarView, ContextSession, SettingsView } from '../types'
-import {
-  addPaths,
-  compactInstructions,
-  crossedLevel,
-  formatLine,
-  isOperatorPrompt,
-  keepLast,
-  PROMPTS_KEPT,
-  readSettings,
-  recoverText,
-  snapshotPaths,
-  snapshotText,
-  warningText,
-  writtenPaths,
-} from './context'
-import type { Fill, Settings } from './context'
+import type { CalendarView, SettingsView } from '../types'
 import { ACCOUNT_KEY, accountFileOf, accountKeyOf, credentialsFileOf, PROFILE_URL, profileKeyOf } from './account'
 import { AWAY_FILE, CLEARED, isAwayOn, isPersonPrompt } from './away'
-import { inboxKey, inboxPath, inboxReading, isDue, limitsKey, stateDirOf } from './inbox'
+import { offerPath, offerTriedKey, offerWorthAsking } from './offer'
+import { inboxKey, inboxPath, inboxReading, isDue, limitsKey, stateDirOf, windowsKey } from './inbox'
 import type { RateLimit, Sent } from './inbox'
 import {
   asRunError,
@@ -60,6 +45,7 @@ import {
   fromEdit,
   MARK,
   markLabel,
+  MOVED_LINE,
   nowText,
   numbersLine,
   reserveOpensText,
@@ -90,7 +76,6 @@ import {
   valueText,
   warnText,
   weekLine,
-  wholeOnly,
   workHoursLength,
   writeArgs,
   zoneDraft,
@@ -98,14 +83,11 @@ import {
   zoneWriteArgs,
 } from './settings'
 import type { Draft, Item, Kind, Parsed, PlanDay, PlanPart, PlanView, Settings as ViewSettings, ZoneDraft } from './settings'
-import { gateOpen, inboxObservedAt, readGate, readingFrom, switchOn, tagOrDrop, USAGE_TICK_MS, USAGE_URL, usageGatePath, usageInboxPath, usageSwitchPath } from './usage'
+import { gateOpen, inboxObservedAt, isConfirmed, readGate, readingFrom, switchOn, tagOrDrop, USAGE_TICK_MS, USAGE_URL, usageGatePath, usageInboxPath, usageSwitchPath } from './usage'
 import type { Outcome } from './usage'
 
 // Every function that takes $, and every atom it reads, lives in this file: the engine follows $
 // and state references only within the file that declares them.
-
-const EMPTY: ContextSession = { sessionId: null, warned: [], prompts: [], written: [], compactions: 0 }
-const session = atom({ plugin: 'paceline', key: 'session' } as const, EMPTY)
 
 // <state>, resolved by the rule every paceline script uses, so the module and the scripts agree.
 async function stateDir($: EngineInterface): Promise<string> {
@@ -114,53 +96,6 @@ async function stateDir($: EngineInterface): Promise<string> {
     configDir: await $.env.get('CLAUDE_CONFIG_DIR'),
     home: (await $.env.get('USERPROFILE')) ?? (await $.env.get('HOME')),
   })
-}
-
-// The settings file context_watch.py writes.
-async function settingsOf($: EngineInterface): Promise<Settings> {
-  try {
-    return readSettings(await $.fs.read(`${await stateDir($)}/context-watch.json`))
-  } catch {
-    return readSettings(null)
-  }
-}
-
-// /clear and a resume start another session in the same process; its state starts empty.
-async function current($: EngineInterface): Promise<ContextSession> {
-  const id = await $.session.id()
-  const held = await read($, session)
-  if (held.sessionId === id) return held
-  const fresh = { ...EMPTY, sessionId: id }
-  await update($, session, () => fresh)
-  return fresh
-}
-
-async function change($: EngineInterface, fn: (s: ContextSession) => ContextSession) {
-  const s = await current($)
-  await update($, session, () => fn(s))
-}
-
-// The engine's own estimate of the whole window against its compact point, the figures /context shows.
-async function fillOf($: EngineInterface): Promise<Fill | null> {
-  const usage = await $.session.usage({ breakdown: 'summary' })
-  const b = usage.context.breakdown
-  const used = b?.totalTokens ?? usage.context.tokens
-  if (used === undefined) return null
-  const window = b?.rawMaxTokens ?? usage.context.window
-  const isAutoCompact = Boolean(b?.isAutoCompactEnabled && b.autoCompactThreshold)
-  return { used, window, isAutoCompact, limit: isAutoCompact ? (b!.autoCompactThreshold as number) : window }
-}
-
-async function warning($: EngineInterface, fill: Fill, settings: Settings): Promise<string | null> {
-  const s = await current($)
-  const { level, warned } = crossedLevel(fill, settings.levels, s.warned)
-  if (level === null) return null
-  await change($, x => ({ ...x, warned }))
-  return warningText(fill, level)
-}
-
-async function snapshotPath($: EngineInterface) {
-  return snapshotPaths(await $.session.root(), await $.session.id())
 }
 
 // The account of the session's credential, from the profile endpoint. Until its first answer no reading
@@ -227,7 +162,14 @@ async function credStamp($: EngineInterface): Promise<string | null> {
 // never sees it. Only the key of the two identifiers is kept, never the body. `reset` starts the count
 // of failed answers again; an ask that repeats a failed one, or follows a change of the state file,
 // keeps it.
-async function askProfile($: EngineInterface, reset = false) {
+// The newest ask, so a caller that cannot go on without the account can wait for it.
+let lastAsk: Promise<void> = Promise.resolve()
+function askProfile($: EngineInterface, reset = false): Promise<void> {
+  lastAsk = askProfileNow($, reset)
+  return lastAsk
+}
+
+async function askProfileNow($: EngineInterface, reset = false) {
   const mine = ++asked
   retryGen++
   profile.ready = false
@@ -373,6 +315,27 @@ let seenLimits: string | null = null
 // turn after the account changed, and a reading with those limits must not be tagged with the new one.
 let hold: { limits: string | null; account: string | null } | null = null
 
+// The last pair of windows confirmed against the profile, per account key, in this process.
+const confirmedWindows = new Map<string, string>()
+
+// The guard of the module: asks the profile endpoint with the handle a reading was taken with and returns
+// `before` only when the answer names the same account. Any other answer, a failure or a refusal returns
+// null, and the profile is asked again from scratch. While the account came from the state-file fallback
+// no confirmation is possible and `before` stands, without a request (the one chokepoint of that rule).
+async function confirmedTag($: EngineInterface, handle: string, before: string | null): Promise<string | null> {
+  if (profile.fallback) return before
+  let answered: string | null = null
+  try {
+    const r = await $.http.fetch(PROFILE_URL, { auth: handle })
+    answered = profileKeyOf(r.status, r.text).key
+  } catch {
+    // Unreachable or refused by the engine: the reading cannot be confirmed.
+  }
+  if (isConfirmed(before, answered)) return before
+  void askProfile($, true)
+  return null
+}
+
 async function writeInbox($: EngineInterface, limits: readonly RateLimit[]) {
   const limitsOnly = limitsKey(limits)
   if (limitsOnly === null) return
@@ -388,6 +351,15 @@ async function writeInbox($: EngineInterface, limits: readonly RateLimit[]) {
   if (key === null) return
   const now = await $.clock.now()
   if (!isDue(key, sent, now)) return
+  // A change of the pair of windows for this key is checked against the profile with a fresh handle: the
+  // credential that filled the payload may no longer be the one the profile answered for. In fallback
+  // the key came from the state file and cannot be confirmed.
+  const windows = windowsKey(limits)
+  if (account !== null && windows !== null && !profile.fallback && confirmedWindows.get(account) !== windows) {
+    const auth = await $.session.authorize()
+    if (!auth || (await confirmedTag($, auth.handle, account)) === null) return
+    confirmedWindows.set(account, windows)
+  }
   try {
     const [dir, id, model] = await Promise.all([stateDir($), $.session.id(), $.session.model()])
     await $.fs.write(inboxPath(dir, id), JSON.stringify(inboxReading(limits, now, id, model ?? null, account)))
@@ -411,13 +383,13 @@ let mergeGaveUp = false
 // The process call with its timeout said out; a final rejection throws RunTimedOut (the command
 // may have run), which runPythonScript does not answer by trying another interpreter, and an unknown
 // one RunUnknown, which it answers that way for a read only.
-function execOf($: EngineInterface): Exec {
+function execOf($: EngineInterface, timeoutMs: number = RUN_TIMEOUT_MS): Exec {
   return async (argv, stdin) => {
     try {
       // The child reads readings under the account this session runs under, not the state file's.
       const known = await accountOf($)
       const env = known?.key ? { PACELINE_ACCOUNT_KEY: known.key } : undefined
-      return await $.process.run(argv, { stdin, timeoutMs: RUN_TIMEOUT_MS, ...(env ? { env } : {}) })
+      return await $.process.run(argv, { stdin, timeoutMs, ...(env ? { env } : {}) })
     } catch (err) {
       throw asRunError(err)
     }
@@ -550,6 +522,12 @@ async function usageTick($: EngineInterface) {
       const after = await accountOf($)
       const tagged = after ? tagOrDrop(outcome.reading, before, after.key) : null
       if (!tagged) return
+      // Asked with a fresh handle, not the one the reading was taken with; an unknown account (both sides null)
+      // stays untagged. In fallback nothing is asked, so no handle is taken.
+      if (before !== null && !profile.fallback) {
+        const confirm = await $.session.authorize()
+        if (!confirm || (await confirmedTag($, confirm.handle, before)) === null) return
+      }
       await $.fs.write(usageInboxPath(dir, key), JSON.stringify(tagged))
       await $.fs.write(gatePath, JSON.stringify({ last_attempt: now, last_success: outcome.at, last_error: null }))
     } else {
@@ -676,9 +654,10 @@ async function performMark($: EngineInterface, date: string, kind: 'work' | 'off
   }
   const day = held.week_days.find(d => d.date === date)
   const part = kind === 'work' ? day?.work : day?.off
-  if (part && part.state !== 'later') {
-    // The part started (or ended) since the plan was drawn: nothing is written, and an older note goes.
-    $.ui.toast(`${date} ${kind === 'work' ? '☼' : '☾'} has started; nothing changed`)
+  if (part && part.state === 'ended') {
+    // The part ended since the plan was drawn: nothing is written, and an older note goes. A current part is
+    // changed like a later one: the plan command splits it at the moment of the change.
+    $.ui.toast(`${date} ${kind === 'work' ? '☼' : '☾'} has ended; nothing changed`)
     await update($, calendarView, v => ({ ...v, note: null }))
     return
   }
@@ -949,10 +928,6 @@ async function drawSettings($: EngineInterface, els: Els, surface: string) {
         await update($, settingsView, v => ({ ...v, note: { row: at, text: `"${d.text ?? ''}" is not a value for ${item.label}` } }))
         return
       }
-      if (!wholeOnly(item, parsed.value)) {
-        await update($, settingsView, v => ({ ...v, note: { row: at, text: `${item.label} takes whole numbers only` } }))
-        return
-      }
       argv = writeArgs(item, parsed.value)
     }
     if (!argv) return
@@ -1055,6 +1030,7 @@ async function drawSettings($: EngineInterface, els: Els, surface: string) {
           )}
         </Box>
         {view.line && <Text dimColor>{view.line}</Text>}
+        <Text dimColor>{MOVED_LINE}</Text>
       </Box>
       {TIERS.map(t => section(t.name, t.color, rowsOf(t.tier).map(item => row(item, t.tier))))}
       {section(
@@ -1104,11 +1080,12 @@ function drawCalendar($: EngineInterface, els: Els, canEdit: boolean, header: un
   const { ended, rows } = endedRun(view)
   const anyWarn = rows.some(d => warnText(d) !== '')
 
-  // One − / + pair of a part that has not started; a part's bound has no button.
+  // One − / + pair of a part that has not ended (the current one splits at the change); a part's bound has no button.
   const marks = (day: PlanDay, kind: 'work' | 'off', part: PlanPart | null) => {
     const id = `cal-${day.date}-${kind}`
-    const down = part && part.state === 'later' ? stepMark(part.mark, -1) : null
-    const up = part && part.state === 'later' ? stepMark(part.mark, 1) : null
+    const live = part !== null && part.state !== 'ended'
+    const down = live ? stepMark(part.mark, -1) : null
+    const up = live ? stepMark(part.mark, 1) : null
     if (down === null && up === null) return null
     // − and + each keep their own slot, so a part at a bound leaves the other button where it always is.
     return (
@@ -1311,6 +1288,42 @@ async function clearAway($: EngineInterface) {
   if (isAwayOn(await textAt($, path))) await $.fs.write(path, CLEARED)
 }
 
+// The off-hours offer on the person's own prompt (spec: one line for the model, once per part, any session).
+// The cheap test reads the week plan file and the record; `paceline plan offer` decides and records, so a
+// second session or a second prompt finds the part already offered. Nothing here may delay or fail a prompt:
+// the command skips the inbox merge and waits only briefly for the lock, the call has a hard time limit, and a
+// part is tried once per hook process, whatever the outcome (a part the plan marks explicitly, a busy lock, a
+// failure all answer nothing, and asking again on every prompt would only cost a process start each time).
+const OFFER_TIMEOUT_MS = 1_500
+// A session's first prompt can come before its first profile answer; the offer waits this long for it,
+// or that prompt would never be offered (seen live: the offer came only on the second prompt).
+const OFFER_PROFILE_WAIT_MS = 1_000
+const offerTried = new Set<string>()
+async function offerLine($: EngineInterface): Promise<string | null> {
+  const dir = await stateDir($)
+  try {
+    if ((JSON.parse((await textAt($, `${dir}/pace.json`)) ?? 'null') as { on?: unknown } | null)?.on !== true) return null
+  } catch {
+    return null
+  }
+  if (!profile.ready) {
+    if (!profile.asking) void askProfile($)
+    await Promise.race([lastAsk, new Promise<void>(resolve => $.clock.after(OFFER_PROFILE_WAIT_MS, resolve))])
+  }
+  const key = (await accountOf($))?.key
+  if (typeof key !== 'string' || !ACCOUNT_KEY.test(key)) return null
+  const planText = await textAt($, weekPlanPath(dir, key))
+  if (!offerWorthAsking(planText, await textAt($, offerPath(dir, key)), await $.clock.now())) return null
+  const tried = offerTriedKey(key, planText)
+  if (tried === null || offerTried.has(tried)) return null
+  offerTried.add(tried)
+  // A writing command run through the read path on purpose: a fresh memo finds its interpreter that way, and
+  // the command is idempotent under the lock (`write` true runs nothing while the memo is undefined).
+  const ran = await runPythonScript(execOf($, OFFER_TIMEOUT_MS), interpreter, `${$.plugin.root}/scripts/paceline.py`, ['plan', 'offer', '--no-merge'], false, false)
+  const line = ran !== null && ran.exitCode === 0 ? ran.stdout.trim() : ''
+  return line || null
+}
+
 export const register: Register = on => {
   // /paceline:settings, answered before the model. Exactly this plugin's own name: another plugin's
   // `settings` skill, and a bare `settings`, run as they do.
@@ -1330,71 +1343,17 @@ export const register: Register = on => {
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => drawSettings($, $.ui.resolve(e) as Els, e.surface))
 
   on('prompt.submit', async ($, e, next) => {
-    try {
-      if (isPersonPrompt(e, $.plugin.name)) await clearAway($)
-    } catch {
-      // The marker stays; the prompt goes on.
-    }
-    return next(e)
-  })
-
-  on('classic.UserPromptSubmit', async ($, e, next) => {
-    const result = await next(e)
-    try {
-      if (e.agent_id) return result
-      const settings = await settingsOf($)
-      if (!settings.on) return result
-      if (isOperatorPrompt(e.prompt, e.source)) {
-        await change($, s => ({ ...s, prompts: keepLast(s.prompts, e.prompt, PROMPTS_KEPT) }))
-      }
-      const fill = await fillOf($)
-      if (!fill) return result
-      const added: string[] = []
-      if (settings.line) added.push(formatLine(fill))
-      const warn = await warning($, fill, settings)
-      if (warn) added.push(warn)
-      return added.length ? { ...result, additionalContext: [...(result.additionalContext ?? []), added.join('\n')] } : result
-    } catch {
-      return result
-    }
-  })
-
-  on('classic.PostToolBatch', async ($, e, next) => {
-    const result = await next(e)
-    try {
-      if (e.agent_id) return result
-      const settings = await settingsOf($)
-      if (!settings.on) return result
-      const paths = writtenPaths(e.tool_calls)
-      if (paths.length) await change($, s => ({ ...s, written: addPaths(s.written, paths) }))
-      const fill = await fillOf($)
-      if (!fill) return result
-      const warn = await warning($, fill, settings)
-      return warn ? { ...result, additionalContext: [...(result.additionalContext ?? []), warn] } : result
-    } catch {
-      return result
-    }
-  })
-
-  // Never vetoes, delays or replaces a compaction: next(e) always runs and its result goes back as is.
-  on('session.compact', async ($, e, next) => {
     let down = e
     try {
-      if (!e.agentId && e.trigger !== 'precompute' && (await settingsOf($)).on) {
-        const s = await current($)
-        const paths = await snapshotPath($)
-        const text = snapshotText({
-          at: new Date(await $.clock.now()).toISOString(),
-          trigger: e.trigger,
-          compaction: s.compactions + 1,
-          prompts: s.prompts,
-          messages: e.messages,
-          written: s.written,
-        })
-        if (!(await $.fs.exists(paths.ignore))) await $.fs.write(paths.ignore, '*\n')
-        await $.fs.write(paths.file, text)
-        await change($, x => ({ ...x, compactions: x.compactions + 1 }))
-        down = { ...e, instructions: compactInstructions(e.instructions, paths.file) }
+      if (isPersonPrompt(e, $.plugin.name)) {
+        try {
+          await clearAway($)
+        } catch {
+          // The marker stays; the prompt goes on.
+        }
+        // Only the person's own prompt counts, by the rule that clears the away marker.
+        const offer = await offerLine($)
+        if (offer) down = { ...e, context: [...(e.context ?? []), offer] }
       }
     } catch {
       down = e
@@ -1402,7 +1361,25 @@ export const register: Register = on => {
     return next(down)
   })
 
-  // Runs whatever the context-watch settings and the pace switch say: the limits file serves every reader.
+  // The time of a request, for readers of the account (PitBoard's `<1` figures): after each step that
+  // returned usage, main agent and subagent alike, and only for a known account key.
+  on('turn.step', async function* ($, e, next) {
+    const result = yield* next(e)
+    if (result.usage) {
+      try {
+        const key = (await accountOf($))?.key ?? null
+        if (key !== null && ACCOUNT_KEY.test(key)) {
+          const at = new Date(await $.clock.now()).toISOString()
+          await $.fs.write(`${await stateDir($)}/last-request-${key}.json`, JSON.stringify({ version: 1, account: key, requested_at: at }))
+        }
+      } catch {
+        // A failed write never fails the step.
+      }
+    }
+    return result
+  })
+
+  // Runs whatever the pace switch says: the limits file serves every reader.
   on('session.measure', async ($, e, next) => {
     try {
       await writeInbox($, e.rateLimits ?? [])
@@ -1436,6 +1413,7 @@ export const register: Register = on => {
   }
 
   on('session.start', async ($, e, next) => {
+    offerTried.clear()
     const result = await next(e)
     // A module reload keeps the engine's panes but starts paneOpenNow over. A host that cannot list
     // panes must not stop the session start.
@@ -1500,19 +1478,5 @@ export const register: Register = on => {
         <Button key="settings" label="[ PaceLine ]" dimColor onPress={() => pressPane($)} />
       </Box>
     )
-  })
-
-  on('classic.SessionStart', async ($, e, next) => {
-    const result = await next(e)
-    try {
-      if (e.source !== 'compact' || e.agent_id) return result
-      if (!(await settingsOf($)).on) return result
-      await change($, s => ({ ...s, warned: [] }))
-      const paths = await snapshotPath($)
-      if (!(await $.fs.exists(paths.file))) return result
-      return { ...result, additionalContext: [...(result.additionalContext ?? []), recoverText(paths.file)] }
-    } catch {
-      return result
-    }
   })
 }

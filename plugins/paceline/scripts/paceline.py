@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""paceline: one command for pace, cache-watch, context-watch and usage-watch.
+"""paceline: one command for pace, usage-watch and away.
 
-    paceline <pace command> ...      status, auto, on, off, plan, reserve, hold, queue, merge, doctor, ...
-    paceline cache-watch ...         on, off, status, config
-    paceline context-watch ...       config, status
+    paceline <pace command> ...      status, advice, on, off, plan, reserve, hold, merge, doctor, ...
+    paceline cache-watch ...         moved to the PitCrew plugin (prints where, exits 2)
+    paceline context-watch ...       moved to the PitCrew plugin (prints where, exits 2)
     paceline usage-watch ...         on, off, status
     paceline away ...                on, off, status
 
@@ -22,19 +22,17 @@ def main(argv=None):
     for stream in (sys.stdout, sys.stderr):
         with contextlib.suppress(AttributeError, ValueError):
             stream.reconfigure(encoding="utf-8")
-    if argv[:1] == ["cache-watch"]:
-        import cache_watch
-        return cache_watch.main(argv[1:])
-    if argv[:1] == ["context-watch"]:
-        import context_watch
-        return context_watch.main(argv[1:])
+    import pace
+    if argv[:1] and argv[0] in pace.MOVED_GROUPS:
+        return pace.moved_group(argv[0])
+    if argv[:1] and argv[0] in pace.MOVED_COMMANDS:
+        return pace.moved_command(argv[0])
     if argv[:1] == ["usage-watch"]:
         import usage_watch
         return usage_watch.main(argv[1:])
     if argv[:1] == ["away"]:
         import away
         return away.main(argv[1:])
-    import pace
     return pace.main(argv)
 
 

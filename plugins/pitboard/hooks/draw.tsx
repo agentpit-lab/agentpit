@@ -80,11 +80,15 @@ function wideCells(Text: Ctor, b: CardBar, cells: number) {
   const projected = Math.max(used, b.projected !== undefined ? at(b.projected) : used)
   const tick = b.tick === null ? -1 : Math.min(cells - 1, at(b.tick))
   const usedColor = b.level === 'calm' ? VALUE : LEVEL[b.level]
-  return Array.from({ length: cells }, (_, i) => (
-    <Text key={String(i)} color={i === tick ? VALUE : i < used ? usedColor : i < projected ? DIM : TRACK}>
-      {i === tick ? '┃' : i < projected ? '━' : '─'}
-    </Text>
-  ))
+  return Array.from({ length: cells }, (_, i) => {
+    const color = i === tick ? VALUE : i < used ? usedColor : i < projected ? DIM : TRACK
+    const glyph = i === tick ? '┃' : i < projected ? '━' : '─'
+    return (
+      <Text key={String(i)} color={color}>
+        {glyph}
+      </Text>
+    )
+  })
 }
 
 // The pane: every card of the row, unfolded in the row's order, with all of its explanation; the
@@ -101,7 +105,7 @@ const toneColor = (tone?: Tone) => (tone === 'on' ? ON : tone && tone !== 'calm'
 
 export function drawPane(els: Els, v: View, isRemote: boolean) {
   const { Box, Text } = els
-  const { gauges, info, advisor } = readings(v)
+  const { gauges, info, advisor } = readings(v, 'pane')
   const m = v.meta
   // A section's lines: a Row drawn as text runs, or a node laid out on its own (the readings grid).
   const sections: { key: string; rows: (Row | { node: any })[] }[] = []
@@ -196,7 +200,8 @@ const HOVER_CARDS = true
 const NATIVE_CARD_CELLS = 44
 // The narrowest a card gets, and desktop cells a character of its text takes (estimated from screenshots).
 const NATIVE_CARD_MIN_CELLS = 26
-const NATIVE_CELLS_PER_CHAR = 1.15
+// 1.15 made the bar, and so the card, wider than its text; 0.9 follows the text.
+const NATIVE_CELLS_PER_CHAR = 0.9
 // A faint grey wash under the hovered reading: a border takes a whole cell on each side and wraps
 // the row, a background takes no room. Half-transparent grey shades a light band and lifts a dark one.
 const HOVER_FRAME = { backgroundColor: '#8080801f' }
@@ -221,10 +226,10 @@ export function drawDesktop(els: Els, v: View, open: string | null, toggle: (key
   const glyphMarks = (g: Gauge) => (g.mark && !Svg ? [<Text key={`m-${g.key}`} color={DESKTOP_ON}>{markText(g)}</Text>] : [])
   const content = (g: Gauge) => {
     if (bars && g.pace !== undefined) {
-      const bar = barSvg(g.pct ?? 0, g.level, g.pace, undefined, g.paceName)
+      const bar = barSvg(g.pct ?? 0, g.barLevel ?? g.level, g.pace, undefined, g.paceName, g.projected !== undefined ? { projected: g.projected, projectedName: g.projectedName } : undefined)
       return [
         name(g.key, g.label),
-        Svg ? <Svg key={`bar-${g.key}`} source={bar.source} alt={`${g.label} ${bar.alt}`} width={bar.width} height={bar.height} /> : null,
+        Svg ? <Svg key={`bar-${g.key}`} source={bar.source} alt={`${g.label} ${g.barAlt ?? bar.alt}`} width={bar.width} height={bar.height} /> : null,
         g.value ? (
           <Text key={`v-${g.key}`} bold color={g.level === 'calm' ? undefined : DESKTOP_LEVEL[g.level]}>
             {g.value}
@@ -243,7 +248,7 @@ export function drawDesktop(els: Els, v: View, open: string | null, toggle: (key
         ? ringMarksSvg(g.pct === null ? null : { pct: g.pct, level: g.level }, !!g.idle)
         : g.pct === null
           ? null
-          : pieSvg(g.pct, g.level)
+          : pieSvg(g.pct, g.barLevel ?? g.level)
     return [
       name(g.key, g.label),
       ring && Svg ? <Svg key={`pie-${g.key}`} source={ring.source} alt={`${g.label} ${g.icon || g.mark ? ring.alt : (g.value ?? 'n/a')}`} width={ring.width} height={ring.height} /> : null,
@@ -394,7 +399,8 @@ const markText = (g: Gauge) => `${g.mark ?? ''}${g.idle ? IDLE_MARK : ''}`
 // added a gap, `|`, a gap and its `[ label ]`; the rule runs 1 past it so the last button sits as far
 // from its end as ⓘ from the │ before it.
 export function terminalCells(v: View, buttons: PitboardButton[] = []): number {
-  const { gauges, advisorOn } = readings(v)
+  const { gauges } = readings(v)
+  const { advisorOn } = readings(v)
   const readingWidth = (g: Gauge) =>
     [g.label.length, g.pct !== null || g.icon ? 2 : null, g.mark ? markText(g).length : null, shownValue(g) && g.value ? g.value.length : null, g.extra?.length ?? null]
       .filter((n): n is number => n !== null)
@@ -411,7 +417,8 @@ export function terminalCells(v: View, buttons: PitboardButton[] = []): number {
 
 export function drawTerminal(els: Els, v: View, open: string | null, toggle: (key: string) => void, togglePane: () => void = () => {}, buttons: PitboardButton[] = []) {
   const { Box, Button, Text } = els
-  const { gauges, info, advisor, advisorOn } = readings(v)
+  const read = readings(v)
+  const { gauges, info, advisor, advisorOn } = read
   const m = v.meta
   const model = m ? displayModel(m.model) : null
   const name = (key: string, label: string) =>
@@ -435,7 +442,7 @@ export function drawTerminal(els: Els, v: View, open: string | null, toggle: (ke
       {g.icon ? (
         <Text color={g.icon === 'cold' ? COLD : LEVEL.act}>{ICON_CELLS[g.icon]}</Text>
       ) : g.pct !== null ? (
-        <Text color={g.level === 'calm' ? CALM_FILL : LEVEL[g.level]} backgroundColor={TRACK}>
+        <Text color={(g.barLevel ?? g.level) === 'calm' ? CALM_FILL : LEVEL[g.barLevel ?? g.level]} backgroundColor={TRACK}>
           {gaugeCells(g.pct)}
         </Text>
       ) : null}
@@ -495,6 +502,9 @@ export function drawTerminal(els: Els, v: View, open: string | null, toggle: (ke
     const at = rows.findIndex(([label]) => label === 'Claude Code')
     return at > 0 ? [{ rows: rows.slice(0, at) }, { rows: rows.slice(at) }] : [{ rows }]
   }
+  // a detail line wraps at the terminal's width, but only between its pairs: the
+  // spaces inside a title, a label or a value are no-break, and the break falls after a " · ".
+  const glue = (text: string) => text.replace(/ /g, ' ')
   const detail = (key: string) => {
     // The advisor's card exists whenever meta does; with no advisor set its line has no label to hang from.
     const card = key === 'advisor' ? (m?.advisor ? advisor : undefined) : cardFor(gauges, info, key)
@@ -503,23 +513,23 @@ export function drawTerminal(els: Els, v: View, open: string | null, toggle: (ke
     return (
       <Box key={`detail-${key}`} flexDirection="column">
         {detailLines(card).map((line, n) => (
-          <Text key={`line-${n}`} wrap="truncate-end">
+          <Text key={`line-${n}`} wrap="wrap">
             {n === 0 ? (
               <Text bold color={titleColor ?? (card.level && card.level !== 'calm' ? LEVEL[card.level] : VALUE)}>
-                {card.title}
+                {glue(card.title)}
               </Text>
             ) : null}
             {line.rows.map(([label, value, level], i) => (
               <Text key={String(i)}>
-                <Text color={DIM}>{`${n === 0 || i > 0 ? ' · ' : ''}${label} `}</Text>
+                <Text color={DIM}>{`${n === 0 || i > 0 ? ' · ' : ''}${glue(label)} `}</Text>
                 {isInfoOf(key) && label === 'Advisor' && isInactive && value.endsWith(INACTIVE_SUFFIX) ? (
                   <>
-                    <Text {...infoColor(key, label)}>{value.slice(0, -INACTIVE_SUFFIX.length)}</Text>
-                    <Text dimColor>{INACTIVE_SUFFIX}</Text>
+                    <Text {...infoColor(key, label)}>{glue(value.slice(0, -INACTIVE_SUFFIX.length))}</Text>
+                    <Text dimColor>{glue(INACTIVE_SUFFIX)}</Text>
                   </>
                 ) : (
                   <Text color={level === 'on' ? ON : level && level !== 'calm' ? LEVEL[level] : VALUE} {...infoColor(key, label)}>
-                    {value}
+                    {glue(value)}
                   </Text>
                 )}
               </Text>
@@ -528,7 +538,7 @@ export function drawTerminal(els: Els, v: View, open: string | null, toggle: (ke
         ))}
         {/* As on desktop: explanations live in the pane; the line adds only advice, when there is one. */}
         {card.advice ? (
-          <Text key="advice" color={DIM} wrap="truncate-end">
+          <Text key="advice" color={DIM} wrap="wrap">
             {card.advice}
           </Text>
         ) : null}

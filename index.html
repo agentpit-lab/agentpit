@@ -113,7 +113,7 @@ a.card strong { color: var(--accent); }
   <header>
     <h1>agentpit documentation</h1>
     <p>Guides and interactive pages for the plugins of the agentpit Claude Code marketplace.</p>
-    <p>On a Team or Enterprise login, or on a machine with managed settings, Claude Code&#x27;s <code>sec-default</code> guard stops PaceLine&#x27;s context-watch and delays what PitBoard shows after a compaction. Each plugin&#x27;s Limitations page says what still works and how an administrator of a small team can work around it.</p>
+    <p>On a Team or Enterprise login, or on a machine with managed settings, Claude Code&#x27;s <code>sec-default</code> guard stops context-watch, which is PitCrew&#x27;s (PaceLine&#x27;s up to 0.6.0), and delays what PitBoard shows after a compaction. Each plugin&#x27;s Limitations page says what still works and how an administrator of a small team can work around it.</p>
   </header>
   <section>
     <h2>PitBoard</h2>
@@ -130,15 +130,37 @@ a.card strong { color: var(--accent); }
   </section>
   <section>
     <h2>PaceLine</h2>
-    <p>Keeps a session&#x27;s context and the subscription&#x27;s usage limits in shape.</p>
+    <p>Keeps the subscription&#x27;s usage limits in shape.</p>
     <div class="cards">
-      <a class="card" href="plugins/paceline/docs/getting-started.html"><strong>Getting started</strong><span>Its four functions and where pace speaks.</span></a>
+      <a class="card" href="plugins/paceline/docs/getting-started.html"><strong>Getting started</strong><span>Its two functions and where pace speaks.</span></a>
       <a class="card" href="plugins/paceline/docs/budget-simulator.html"><strong>Budget simulator</strong><span>What pace will tell you, before it does.</span></a>
-      <a class="card" href="plugins/paceline/docs/how-to.html"><strong>How-to guides</strong><span>Run a night queue, declare a plan, hold the cache.</span></a>
+      <a class="card" href="plugins/paceline/docs/how-to.html"><strong>How-to guides</strong><span>Run a night queue, declare a plan, keep usage current.</span></a>
       <a class="card" href="plugins/paceline/docs/explanation.html"><strong>Explanation</strong><span>How the budget, the forecast and the night queue decide.</span></a>
       <a class="card" href="plugins/paceline/docs/reference.html"><strong>Reference</strong><span>Commands, exit codes, profile keys, files and formats.</span></a>
       <a class="card" href="plugins/paceline/docs/troubleshooting.html"><strong>Troubleshooting</strong><span>Pace looks inactive, the budget looks wrong, data is stale.</span></a>
       <a class="card" href="plugins/paceline/docs/limitations.html"><strong>Limitations</strong><span>What it cannot do, and what still works.</span></a>
+    </div>
+  </section>
+  <section>
+    <h2>PitCrew</h2>
+    <p>Keeps a session&#x27;s context and prompt cache in shape: warnings and snapshots around compaction, and a keeper for an idle session&#x27;s cache.</p>
+    <div class="cards">
+      <a class="card" href="plugins/pitcrew/docs/getting-started.html"><strong>Getting started</strong><span>Install it and see what runs at once.</span></a>
+      <a class="card" href="plugins/pitcrew/docs/how-to.html"><strong>How-to guides</strong><span>Hold the cache, recover after a compaction, choose between the two.</span></a>
+      <a class="card" href="plugins/pitcrew/docs/reference.html"><strong>Reference</strong><span>Commands, settings, files, variables and hooks.</span></a>
+      <a class="card" href="plugins/pitcrew/docs/troubleshooting.html"><strong>Troubleshooting</strong><span>No warning, no snapshot, a watch that did not start.</span></a>
+      <a class="card" href="plugins/pitcrew/docs/limitations.html"><strong>Limitations</strong><span>What it cannot do, and what still works.</span></a>
+    </div>
+  </section>
+  <section>
+    <h2>Stint</h2>
+    <p>A queue of unattended work for Claude Code, bounded by PaceLine&#x27;s advice or by its own limit stops.</p>
+    <div class="cards">
+      <a class="card" href="plugins/stint/docs/getting-started.html"><strong>Getting started</strong><span>Install it, queue an item and run it.</span></a>
+      <a class="card" href="plugins/stint/docs/how-to.html"><strong>How-to guides</strong><span>Queue work, plan tonight&#x27;s share, run without PaceLine, move from PaceLine&#x27;s queue.</span></a>
+      <a class="card" href="plugins/stint/docs/reference.html"><strong>Reference</strong><span>Commands, settings, files, variables and the order of the answer.</span></a>
+      <a class="card" href="plugins/stint/docs/troubleshooting.html"><strong>Troubleshooting</strong><span>The queue stops at once, waits with no reading, PaceLine is not found.</span></a>
+      <a class="card" href="plugins/stint/docs/limitations.html"><strong>Limitations</strong><span>What it cannot do, and what still works.</span></a>
     </div>
   </section>
   <section>

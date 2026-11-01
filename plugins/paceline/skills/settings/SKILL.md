@@ -1,9 +1,8 @@
 ---
 name: settings
 description: >
-  Show every PaceLine setting and switch with its current value, and change one. Prints the four
-  switches (pace, usage-watch, away, context-watch), the settings in tiers (your day, this machine,
-  the watchers) and how many Advanced settings differ from their default; a
+  Show every PaceLine setting and switch with its current value, and change one. Prints the three
+  switches (pace, usage-watch, away), the settings in tiers (your day, this machine) and how many Advanced settings differ from their default; a
   value that differs is marked with a "●". The pane (`pane`) edits a value with the same checks as
   `paceline profile set` and plans the week in its Calendar tab. Use when the operator asks what is set, which settings PaceLine has, what a
   setting is now or by default, or wants to look at or change settings in one place.
@@ -42,11 +41,10 @@ the operator what it printed, in their language:
 | The memory guard | `paceline profile set memory_guard 'true' < /dev/null` (a JSON boolean; `'false'` turns it off) |
 | The time zone follows the machine, or stays fixed | `paceline profile set timezone_mode machine\|fixed < /dev/null` |
 | A fixed time zone | `paceline profile set timezone NAME < /dev/null` |
-| The context gauge, warning levels, snapshot days, on or off | `paceline context-watch config --line on\|off`, `--levels 85,95`, `--days N`, `--on`, `--off` |
-| cache-watch lead and wakes | `paceline cache-watch config --lead MIN --max N` |
+| context-watch or cache-watch settings | They moved to the PitCrew plugin: `/pitcrew:context-watch`, `/pitcrew:cache-watch` |
 | pace | `paceline on < /dev/null`, `paceline off < /dev/null` |
 | usage-watch | `paceline usage-watch on\|off < /dev/null` |
 | away | `paceline away on --session ${CLAUDE_SESSION_ID} < /dev/null`, `paceline away off < /dev/null` |
 
 A refused value prints the reason and changes nothing; pass it on. The `pace` skill covers `profile set`
-in more detail, and `cache-watch` and `context-watch` their commands.
+in more detail.

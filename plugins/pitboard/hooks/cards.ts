@@ -1,7 +1,7 @@
 import type { StatusMeta } from '../types'
-import { PIE_PX, ringMarksWidth, type Card, type CardBar, type Tone } from './desktop'
+import { PIE_PX, ringMarksWidth, type BarExtra, type Card, type CardBar, type Tone } from './desktop'
 import type { CacheView, ContextView, Level, PlanView, View } from './view'
-import { planLevel } from './view'
+import { FIVE_BUDGET_MIN_MS, higher, planLevel, reserveLevel, roundedRate } from './view'
 
 // The terminal and the pane draw in theme keys: the engine resolves each against the person's
 // theme, light or dark, and a mod cannot read which one is active to pick a colour itself.
@@ -190,6 +190,13 @@ export function alerts(v: View): { level: Level; head: string; advice: string }[
     else if (f.pct >= 70) out.push({ level: f.level, head: `5h limit ${pct0(f.pct)}`, advice: reset })
     else out.push({ level: f.level, head: `5h pace ${rate(f.ratePerHour)}`, advice: `above the budget ${rate(f.evenPerHour)} · ${pct0(f.pct)} used, ${reset}` })
   }
+  // A model-scoped weekly limit past calm, worded as the five-hour one; it resets on its own or the week's clock.
+  for (const b of v.scoped) {
+    if (b.level === 'calm') continue
+    const own = b.resetsAt ? Date.parse(b.resetsAt) : NaN
+    const resetAt = Number.isFinite(own) ? own : (v.week?.resetAt ?? null)
+    out.push({ level: b.level, head: `${b.name} limit ${pct0(b.percentUsed)}`, advice: resetAt !== null ? `resets in ${span(Math.max(0, resetAt - v.now))}` : 'reset unknown' })
+  }
   return out.sort((a, b) => (a.level === b.level ? 0 : a.level === 'act' ? -1 : 1))
 }
 // Where readings run as one list (the pane, a CLI detail line) Budget follows Pace, as it stands
@@ -202,7 +209,8 @@ export const listOrder = (rows: Card['rows']) => {
   const rest = filled.filter(r => r !== budget)
   return [...rest.slice(0, at + 1), budget, ...rest.slice(at + 1)]
 }
-type Group = 'context' | 'cache' | 'limits'
+// 'week' holds the week plan (Part, 7d, the scoped weekly limits) apart from 5h: 5h │ Part · 7d.
+export type Group = 'context' | 'cache' | 'limits' | 'week'
 export type Gauge = {
   key: string
   group: Group
@@ -225,6 +233,14 @@ export type Gauge = {
   pace?: number | null
   // What the tick is called in the alt text; omitted, it is the even pace.
   paceName?: string
+  // The paler forecast layer of the bar: whole percent 0-100, and what the alt text calls it
+  // ('at reset', or 'at part end' for the Part block).
+  projected?: number
+  projectedName?: string
+  // The bar's fill level where it differs from the gauge's (the Part block, amber over its share).
+  barLevel?: Level
+  // What a bar's alt text says where the fill's percentage would mislead (an unplanned Part block).
+  barAlt?: string
   reset?: string
   card: Card
 }
@@ -296,7 +312,9 @@ function contextCard(v: View): Card {
   }
 }
 
-function cacheCard(v: View): Card {
+// `withHits`: the row has no Hit reading, so its Cache card carries the hit rates.
+// isRow: the row's card joins TTL to the countdown, "41m of 1h".
+function cacheCard(v: View, withHits = false, isRow = false): Card {
   const k = v.cache
   const ratio = `${k.isRatioFloor ? '≥' : '~'}${k.ratio}×`
   const rewrite = k.rewrite !== null ? `${kilo(k.rewrite)} tokens` : 'the whole context'
@@ -313,10 +331,20 @@ function cacheCard(v: View): Card {
             ? `${Math.floor(k.leftMs / 60_000)}m`
             : mmss(k.leftMs)
   const rows: Rows = [
-    ['Countdown', expires, k.state === 'warm' ? k.level : undefined],
-    ['TTL', k.regime ?? '5m?'],
+    ...((isRow && k.state === 'warm'
+      ? [['Countdown', `${expires} of ${k.regime ?? '5m?'}`, k.level]]
+      : [
+          ['Countdown', expires, k.state === 'warm' ? k.level : undefined],
+          ['TTL', k.regime ?? '5m?'],
+        ]) as Rows),
     // What the next turn writes again once the cache has expired, and how much dearer that turn is.
     ['If cold', k.rewrite !== null ? `${kilo(k.rewrite)} (${ratio})` : 'n/a'],
+    ...(withHits
+      ? ([
+          ['Hit, last turn', pct1(k.hitLast)],
+          ['Hit, session', pct1(k.hitAvg)],
+        ] as Rows)
+      : []),
   ]
   const advice =
     k.state === 'cold'
@@ -361,7 +389,8 @@ const GAP: [string, string] = ['', '']
 // Said where the person looks: the limits file could not tell whose figures these are.
 const accountRows = (isUnknown: boolean): Rows => (isUnknown ? [['Account', 'unknown', 'watch']] : [])
 
-function fiveCard(v: View): Card {
+// isRow: the row's card puts the reset in the title and the budget beside the pace.
+function fiveCard(v: View, isRow = false): Card {
   const f = v.five
   if (!f) return { title: '5h limit', rows: [], bullets: ['No reading yet.'] }
   const isShort = f.fullAt !== null && f.resetInMs !== null && f.fullAt < v.now + f.resetInMs
@@ -373,15 +402,31 @@ function fiveCard(v: View): Card {
         ? [['Threshold', `${pct0(f.targetPct)} at ${clock(f.fullAt, v.meta)}`, 'act']]
         : [['Runs out', clock(f.fullAt, v.meta), 'act']]
       : [['At reset', projected !== null ? `~${pct0(projected)}` : 'n/a', projected !== null && projected >= 80 ? 'watch' : undefined]]
-  const rows: Rows = [
-    ['Used', pct0(f.pct), f.level],
-    ['Resets in', f.resetInMs !== null ? span(f.resetInMs) : 'n/a'],
-    ...paceRows(f.ratePerHour, f.evenPerHour, '10 min', isShort ? 'act' : 'watch', forecast),
-    ...accountRows(v.isAccountUnknown),
-  ]
+  const isOver = f.ratePerHour !== null && f.evenPerHour !== null && f.ratePerHour > f.evenPerHour
+  const rows: Rows = isRow
+    ? [
+        ['Used', pct0(f.pct), f.level],
+        [
+          'Pace',
+          f.ratePerHour === null
+            ? 'n/a (needs 10 min)'
+            : f.evenPerHour !== null
+              ? `${f.ratePerHour.toFixed(1)} of ${rate(f.evenPerHour)}`
+              : rate(f.ratePerHour),
+          isShort ? 'act' : isOver ? 'watch' : undefined,
+        ],
+        ...forecast,
+        ...accountRows(v.isAccountUnknown),
+      ]
+    : [
+        ['Used', pct0(f.pct), f.level],
+        ['Resets in', f.resetInMs !== null ? span(f.resetInMs) : 'n/a'],
+        ...paceRows(f.ratePerHour, f.evenPerHour, '10 min', isShort ? 'act' : 'watch', forecast, f.resetInMs !== null && f.resetInMs < FIVE_BUDGET_MIN_MS ? 'n/a (under 15 min left)' : undefined),
+        ...accountRows(v.isAccountUnknown),
+      ]
   const tick = paceOf(f.resetInMs, 5 * HOUR_MS)
   // Whole percents: the card is part of the desktop key, and a finer tick would redraw the row every second.
-  const bar = { used: Math.round(f.pct), ...(projected !== null ? { projected: Math.round(projected) } : {}), tick: tick === null ? null : Math.round(tick), level: f.level }
+  const bar = { used: Math.round(f.pct), ...(projected !== null ? { projected: Math.min(100, Math.round(projected)), projectedName: 'at reset' } : {}), tick: tick === null ? null : Math.round(tick), level: f.level }
   const advice =
     f.level === 'calm'
       ? null
@@ -393,19 +438,14 @@ function fiveCard(v: View): Card {
           ? `${pct0(f.pct)} used: keep subagents for what needs them.`
           : 'Pace is above budget.'
   const explain = ['Pace: last 90 min. Budget: the pace that lasts to the reset.', 'Bar: used, paler to the reset at this pace; tick: even pace now.']
-  return { title: '5h limit', level: f.level, rows, ...noted(advice, explain), bar }
+  const title = isRow && f.resetInMs !== null ? `5h limit · resets in ${span(f.resetInMs)}` : '5h limit'
+  return { title, level: f.level, rows, ...noted(advice, explain), bar }
 }
 
-// The plan card's rows from Plan to Reserve: the verdict, the lead against the part's share, the reserve.
-function planRows(p: PlanView, v: View, resetAt: number | null): Rows {
+// The plan card's rows: the lead against the part's share, the reserve. The verdict is not a row here.
+function planRows(p: PlanView, v: View): Rows {
   const level = planLevel(p)
-  const verdict =
-    p.isUnplannedWeek
-      ? `${pct0(p.unplannedPct ?? 0)} unplanned, expires ${resetAt !== null ? clock(resetAt, v.meta, true) : 'n/a'}`
-      : p.isUnplannedPart
-        ? 'unplanned part'
-        : `${p.isAbove ? 'above' : 'within'} · ${p.mode}`
-  const rows: Rows = [['Plan', verdict, level === 'calm' ? undefined : level]]
+  const rows: Rows = []
   if (p.lead !== null) {
     const hours = p.leadHours !== null ? ` (${span(Math.round(p.leadHours * 60) * 60_000)})` : ''
     rows.push([p.lead > 0 ? 'Overspent' : 'Spare', `${Math.round(Math.abs(p.lead))} pts${hours}`, p.isAbove ? level : undefined])
@@ -418,62 +458,304 @@ function planRows(p: PlanView, v: View, resetAt: number | null): Rows {
   return rows
 }
 
-function weekCard(v: View): Card {
+// The 7d bar: the tick is the share of the week gone, whole percent or null, and the paler layer the forecast
+// at reset (the plain average since the reset held to the reset).
+export function weekBarOf(v: View): { tick: number | null; extra: BarExtra } | null {
   const w = v.week
-  const p = w?.plan ?? null
-  // What even pace would have spent by now, and how far the week is from it, in points and in hours
-  // of budget (a week spends 100% over 168 h): Spare below it, uncoloured; Overspent past it, yellow,
-  // and red past a day.
+  if (!w) return null
+  const leftMs = w.resetAt !== null ? Math.max(0, w.resetAt - v.now) : null
+  const time = paceOf(leftMs, WEEK_MS)
+  const extra: BarExtra = {}
+  if (w.forecast) {
+    extra.projected = Math.max(0, Math.min(100, Math.round(w.forecast.atReset)))
+    extra.projectedName = 'at reset'
+  }
+  return { tick: time === null ? null : Math.round(time), extra }
+}
+
+// The week's use the forecast's rate implies now, where it differs from the
+// account's whole percent; Used, the 7d value and the fill show it with one decimal. null otherwise.
+export function weekEstimate(v: View): number | null {
+  const w = v.week
+  const f = w?.forecast
+  if (!w || !f || w.isUsedUnderOne) return null
+  return Math.abs(f.usedNow - w.pct) >= 0.05 ? f.usedNow : null
+}
+
+// The sign before a forecast value that rests on under 48 h of the week.
+const approx = (f: { isApprox: boolean } | null) => (f?.isApprox ? '≈' : '')
+
+// The Week card, week rows only; the plan's rows are on the Part card.
+// Pace is the rate behind the bar's forecast: the week's average since the reset. The Part card keeps the part's own.
+// isRow: the row's card (Desktop hover, CLI line) is short: the reset joins the title, Week elapsed is the tick.
+function weekCard(v: View, isRow = false): Card {
+  const w = v.week
+  const model = weekBarOf(v)
   const even = w ? paceOf(w.resetAt !== null ? Math.max(0, w.resetAt - v.now) : null, WEEK_MS) : null
-  const lead = w && even !== null ? w.pct - even : null
-  const leadText =
-    lead === null ? 'n/a' : `${Math.round(Math.abs(lead))} pts (${span(Math.round(((Math.abs(lead) / 100) * WEEK_MS) / 60_000) * 60_000)})`
-  // With PaceLine's plan the verdict, Spare / Overspent and Budget follow the part's share; Week
-  // elapsed stays on time passed.
+  const f = w?.forecast ?? null
+  // The At reset row reads the forecast itself; only the bar's paler layer is held to 100.
+  const projected = f ? Math.round(f.atReset) : undefined
   const rows: Rows = w
     ? [
-        ['Used', pct0(w.pct), w.level],
-        ['Resets', w.resetAt !== null ? clock(w.resetAt, v.meta, true) : 'n/a'],
-        ...(p
-          ? paceRows(p.pace, p.budget, '1 h', 'watch', [['Week elapsed', even !== null ? pct0(even) : 'n/a']], 'n/a (unplanned)')
-          : paceRows(w.ratePerHour, w.evenPerHour, '1 h', 'watch', [['Week elapsed', even !== null ? pct0(even) : 'n/a']])),
-        ...(p
-          ? planRows(p, v, w.resetAt)
-          : [[lead !== null && lead > 0 ? 'Overspent' : 'Spare', leadText, lead === null || lead <= 0 ? undefined : lead > 100 / 7 ? 'act' : 'watch'] as [string, string, Tone?]]),
+        ['Used', w.isUsedUnderOne ? '<1%' : weekEstimate(v) !== null ? `~${pct1(weekEstimate(v)!)}` : pct0(w.pct), w.level],
+        ...((isRow ? [] : [['Resets', w.resetAt !== null ? clock(w.resetAt, v.meta, true) : 'n/a']]) as Rows),
+        // Before the forecast's first hour the rows that need it give way to one line: when it comes.
+        ...((f
+          ? [
+              ['Pace', `${rate(f.rate)} (week average)`],
+              ...((isRow ? [] : [['Week elapsed', even !== null ? pct0(even) : 'n/a']]) as Rows),
+              // Past 100% the forecast's depth is of no use: the row says when the week runs out instead.
+              f.runsOutAt !== null
+                ? ['Runs out', `${approx(f)}${clock(f.runsOutAt, v.meta, true)}`, 'act']
+                : ['At reset', projected !== undefined ? `${approx(f)}${pct0(projected)}` : 'n/a', projected !== undefined && projected >= 80 ? 'watch' : undefined],
+            ]
+          : [['Forecast', w.resetAt !== null ? `from ${clock(w.resetAt - WEEK_MS + HOUR_MS, v.meta, true)}` : 'n/a']]) as Rows),
         ...accountRows(v.isAccountUnknown),
       ]
     : []
-  const stop = p?.reserve.kind === 'held' && p.reserve.isStop ? p.reserve.pct : null
+  // Without a Part block the reserve's stop has no other card to say that launches ask.
+  const reserve = w?.plan?.reserve
+  const advice =
+    w && partOf(v) === null && reserve?.kind === 'held' && reserve.isStop
+      ? `Week at ${pct0(100 - reserve.pct)}+ before the reserve opens: launches ask before each agent.`
+      : w && w.level !== 'calm'
+        ? `${pct0(w.pct)} used: save it for work that needs it.`
+        : null
+  // The ≈ note shows only while the forecast carries the mark.
+  const explain = [
+    'Pace: the average rate since the reset. At reset: used plus that rate over the hours left. Runs out: when the week reaches 100% at it, before the reset.',
+    ...(f?.isApprox ? ['≈: under 48 h of the week are gone, so the average is rough. No forecast in the first hour.'] : []),
+    'Bar: used; tick: time elapsed in the week; paler: forecast at reset.',
+  ]
+  const bar = w && model ? { used: Math.round(w.pct), tick: earlyTick(even) === null ? null : model.tick, level: w.cardLevel, ...model.extra } : undefined
+  const title = isRow && w?.resetAt != null ? `Week · resets ${clock(w.resetAt, v.meta, true)}` : 'Week'
+  return { title, level: w?.cardLevel ?? 'calm', rows, ...noted(advice, explain), ...(bar ? { bar } : {}) }
+}
+
+// The Part block. The bar runs 0..share of the part in points of the week:
+// the fill is spent in the part, the tick the share of the part's time gone. Past the share (the plan's
+// tolerance), or with any spend in a part of share 0, the fill is amber. null without a usable plan; a share
+// of 0 (a planned off part) keeps the block. A part with no share (an unplanned week or part) keeps it only
+// once at least UNPLANNED_SPENT_MIN points of the week were spent in it: then the bar is an empty track with
+// no tick (nothing to measure against; a full grey bar read as "all spent"), and the block gives no advice.
+export const UNPLANNED_SPENT_MIN = 1
+export type PartModel = {
+  glyph: '☼' | '☾'
+  // Fill and tick as a share of the bar, 0-100; no tick for a part with no share.
+  fill: number
+  tick: number | null
+  isOver: boolean
+  spent: number
+  // The plan's isSpentUnderOne: shown as "<1".
+  isSpentUnderOne: boolean
+  // null: the part is not planned.
+  share: number | null
+  leftMs: number
+  // The block's level: the plan's, with the reserve's stop.
+  level: Level
+  // The fill's level: amber when over, else the block's.
+  barLevel: Level
+  // The bar's paler forecast: spent at the part's end at its average pace so far, as a share of the bar
+  // (past 100 when the share runs out first), and in points; null in the part's first PART_FORECAST_MIN_MS.
+  projected: number | null
+  atEnd: number | null
+  // The part's average rate behind atEnd, points an hour; null with it.
+  rate: number | null
+  // The spent the rate implies now, when it differs from the rounded figure; else null.
+  estimate: number | null
+}
+// No tick in a period's first percent: at the bar's edge it reads as its frame, and the
+// empty bar already says the period has just begun.
+export const earlyTick = (tick: number | null) => (tick !== null && tick < 1 ? null : tick)
+// The forecast needs this much of the part gone; earlier the average pace is a few minutes of noise.
+export const PART_FORECAST_MIN_MS = 15 * 60_000
+export function partOf(v: View): PartModel | null {
+  const p = v.week?.plan
+  if (!p) return null
+  const level = higher(planLevel(p), reserveLevel(p))
+  if (p.share === null) {
+    if (p.spent < UNPLANNED_SPENT_MIN) return null
+    return {
+      glyph: p.kind === 'off' ? '☾' : '☼',
+      fill: 0,
+      tick: null,
+      isOver: false,
+      spent: p.spent,
+    isSpentUnderOne: p.isSpentUnderOne,
+      share: null,
+      leftMs: Math.max(0, p.end - v.now),
+      level,
+      barLevel: 'calm',
+      projected: null,
+      atEnd: null,
+      rate: null,
+      estimate: null,
+    }
+  }
+  const isOver = p.share === 0 ? p.spent > 0 : p.isAbove
+  const tick = earlyTick(Math.max(0, Math.min(100, ((v.now - p.start) / (p.end - p.start)) * 100)))
+  const gone = v.now - p.start
+  // The part's average rate in points an hour, read through the week's last whole-percent step (roundedRate).
+  const step = v.week?.step ?? null
+  const ownRate = roundedRate(p.spent, p.start, v.now, step ? { t: step.t, used: step.used - p.usedAtStart } : null)
+  // The part cannot have spent more than the week's estimate past the part's start: the two rates start
+  // at different instants, so the part's alone can run ahead of the week's.
+  const weekEst = weekEstimate(v)
+  const partRate = weekEst !== null && gone > 0 ? Math.min(ownRate, Math.max(0, weekEst - p.usedAtStart) / (gone / HOUR_MS)) : ownRate
+  // The spent that rate implies now, where it differs from the rounded figure: the fill, the value and the
+  // card's Spent and Spare / Overspent show it. The plan's verdict (isOver) keeps the account's figure.
+  const est = gone >= PART_FORECAST_MIN_MS ? partRate * (gone / HOUR_MS) : null
+  const estimate = est !== null && !p.isSpentUnderOne && Math.abs(est - p.spent) >= 0.05 ? est : null
+  const shown = estimate ?? p.spent
+  const fill = p.share === 0 ? (shown > 0 ? 100 : 0) : Math.min(100, (shown / p.share) * 100)
+  const atEnd = gone >= PART_FORECAST_MIN_MS && p.end > p.start ? partRate * ((p.end - p.start) / HOUR_MS) : null
+  const projected = atEnd === null ? null : p.share === 0 ? (atEnd > 0 ? 100 : 0) : (atEnd / p.share) * 100
+  return {
+    glyph: p.kind === 'off' ? '☾' : '☼',
+    fill,
+    tick,
+    isOver,
+    spent: p.spent,
+    isSpentUnderOne: p.isSpentUnderOne,
+    share: p.share,
+    leftMs: Math.max(0, p.end - v.now),
+    level,
+    barLevel: isOver ? 'watch' : level,
+    projected,
+    atEnd,
+    rate: gone >= PART_FORECAST_MIN_MS ? partRate : null,
+    estimate,
+  }
+}
+
+function partGauge(v: View, isRow = false): Gauge | null {
+  const m = partOf(v)
+  if (!m) return null
+  return {
+    key: 'part',
+    group: 'week',
+    label: m.glyph,
+    pct: m.fill,
+    level: m.level,
+    value: `${m.isSpentUnderOne ? '<1' : m.estimate !== null ? pts(m.estimate) : Math.round(m.spent)}/${m.share === null ? '-' : Math.round(m.share)}`,
+    pace: m.tick,
+    paceName: 'part time',
+    barLevel: m.barLevel,
+    ...(m.share === null ? { barAlt: `${Math.round(m.spent)} pts spent, no share` } : {}),
+    ...(m.projected !== null ? { projected: Math.min(100, Math.round(m.projected)), projectedName: 'at part end' } : {}),
+    reset: span(m.leftMs),
+    card: partCard(v, m, isRow),
+  }
+}
+
+export const pts = (n: number) => String(Number(n.toFixed(1)))
+
+// isRow: the row's card (Desktop hover, CLI line) is short: Hours join the title, Share joins Spent, Budget
+// joins Pace, Mode and Reserve show only while they act. The pane keeps every row.
+function partCard(v: View, m: PartModel, isRow = false): Card {
+  const p = v.week!.plan!
+  if (m.share === null) {
+    // Not planned: what was spent, no share to measure it against, no advice.
+    return {
+      title: 'Part',
+      level: m.level,
+      rows: [
+        ['Hours', `${p.kind === 'off' ? 'off' : 'work'} ${clock(p.start, v.meta)}-${clock(p.end, v.meta)}`],
+        ['Spent', `${pts(p.spent)} pts`],
+        ['Share', 'none (not planned)'],
+      ],
+      ...noted(null, ['Bar: empty, as this part has no share to measure against; no tick.']),
+      bar: { used: 0, tick: null, level: 'calm' },
+    }
+  }
+  const planned = planRows(p, v)
+  const find = (label: string) => planned.filter(([l]) => l === label)
+  let rowsOverride: { title: string; rows: Rows } | null = null
+  // The part's average pace since its start: the same rate the bar's paler forecast and At part end use.
+  const pace = m.rate
+  const isOver = pace !== null && p.budget !== null && pace > p.budget
+  // The spent the rate implies now, where it differs from the rounded figure; Spent and
+  // Spare / Overspent show it with "~". The plan's own verdict keeps the account's figure.
+  const est = m.estimate
+  const isEst = est !== null
+  const estLead = isEst && p.allowed !== null ? est! - p.allowed : null
+  const leadRows: Rows =
+    estLead === null
+      ? // Under one point the spent is counted as 0, so the lead is off by up to a point: "~".
+        ([...find('Spare'), ...find('Overspent')].map(r => (p.isSpentUnderOne ? [r[0], `~${r[1]}`, ...r.slice(2)] : r)) as Rows)
+      : [[
+          estLead > 0 ? 'Overspent' : 'Spare',
+          `~${pts(Math.abs(estLead))} pts${p.share ? ` (${span(Math.round((Math.abs(estLead) / (p.share / ((p.end - p.start) / HOUR_MS))) * 60) * 60_000)})` : ''}`,
+          p.isAbove ? planLevel(p) : undefined,
+        ]]
+  const stop = p.reserve.kind === 'held' && p.reserve.isStop ? p.reserve.pct : null
+  const hours = `${p.kind === 'off' ? 'off' : 'work'} ${clock(p.start, v.meta)}-${clock(p.end, v.meta)}`
+  if (isRow) {
+    const of = ` of ${pts(p.share!)} pts`
+    const budget = p.budget !== null ? ` of ${rate(p.budget)}` : '%/h'
+    const num = (n: number) => n.toFixed(1)
+    const compact: Rows = [
+      ['Spent', `${p.isSpentUnderOne ? '<1' : isEst ? `~${pts(est!)}` : pts(p.spent)}${of}`],
+      ...leadRows,
+      ...((p.isSpentUnderOne && v.now > p.start
+        ? [['Pace', `<${num(1 / ((v.now - p.start) / HOUR_MS))}${budget} (part average)`]]
+        : pace !== null && m.atEnd !== null
+          ? [
+              ['Pace', `${num(pace)}${budget} (part average)`, isOver ? 'watch' : undefined],
+              ['At part end', `~${pts(m.atEnd)}${of}`, m.projected !== null && m.projected > 100 ? 'watch' : undefined],
+            ]
+          : [['Forecast', `from ${clock(p.start + PART_FORECAST_MIN_MS, v.meta)}`]]) as Rows),
+      ...((p.mode === 'limit' ? [['Mode', p.mode]] : []) as Rows),
+      ...(stop !== null ? find('Reserve') : []),
+    ]
+    rowsOverride = { title: `Part · ${hours}`, rows: compact }
+  }
+  const rows: Rows = [
+    ['Hours', hours],
+    ['Share', `${pts(p.share!)} pts`],
+    ['Spent', p.isSpentUnderOne ? '<1 pts' : isEst ? `~${pts(est!)} pts` : `${pts(p.spent)} pts`],
+    ...leadRows,
+    ['Budget', p.budget !== null ? rate(p.budget) : 'n/a (unplanned)'],
+    // Under one point the account's figure has not moved, so its rate reads 0; the
+    // pace is shown as its bound (under 1 point over the time gone) and the part's end is not projected.
+    ...((p.isSpentUnderOne && v.now > p.start
+      ? [
+          ['Pace', `<${rate(1 / ((v.now - p.start) / HOUR_MS))} (part average)`],
+          ['At part end', 'n/a (under 1 pt so far)'],
+        ]
+      : pace !== null && m.atEnd !== null
+      ? [
+          ['Pace', `${rate(pace)} (part average)`, isOver ? 'watch' : undefined],
+          ['At part end', `~${pts(m.atEnd)} of ${pts(p.share!)} pts`, m.projected !== null && m.projected > 100 ? 'watch' : undefined],
+        ]
+      : [['Forecast', `from ${clock(p.start + PART_FORECAST_MIN_MS, v.meta)}`]]) as Rows),
+    ['Mode', p.mode],
+    ...find('Reserve'),
+  ]
   const advice =
     stop !== null
       ? `Week at ${pct0(100 - stop)}+ before the reserve opens: launches ask before each agent.`
-      : p?.isAbove && p.mode === 'limit'
+      : p.isAbove && p.mode === 'limit'
         ? "Above the plan's share: PaceLine asks before each agent launch while its data is fresh."
-        : w && w.level !== 'calm'
-          ? `${pct0(w.pct)} used: save it for work that needs it.`
-          : null
-  const explain = p
-    ? [
-        'Plan: spend in this part against its share, pro rata by time, 1 pt tolerance.',
-        "Pace: this part, last 6 h at most. Budget: what is left of the part's share over its hours left.",
-        'Bar: used; tick: where the plan expects the week now.',
-        ...(p.reserve.kind === 'held' && p.reserve.name ? [`Reserve "${p.reserve.name}": kept until its release; launches ask past ${pct0(100 - p.reserve.pct)}.`] : []),
-      ]
-    : ['Spare / Overspent: below or past even pace, in points and hours.', 'Pace: last 6 h. Budget: the pace that lasts to the reset.', 'Bar: used; tick: even pace now.']
-  const tick = p ? p.tick : even === null ? null : Math.round(even)
-  const bar = w ? { used: Math.round(w.pct), tick, level: w.cardLevel } : undefined
-  return { title: 'Week', level: w?.cardLevel ?? 'calm', rows, ...noted(advice, explain), ...(bar ? { bar } : {}) }
+        : null
+  const bar = { used: Math.round(m.fill), ...(m.projected !== null ? { projected: Math.min(100, Math.round(m.projected)), projectedName: 'at part end' } : {}), tick: m.tick === null ? null : Math.round(m.tick), level: m.barLevel }
+  const explain = [
+    'Pace: the average since the part began. At part end: what the part spends by its end at that pace.',
+    "Bar: spent against the share, paler to the part's end at that pace; tick: time elapsed in the part. Paler past the tick means faster than the share allows; paler to the end means the share runs out.",
+  ]
+  return { title: rowsOverride?.title ?? 'Part', level: m.level, rows: rowsOverride?.rows ?? rows, ...noted(advice, explain), bar }
 }
 
-function scopedCard(v: View, b: View['scoped'][number]): Card {
+// isRow: the row's card puts the reset in the title.
+function scopedCard(v: View, b: View['scoped'][number], isRow = false): Card {
   const own = b.resetsAt ? Date.parse(b.resetsAt) : NaN
   const resetAt = Number.isFinite(own) ? own : (v.week?.resetAt ?? null)
   return {
-    title: b.name,
+    title: isRow && resetAt !== null ? `${b.name} · resets ${clock(resetAt, v.meta, true)}` : b.name,
     level: b.level,
     rows: [
       ['Used', pct0(b.percentUsed), b.level],
-      ['Resets', resetAt !== null ? clock(resetAt, v.meta, true) : 'n/a'],
+      ...((isRow && resetAt !== null ? [] : [['Resets', resetAt !== null ? clock(resetAt, v.meta, true) : 'n/a']]) as Rows),
       ...accountRows(v.isScopedAccountUnknown),
     ],
     ...noted(b.level !== 'calm' ? `${pct0(b.percentUsed)} used: switch model for work that does not need ${b.name}.` : null, [
@@ -496,13 +778,21 @@ function advisorCard(m: StatusMeta): Card {
   }
 }
 
-// The readings both rows draw, with each one's detail card.
-export function readings(v: View): { gauges: Gauge[]; info: Card; advisor: Card | null; advisorOn: string | null } {
+// What both rows leave out, and so out of their cards, detail lines and widths: Hit at
+// every level, and a scoped weekly limit while its level is calm; past calm it returns to its place
+// in the row. Only the pane keeps what is out. desktopKey reads the row's readings, so a limit
+// crossing calm and watch adds or drops its key and the row redraws.
+const isPaneOnly = (g: Gauge) =>
+  (g.key === 'hit' || (g.key.startsWith('scoped-') && g.level === 'calm'))
+
+// The readings both rows draw, with each one's detail card; `scope: 'pane'` gives every reading the
+// pane unfolds.
+export function readings(v: View, scope: 'row' | 'pane' = 'row'): { gauges: Gauge[]; info: Card; advisor: Card | null; advisorOn: string | null } {
   const m = v.meta
   const c = v.context
   const f = v.five
   const k = v.cache
-  const gauges: Gauge[] = [
+  let gauges: Gauge[] = [
     {
       key: 'context',
       group: 'context',
@@ -524,7 +814,7 @@ export function readings(v: View): { gauges: Gauge[]; info: Card; advisor: Card 
       value: desktopCache(v),
       tone: k.state === 'cold' ? 'cold' : undefined,
       icon: k.state === 'hot' || k.state === 'cold' ? k.state : undefined,
-      card: cacheCard(v),
+      card: cacheCard(v, scope === 'row', scope === 'row'),
     },
     {
       key: 'hit',
@@ -544,35 +834,44 @@ export function readings(v: View): { gauges: Gauge[]; info: Card; advisor: Card 
       level: f?.level ?? 'calm',
       value: f ? pct0(f.pct) : null,
       pace: paceOf(f?.resetInMs ?? null, 5 * HOUR_MS),
+      // The row draws the paler forecast at reset its card already draws, as 7d and Part do.
+      ...(f && f.ratePerHour !== null && f.resetInMs !== null
+        ? { projected: Math.min(100, Math.round(f.pct + f.ratePerHour * (f.resetInMs / HOUR_MS))), projectedName: 'at reset' }
+        : {}),
       reset: f?.resetInMs != null ? span(f.resetInMs) : undefined,
-      card: fiveCard(v),
+      card: fiveCard(v, scope === 'row'),
     },
     ...(v.week
       ? [
           {
             key: 'week',
-            group: 'limits' as Group,
+            group: 'week' as Group,
             label: '7d',
-            pct: v.week.pct,
+            pct: weekEstimate(v) ?? v.week.pct,
             level: v.week.cardLevel,
-            value: pct0(v.week.pct),
-            pace: v.week.plan ? v.week.plan.tick : paceOf(v.week.resetAt !== null ? Math.max(0, v.week.resetAt - v.now) : null, 7 * 24 * HOUR_MS),
-            ...(v.week.plan ? { paceName: 'plan' } : {}),
+            value: v.week.isUsedUnderOne ? '<1%' : weekEstimate(v) !== null ? pct1(weekEstimate(v)!) : pct0(v.week.pct),
+            pace: earlyTick(paceOf(v.week.resetAt !== null ? Math.max(0, v.week.resetAt - v.now) : null, 7 * 24 * HOUR_MS)),
+            ...weekBarOf(v)?.extra,
             reset: v.week.resetAt !== null ? span(Math.max(0, v.week.resetAt - v.now)) : undefined,
-            card: weekCard(v),
+            card: weekCard(v, scope === 'row'),
           },
+          ...(partGauge(v, scope === 'row') ? [partGauge(v, scope === 'row')!] : []),
         ]
       : []),
     ...v.scoped.map(b => ({
       key: `scoped-${b.name}`,
-      group: 'limits' as Group,
+      group: 'week' as Group,
       label: b.name,
       pct: b.percentUsed,
       level: b.level,
       value: pct0(b.percentUsed),
-      card: scopedCard(v, b),
+      card: scopedCard(v, b, scope === 'row'),
     })),
   ]
+  // The part leads its week, the finer reading first: 5h │ Part · 7d.
+  const part = gauges.find(g => g.key === 'part')
+  if (part) gauges = gauges.filter(g => g !== part).flatMap(g => (g.key === 'week' ? [part, g] : [g]))
+  if (scope === 'row') gauges = gauges.filter(g => !isPaneOnly(g))
   const advisorOn = m?.advisor ? advisorText(m) : null
   const isInactive = advisorOn?.endsWith(' (inactive)') ?? false
   const info: Card = m
@@ -599,7 +898,7 @@ export function readings(v: View): { gauges: Gauge[]; info: Card; advisor: Card 
   return { gauges, info, advisor: m ? advisorCard(m) : null, advisorOn }
 }
 
-export const GROUPS: Group[] = ['context', 'cache', 'limits']
+export const GROUPS: Group[] = ['context', 'cache', 'limits', 'week']
 
 export const cardFor = (gauges: Gauge[], info: Card, key: string | null) => {
   if (key === 'info') return info
@@ -632,7 +931,7 @@ export function desktopKey(v: View, open: string | null, cards?: View, isPaneOpe
   const shown = readings(coarse)
   const hidden = cards ? readings(cards) : shown
   return JSON.stringify([
-    gauges.map(g => [g.key, g.pct === null ? null : Math.round(g.pct / 2), g.pace == null ? g.pace : Math.round(g.pace)]),
+    gauges.map(g => [g.key, g.pct === null ? null : Math.round(g.pct / 2), g.pace == null ? g.pace : Math.round(g.pace), g.projected == null ? null : Math.round(g.projected / 2), g.projectedName ?? null, g.barLevel ?? null]),
     shown.gauges.map(g => [g.key, g.label, g.level, g.value, g.extra, g.tone, g.reset, g.mark, g.idle]),
     shown.advisorOn,
     v.meta !== null,
@@ -667,12 +966,19 @@ function desktopItems(g: Gauge, style: LimitStyle): (number | string)[] {
   ]
 }
 
+// Desktop's font is proportional, and the row's values are mostly digits, %, m and
+// spaces, which differ most from an average letter. Widths in cells, measured on owner screenshots
+// 2026-10-31 (a 40 px bar as the ruler); anything else keeps CELLS_PER_CHAR.
+const CHAR_CELLS: Record<string, number> = { '%': 1.35, m: 1.45, ' ': 0.5, '☼': 1.7, '☾': 1.7, 'ⓘ': 1.7, '/': 0.6 }
+export const textCells = (text: string) =>
+  [...text].reduce((sum, ch) => sum + (CHAR_CELLS[ch] ?? (ch >= '0' && ch <= '9' ? 0.97 : CELLS_PER_CHAR)), 0)
+
 // The desktop row's width in cells: each reading's parts one cell apart inside one cell of padding
 // a side, the rules between groups, the advisor group, and ⓘ with its margin.
 export function desktopCells(v: View, style: LimitStyle): number {
   const { gauges, advisorOn } = readings(v)
   const width = (items: (number | string)[]) =>
-    items.reduce<number>((sum, x) => sum + (typeof x === 'number' ? x / PX_PER_CELL : x.length * CELLS_PER_CHAR), 0) + items.length - 1 + 2
+    items.reduce<number>((sum, x) => sum + (typeof x === 'number' ? x / PX_PER_CELL : textCells(x)), 0) + items.length - 1 + 2
   const groups = GROUPS.map(id => gauges.filter(g => g.group === id && !g.opens)).filter(gs => gs.length)
   // Readings within a group are parted by a dot, about one cell.
   let cells = groups.reduce(
@@ -687,12 +993,15 @@ export function desktopCells(v: View, style: LimitStyle): number {
     parts += 1
   }
   // A rule parts ⓘ from the readings, as it parts the groups.
-  return cells + parts * (RULE_PX / PX_PER_CELL) + width(['ⓘ'])
+  // The band's own padding, about a cell a side, measured on owner screenshots.
+  return cells + parts * (RULE_PX / PX_PER_CELL) + width(['ⓘ']) + 2
 }
 
 // The fullest limit style that keeps the row on one line; the time to reset goes first, since the
 // card still shows it.
 export function limitStyle(v: View, columns: number): LimitStyle {
-  const fits = (style: LimitStyle) => desktopCells(v, style) <= columns - 1
+  // The row measures its text per character (CHAR_CELLS) and the band's padding, and keeps
+  // 1.5 cells spare: the row wrapped ⓘ within half a cell of the estimate.
+  const fits = (style: LimitStyle) => desktopCells(v, style) <= columns - 1.5
   return fits('bars') ? 'bars' : fits('bare') ? 'bare' : 'pies'
 }

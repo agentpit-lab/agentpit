@@ -675,9 +675,9 @@ ol.walker, ol.walker ol { padding-left: 1.4em; display: grid; gap: var(--space-2
         <h2 id="h-details">How it is computed and what it leaves out</h2>
       </div>
       <div>
-        <details class="more"><summary>How the budget per hour is computed</summary><div class="body"><p>At the start of each part, a day&#x27;s working hours or its off-hours, pace fixes the part&#x27;s share: what is left of the week, less the reserve, times the part&#x27;s mark over the sum of the marks of this and every later part. The budget per hour is the share not yet spent over the hours left in the part, capped at what a five-hour window can hold.</p></div></details>
+        <details class="more"><summary>How the budget per hour is computed</summary><div class="body"><p>At the start of each part, a day&#x27;s working hours or its off-hours, pace fixes the part&#x27;s share: what is left of the week, less the reserve, times the part&#x27;s mark over the sum of the marks of this and every later part. A change of the running part&#x27;s mark splits it, and the rest starts at once by the same rule. The budget per hour is the share not yet spent over the hours left in the part, capped at what a five-hour window can hold.</p></div></details>
         <details class="more"><summary>What this simulator leaves out</summary><div class="body"><p>Your usage history (forecast, calibration and the five-hour burn rate), running holds, host memory checks, model-scoped limits, spend inside the current part (taken as 0, so the part is on plan) and the plan gate of <code>limit</code> mode. <code>paceline status</code> and <code>paceline plan</code> on your machine include them.</p></div></details>
-        <details class="more"><summary>How the night queue decides</summary><div class="body"><p><code>paceline auto</code> returns start, wait or stop with an exit code (0, 10, 11) before each item; the queue obeys it without deciding again.</p></div></details>
+        <details class="more"><summary>How the off-hours advice is given</summary><div class="body"><p><code>paceline advice</code> returns start, wait or stop with an exit code (0, 10, 11), a budget and an agent count; an unattended run, such as Stint&#x27;s, obeys it without deciding again.</p></div></details>
       </div>
     </section>
     <footer class="page-foot">
@@ -688,9 +688,9 @@ ol.walker, ol.walker ol { padding-left: 1.4em; display: grid; gap: var(--space-2
 
 
 </div>
-<script type="application/json" id="pb-strings">{"changed_line":"{input}: budget {b0} → {b1} %/h.","changed_none":"Move any input to see what it changes.","days_short":"Mon,Tue,Wed,Thu,Fri,Sat,Sun","decision_day":"Working hours: the night queue is idle","decision_start":"Night queue: start","decision_stop":"Night queue: stop","decision_wait":"Night queue: wait","details_eyebrow":"Details","details_left_out":"What this simulator leaves out","details_left_out_body":"Your usage history (forecast, calibration and the five-hour burn rate), running holds, host memory checks, model-scoped limits, spend inside the current part (taken as 0, so the part is on plan) and the plan gate of `limit` mode. `paceline status` and `paceline plan` on your machine include them.","details_queue":"How the night queue decides","details_queue_body":"`paceline auto` returns start, wait or stop with an exit code (0, 10, 11) before each item; the queue obeys it without deciding again.","details_rule":"How the budget per hour is computed","details_rule_body":"At the start of each part, a day's working hours or its off-hours, pace fixes the part's share: what is left of the week, less the reserve, times the part's mark over the sum of the marks of this and every later part. The budget per hour is the share not yet spent over the hours left in the part, capped at what a five-hour window can hold.","details_title":"How it is computed and what it leaves out","fmt_clock":"{day} {hh}:00","fmt_in":"{d}d {h}h","foot_getting_started":"Getting started with PaceLine","foot_source":"PaceLine turns usage into a budget; this page shows the same rules on sample numbers.","hard_limit":"Hard limit: a launch now asks you to confirm.","in_clock":"Now (day of the week, in the profile's time zone)","in_five":"Five-hour window used","in_hours":"Working hours (the rest of the day is off-hours)","in_marks":"Week plan","in_marks_note":"Each day has a mark for its working hours (☼) and one for its off-hours (☾): 0 is a day off, 0.5 light, 1 normal, 1.5 heavy. Default: ☼ 1 and ☾ 0 every day. Tomorrow off sets tomorrow's ☼ to 0; Heavy tomorrow sets it to 1.5; Nights at 0.5 sets today's and tomorrow's ☾ to 0.5; Today off sets today's ☼ and ☾ to 0; Week template marks Tuesday ☼ 1.5, Friday ☼ 0.5 and Saturday ☼ 0. Today is the date on the clock; off-hours before the working start belong to the day before.","in_profile_note":"Profile defaults, counted in UTC: five-hour stop 95% in all hours, 8% of the week kept in reserve until the working start of the last day before the reset.","in_reset":"Weekly reset in","in_week":"Weekly limit used","inputs_title":"Your situation","label_clock":"Now","label_five":"Five-hour window used","label_hours":"Working hours","label_marks":"Week plan","label_reset":"Weekly reset in","label_week":"Weekly limit used","lang_en":"En","lang_label":"Language","lang_uk":"Uk","legend_day":"A date's share (working hours and off-hours)","legend_night_note":"Tonight's night-queue allowance (its off-hours share, capped by the five-hour window): {night}%.","marks_away":"Tomorrow off","marks_dayoff":"Today off","marks_heavy":"Heavy tomorrow","marks_night":"Nights at 0.5","marks_none":"Default","marks_template":"Week template","nav_label":"Budget simulator","out_budget":"Budget for this hour","out_budget_day":"Weekly percent pace may spend per hour now: this working-hours part's share, fixed at its start, less what it has spent, over the hours left in it.","out_budget_off":"Off-hours: the same rule over this off-hours part's share. With the default off-hours mark 0 the share is 0; the night queue spends this share.","out_line":"What the model reads in limit mode","out_night":"Night allowance","out_threshold":"Five-hour stop","reserve_ask":"Weekly reserve: a launch now asks you to confirm, because it would spend the reserve.","series_label":"pages in this series","sim_eyebrow":"Simulator","sim_lede":"pace has no window of its own. It turns your limits into a budget per hour. In limit mode it tells the model the pace in plain words before every Agent and Workflow launch; in inform mode the model reads nothing. Move the inputs and watch that line change.","sim_title":"What pace will tell you, before it does","sit_ahead":"Week spent ahead","sit_ahead_story":"Most of the week is gone with days left: the budget shrinks.","sit_apply":"Load this situation","sit_away":"A day off planned","sit_away_story":"Tomorrow's working hours are marked 0, so their share moves to the other days.","sit_fresh":"Fresh week","sit_fresh_story":"Little used, a long way to the reset: the budget sits near the on-plan rate.","sit_morning":"Heavy morning","sit_morning_story":"The five-hour window filled early. a launch now asks you first until it resets.","sit_night":"A night with budget left","sit_night_story":"Tonight's off-hours are marked 0.5, so they carry a share: the night queue may start its next item.","situations_eyebrow":"Situations","situations_title":"Typical moments, one click away","theme_dark":"Dark","theme_label":"Page theme","theme_light":"Light","theme_system":"System","title":"PaceLine budget simulator","tldr_body":"pace spreads what is left of your weekly limit over the rest of the week by the marks of each day's working hours and off-hours, and fixes each part's share at its start. The budget per hour is what is left of the current part's share over its remaining hours. On this page the current part is always on plan. At a hard limit it asks before a launch.","tldr_label":"TL;DR","toc_details":"Details","toc_label":"Sections","toc_simulator":"Simulator","toc_situations":"Situations","toc_week":"The week","week_chart_label":"Share of the week per remaining date","week_eyebrow":"The week","week_lede":"What is left of the week, less the reserve, is spread over its remaining parts by their marks: each day's working hours and off-hours. A bar is one date's share, both parts together. The week plan above moves budget between days.","week_title":"Where the rest of the week's budget goes","why_day":"The queue runs only in off-hours. In working hours pace holds a launch only at a hard limit or past the weekly reserve's stop line, and in limit mode when the part is over its share."}</script>
-<script type="application/json" id="pb-glossary">{"budget":{"name":"Budget per hour","short":"The weekly percent pace may spend per hour in the current part of the week plan: the part's share, fixed when the part started, less what it has spent, over the hours left in it."},"forecast":{"name":"Forecast unused","short":"The weekly percent likely left unspent at the reset at the recent pace."},"hold":{"name":"Hold","short":"A share of the weekly limit held for a running subagent, gate or queue item. The night queue counts it before starting the next item; outside a night run the launch line shows how many are active."},"night":{"name":"Night allowance","short":"The weekly percent the night queue may spend tonight: tonight's off-hours share, which is 0 until the off-hours are marked."},"plan":{"name":"Week plan","short":"Each day of the week as its working hours and its off-hours, each with a mark from 0 to 2: off 0, light 0.5, normal 1, heavy 1.5. What is left of the week is shared among the remaining parts by their marks."},"reserve":{"name":"Reserve","short":"A share of the week, 8% by default, kept out of the plan until the start of working hours of its release day. Until then a launch asks once the week's usage reaches 100% minus the reserve; from then the share is spread over the rest of the week."},"threshold":{"name":"Five-hour stop","short":"The five-hour usage from which pace asks before an Agent or Workflow launch: 95% by default, in working hours and off-hours alike."}}</script>
-<script type="application/json" id="pb-facts">{"commands":[{"command":"paceline on","help":"turn the pace hooks on","service":false},{"command":"paceline off","help":"turn the pace hooks off (every command still runs)","service":false},{"command":"paceline status","help":"interactive one-line recommendation","service":false},{"command":"paceline auto","help":"autonomous parameters for the next queue item","service":false},{"command":"paceline calibrate","help":"propose parameter corrections from history","service":true},{"command":"paceline simulate","help":"replay a week through the budget with your profile (a model: one reading per hour, no plans or holds)","service":true},{"command":"paceline settings","help":"every setting and switch with its value, default and source; read-only","service":false},{"command":"paceline profile","help":"print, change or check the profile (creates it with the detected time zone)","service":false},{"command":"paceline profile show","help":"print the profile (the default)","service":false},{"command":"paceline profile set","help":"change one key, with checks","service":false},{"command":"paceline profile check","help":"the time zone against this machine's, with a hint","service":false},{"command":"paceline doctor","help":"diagnose pace on this machine; read-only without --live","service":true},{"command":"paceline merge","help":"merge the sessions' readings from the inbox into rate-limits.json","service":true},{"command":"paceline plan","help":"the week plan: marks per part, shares, template (no subcommand: show the week)","service":false},{"command":"paceline plan set","help":"mark a day's working hours and off-hours","service":false},{"command":"paceline plan reset","help":"remove a day's marks, or every day's","service":false},{"command":"paceline plan template","help":"the weekday marks every week starts from","service":false},{"command":"paceline plan template show","help":"the template (the default)","service":false},{"command":"paceline plan template set","help":"mark a weekday","service":false},{"command":"paceline plan template reset","help":"remove a weekday's marks, or the whole template","service":false},{"command":"paceline mode","help":"inform (no plan prompts) or limit (a launch past the part's share asks); bare: show it","service":false},{"command":"paceline reserve","help":"the weekly reserve: show it, or set its size, release weekday and name","service":false},{"command":"paceline hold","help":"hold registry","service":false},{"command":"paceline hold acquire","help":"","service":false},{"command":"paceline hold renew","help":"","service":false},{"command":"paceline hold release","help":"","service":false},{"command":"paceline hold release-session","help":"","service":false},{"command":"paceline hold prune","help":"","service":false},{"command":"paceline hold list","help":"","service":false},{"command":"paceline hold reconcile","help":"","service":false},{"command":"paceline queue","help":"night queue and leftover pool (--pool)","service":false},{"command":"paceline queue add","help":"","service":false},{"command":"paceline queue list","help":"","service":false},{"command":"paceline queue report","help":"","service":false},{"command":"paceline queue approve","help":"","service":false},{"command":"paceline queue clear-done","help":"","service":false},{"command":"paceline queue start","help":"","service":false},{"command":"paceline queue done","help":"","service":false},{"command":"paceline queue defer","help":"","service":false},{"command":"paceline queue fail","help":"","service":false},{"command":"paceline queue retry","help":"","service":false},{"command":"paceline queue remove","help":"","service":false},{"command":"paceline away","help":"tell the launch gate that you are away, so it denies a launch it would ask about: on|off|status","service":false},{"command":"paceline cache-watch","help":"keep an idle session's one-hour prompt cache alive: on|off|status|config","service":false},{"command":"paceline context-watch","help":"context against the auto-compaction point: config|status","service":false},{"command":"paceline usage-watch","help":"read the account's exact usage through Claude Code: on|off|status","service":false}],"env":["ANTHROPIC_MODEL","CLAUDE_CODE_ACCOUNT_UUID","CLAUDE_CODE_ENTRYPOINT","CLAUDE_CODE_ORGANIZATION_UUID","CLAUDE_CODE_SESSION_ID","CLAUDE_CONFIG_DIR","CLAUDE_PID","CLAUDE_PLUGIN_DATA","CLAUDE_PROJECT_DIR","CLAUDE_SESSION_ID","HOME","PACELINE_ACCOUNT_KEY","PACELINE_DEBUG","PACELINE_FREE_COMMIT_MB","PACELINE_MODEL","PACELINE_NOW","PACELINE_NO_MERGE","PACELINE_SCRIPT","PACELINE_STATE_DIR","PACELINE_USAGE_FILE","USERPROFILE"],"exit_codes":{"EXIT_ERROR":1,"EXIT_NONE":4,"EXIT_OK":0,"EXIT_SEVERAL":3,"EXIT_STOP":11,"EXIT_USAGE":2,"EXIT_WAIT":10},"profile":[{"default":2048,"internal":false,"key":"commit_reserve_mb"},{"default":95.0,"internal":false,"key":"five_hour_stop_pct"},{"default":10.0,"internal":false,"key":"five_hour_to_week_pct"},{"default":6000,"internal":false,"key":"heavy_job_mb"},{"default":6,"internal":false,"key":"max_agents"},{"default":3,"internal":false,"key":"max_heavy_runs"},{"default":false,"internal":false,"key":"memory_guard"},{"default":2048,"internal":false,"key":"min_free_commit_mb"},{"default":1.0,"internal":false,"key":"subagent_estimate_pct"},{"default":"UTC","internal":false,"key":"timezone"},{"default":false,"internal":true,"key":"timezone_confirmed"},{"default":"machine","internal":false,"key":"timezone_mode"},{"default":1,"internal":true,"key":"version"}],"reserve_default_pct":8,"simulate":[{"asks_h":1,"night_pct":0.0,"night_queue":false,"peak_five_hour_pct":100.0,"unused_pct":5.1,"week":"on-track"},{"asks_h":1,"night_pct":0.0,"night_queue":true,"peak_five_hour_pct":100.0,"unused_pct":5.1,"week":"on-track"},{"asks_h":4,"night_pct":0.0,"night_queue":false,"peak_five_hour_pct":100.0,"unused_pct":5.1,"week":"heavy-start"},{"asks_h":4,"night_pct":0.0,"night_queue":true,"peak_five_hour_pct":100.0,"unused_pct":5.1,"week":"heavy-start"},{"asks_h":1,"night_pct":0.0,"night_queue":false,"peak_five_hour_pct":100.0,"unused_pct":8.7,"week":"light-start"},{"asks_h":1,"night_pct":0.0,"night_queue":true,"peak_five_hour_pct":100.0,"unused_pct":8.7,"week":"light-start"},{"asks_h":2,"night_pct":0.0,"night_queue":false,"peak_five_hour_pct":100.0,"unused_pct":28.6,"week":"away-thu-fri"},{"asks_h":2,"night_pct":0.0,"night_queue":true,"peak_five_hour_pct":100.0,"unused_pct":28.6,"week":"away-thu-fri"}]}</script>
+<script type="application/json" id="pb-strings">{"changed_line":"{input}: budget {b0} → {b1} %/h.","changed_none":"Move any input to see what it changes.","days_short":"Mon,Tue,Wed,Thu,Fri,Sat,Sun","decision_day":"Working hours: no off-hours advice","decision_start":"Advice: start","decision_stop":"Advice: stop","decision_wait":"Advice: wait","details_eyebrow":"Details","details_left_out":"What this simulator leaves out","details_left_out_body":"Your usage history (forecast, calibration and the five-hour burn rate), running holds, host memory checks, model-scoped limits, spend inside the current part (taken as 0, so the part is on plan) and the plan gate of `limit` mode. `paceline status` and `paceline plan` on your machine include them.","details_queue":"How the off-hours advice is given","details_queue_body":"`paceline advice` returns start, wait or stop with an exit code (0, 10, 11), a budget and an agent count; an unattended run, such as Stint's, obeys it without deciding again.","details_rule":"How the budget per hour is computed","details_rule_body":"At the start of each part, a day's working hours or its off-hours, pace fixes the part's share: what is left of the week, less the reserve, times the part's mark over the sum of the marks of this and every later part. A change of the running part's mark splits it, and the rest starts at once by the same rule. The budget per hour is the share not yet spent over the hours left in the part, capped at what a five-hour window can hold.","details_title":"How it is computed and what it leaves out","fmt_clock":"{day} {hh}:00","fmt_in":"{d}d {h}h","foot_getting_started":"Getting started with PaceLine","foot_source":"PaceLine turns usage into a budget; this page shows the same rules on sample numbers.","hard_limit":"Hard limit: a launch now asks you to confirm.","in_clock":"Now (day of the week, in the profile's time zone)","in_five":"Five-hour window used","in_hours":"Working hours (the rest of the day is off-hours)","in_marks":"Week plan","in_marks_note":"Each day has a mark for its working hours (☼) and one for its off-hours (☾): 0 is a day off, 0.5 light, 1 normal, 1.5 heavy. Default: ☼ 1 and ☾ 0 every day. Tomorrow off sets tomorrow's ☼ to 0; Heavy tomorrow sets it to 1.5; Nights at 0.5 sets today's and tomorrow's ☾ to 0.5; Today off sets today's ☼ and ☾ to 0; Week template marks Tuesday ☼ 1.5, Friday ☼ 0.5 and Saturday ☼ 0. Today is the date on the clock; off-hours before the working start belong to the day before.","in_profile_note":"Profile defaults, counted in UTC: five-hour stop 95% in all hours, 8% of the week kept in reserve until the working start of the last day before the reset.","in_reset":"Weekly reset in","in_week":"Weekly limit used","inputs_title":"Your situation","label_clock":"Now","label_five":"Five-hour window used","label_hours":"Working hours","label_marks":"Week plan","label_reset":"Weekly reset in","label_week":"Weekly limit used","lang_en":"En","lang_label":"Language","lang_uk":"Uk","legend_day":"A date's share (working hours and off-hours)","legend_night_note":"Tonight's off-hours allowance as `status` shows it (its off-hours share, capped by the five-hour window): {night}%. Unattended work spends what is left of the current part's share.","marks_away":"Tomorrow off","marks_dayoff":"Today off","marks_heavy":"Heavy tomorrow","marks_night":"Nights at 0.5","marks_none":"Default","marks_template":"Week template","nav_label":"Budget simulator","out_budget":"Budget for this hour","out_budget_day":"Weekly percent pace may spend per hour now: this working-hours part's share, fixed at its start, less what it has spent, over the hours left in it.","out_budget_off":"Off-hours: the same rule over this off-hours part's share. With the default off-hours mark 0 the share is 0; unattended work spends this share, as `paceline advice` reports it.","out_line":"What the model reads in limit mode","out_night":"Night allowance","out_threshold":"Five-hour stop","reserve_ask":"Weekly reserve: a launch now asks you to confirm, because it would spend the reserve.","series_label":"pages in this series","sim_eyebrow":"Simulator","sim_lede":"pace has no window of its own. It turns your limits into a budget per hour. In limit mode it tells the model the pace in plain words before every Agent and Workflow launch; in inform mode the model reads nothing. Move the inputs and watch that line change.","sim_title":"What pace will tell you, before it does","sit_ahead":"Week spent ahead","sit_ahead_story":"Most of the week is gone with days left: the budget shrinks.","sit_apply":"Load this situation","sit_away":"A day off planned","sit_away_story":"Tomorrow's working hours are marked 0, so their share moves to the other days.","sit_fresh":"Fresh week","sit_fresh_story":"Little used, a long way to the reset: the budget sits near the on-plan rate.","sit_morning":"Heavy morning","sit_morning_story":"The five-hour window filled early. a launch now asks you first until it resets.","sit_night":"A night with budget left","sit_night_story":"Tonight's off-hours are marked 0.5, so they carry a share: unattended work may start.","situations_eyebrow":"Situations","situations_title":"Typical moments, one click away","theme_dark":"Dark","theme_label":"Page theme","theme_light":"Light","theme_system":"System","title":"PaceLine budget simulator","tldr_body":"pace spreads what is left of your weekly limit over the rest of the week by the marks of each day's working hours and off-hours, and fixes each part's share at its start. The budget per hour is what is left of the current part's share over its remaining hours. On this page the current part is always on plan. At a hard limit it asks before a launch.","tldr_label":"TL;DR","toc_details":"Details","toc_label":"Sections","toc_simulator":"Simulator","toc_situations":"Situations","toc_week":"The week","week_chart_label":"Share of the week per remaining date","week_eyebrow":"The week","week_lede":"What is left of the week, less the reserve, is spread over its remaining parts by their marks: each day's working hours and off-hours. A bar is one date's share, both parts together. The week plan above moves budget between days.","week_title":"Where the rest of the week's budget goes","why_day":"The off-hours advice applies only in off-hours. In working hours pace holds a launch only at a hard limit or past the weekly reserve's stop line, and in limit mode when the part is over its share."}</script>
+<script type="application/json" id="pb-glossary">{"budget":{"name":"Budget per hour","short":"The weekly percent pace may spend per hour in the current part of the week plan: the part's share, fixed when the part started, less what it has spent, over the hours left in it."},"forecast":{"name":"Forecast unused","short":"The weekly percent likely left unspent at the reset at the recent pace."},"hold":{"name":"Hold","short":"A share of the weekly limit held for a running subagent, gate or Stint item. The advice counts it before unattended work starts the next item; outside such a run the launch line shows how many are active."},"night":{"name":"Night allowance","short":"The weekly percent unattended work may spend tonight: tonight's off-hours share, which is 0 until the off-hours are marked."},"plan":{"name":"Week plan","short":"Each day of the week as its working hours and its off-hours, each with a mark from 0 to 2: off 0, light 0.5, normal 1, heavy 1.5. What is left of the week is shared among the remaining parts by their marks."},"reserve":{"name":"Reserve","short":"A share of the week, 8% by default, kept out of the plan until the start of working hours of its release day. Until then a launch asks once the week's usage reaches 100% minus the reserve; from then the share is spread over the rest of the week."},"threshold":{"name":"Five-hour stop","short":"The five-hour usage from which pace asks before an Agent or Workflow launch: 95% by default, in working hours and off-hours alike."}}</script>
+<script type="application/json" id="pb-facts">{"commands":[{"command":"paceline on","help":"turn the pace hooks on","service":false},{"command":"paceline off","help":"turn the pace hooks off (every command still runs)","service":false},{"command":"paceline status","help":"interactive one-line recommendation","service":false},{"command":"paceline advice","help":"may unattended work start: start, wait or stop (exit 0, 10 or 11), with the budget and agents; writes advice-<account>.json","service":false},{"command":"paceline calibrate","help":"propose parameter corrections from history","service":true},{"command":"paceline simulate","help":"replay a week through the budget with your profile (a model: one reading per hour, no plans or holds)","service":true},{"command":"paceline settings","help":"every setting and switch with its value, default and source; read-only","service":false},{"command":"paceline profile","help":"print, change or check the profile (creates it with the detected time zone)","service":false},{"command":"paceline profile show","help":"print the profile (the default)","service":false},{"command":"paceline profile set","help":"change one key, with checks","service":false},{"command":"paceline profile check","help":"the time zone against this machine's, with a hint","service":false},{"command":"paceline doctor","help":"diagnose pace on this machine; read-only without --live","service":true},{"command":"paceline merge","help":"merge the sessions' readings from the inbox into rate-limits.json","service":true},{"command":"paceline plan","help":"the week plan: marks per part, shares, template (no subcommand: show the week)","service":false},{"command":"paceline plan set","help":"mark a day's working hours and off-hours","service":false},{"command":"paceline plan reset","help":"remove a day's marks, or every day's","service":false},{"command":"paceline plan offer","help":"the off-hours offer a prompt hook makes: print its line when the current off part is unplanned (default mark, no share) and was not offered yet; --refuse records a no","service":false},{"command":"paceline plan template","help":"the weekday marks every week starts from","service":false},{"command":"paceline plan template show","help":"the template (the default)","service":false},{"command":"paceline plan template set","help":"mark a weekday","service":false},{"command":"paceline plan template reset","help":"remove a weekday's marks, or the whole template","service":false},{"command":"paceline mode","help":"inform (no plan prompts) or limit (a launch past the part's share asks); bare: show it","service":false},{"command":"paceline reserve","help":"the weekly reserve: show it, or set its size, release weekday and name","service":false},{"command":"paceline hold","help":"hold registry","service":false},{"command":"paceline hold acquire","help":"","service":false},{"command":"paceline hold renew","help":"","service":false},{"command":"paceline hold release","help":"","service":false},{"command":"paceline hold release-session","help":"","service":false},{"command":"paceline hold prune","help":"","service":false},{"command":"paceline hold list","help":"","service":false},{"command":"paceline hold reconcile","help":"","service":false},{"command":"paceline away","help":"tell the launch gate that you are away, so it denies a launch it would ask about: on|off|status","service":false},{"command":"paceline context-watch","help":"moved to the PitCrew plugin","service":false},{"command":"paceline cache-watch","help":"moved to the PitCrew plugin","service":false},{"command":"paceline usage-watch","help":"read the account's exact usage through Claude Code: on|off|status","service":false},{"command":"paceline queue","help":"moved to the Stint plugin","service":false},{"command":"paceline auto","help":"moved to the Stint plugin","service":false}],"env":["ANTHROPIC_MODEL","CLAUDE_CODE_ACCOUNT_UUID","CLAUDE_CODE_ENTRYPOINT","CLAUDE_CODE_ORGANIZATION_UUID","CLAUDE_CODE_SESSION_ID","CLAUDE_CONFIG_DIR","CLAUDE_PID","CLAUDE_SESSION_ID","HOME","PACELINE_ACCOUNT_KEY","PACELINE_DEBUG","PACELINE_FREE_COMMIT_MB","PACELINE_MODEL","PACELINE_NOW","PACELINE_NO_MERGE","PACELINE_SCRIPT","PACELINE_STATE_DIR","PACELINE_USAGE_FILE","USERPROFILE"],"exit_codes":{"EXIT_ERROR":1,"EXIT_NONE":4,"EXIT_OK":0,"EXIT_SEVERAL":3,"EXIT_STOP":11,"EXIT_USAGE":2,"EXIT_WAIT":10},"profile":[{"default":2048,"internal":false,"key":"commit_reserve_mb"},{"default":95.0,"internal":false,"key":"five_hour_stop_pct"},{"default":10.0,"internal":false,"key":"five_hour_to_week_pct"},{"default":6000,"internal":false,"key":"heavy_job_mb"},{"default":6,"internal":false,"key":"max_agents"},{"default":3,"internal":false,"key":"max_heavy_runs"},{"default":false,"internal":false,"key":"memory_guard"},{"default":2048,"internal":false,"key":"min_free_commit_mb"},{"default":1.0,"internal":false,"key":"subagent_estimate_pct"},{"default":"UTC","internal":false,"key":"timezone"},{"default":false,"internal":true,"key":"timezone_confirmed"},{"default":"machine","internal":false,"key":"timezone_mode"},{"default":1,"internal":true,"key":"version"}],"reserve_default_pct":8,"simulate":[{"asks_h":1,"night_pct":0.0,"night_queue":false,"peak_five_hour_pct":100.0,"unused_pct":5.1,"week":"on-track"},{"asks_h":1,"night_pct":0.0,"night_queue":true,"peak_five_hour_pct":100.0,"unused_pct":5.1,"week":"on-track"},{"asks_h":4,"night_pct":0.0,"night_queue":false,"peak_five_hour_pct":100.0,"unused_pct":5.1,"week":"heavy-start"},{"asks_h":4,"night_pct":0.0,"night_queue":true,"peak_five_hour_pct":100.0,"unused_pct":5.1,"week":"heavy-start"},{"asks_h":1,"night_pct":0.0,"night_queue":false,"peak_five_hour_pct":100.0,"unused_pct":8.7,"week":"light-start"},{"asks_h":1,"night_pct":0.0,"night_queue":true,"peak_five_hour_pct":100.0,"unused_pct":8.7,"week":"light-start"},{"asks_h":2,"night_pct":0.0,"night_queue":false,"peak_five_hour_pct":100.0,"unused_pct":28.6,"week":"away-thu-fri"},{"asks_h":2,"night_pct":0.0,"night_queue":true,"peak_five_hour_pct":100.0,"unused_pct":28.6,"week":"away-thu-fri"}]}</script>
 <script type="application/json" id="pb-data">{}</script>
 <script>
 const __m = {}
@@ -1091,7 +1091,6 @@ const PBPace = (() => {
     commit_mb: 65536,
     data_age_min: 0,
     data_source: 'exact',
-    queue_item_estimate_pct: 1.0,
   }
 
   // The fixed values of pace.py the port reads (STALE_THRESHOLD_MIN and the rest there); golden.json
@@ -1528,6 +1527,12 @@ const PBPace = (() => {
     const normal_rate = rate > 0 ? Math.min(rate, per_hour_cap) : (100.0 - state.pct) / 168.0
 
     const later = parts(entry.end, reset, work_hours, plan)
+    // The first later part that carries weight: where the next planned work starts (null when there is none).
+    const following = later.find(p => p.weight > 0)
+    const next_planned = following === undefined ? null : {
+      start: iso_ms(following.start), start_local: fmt_local(following.start),
+      day: date_iso(following.day), kind: following.kind,
+    }
     const left_now = left(seven_used, state.kept(now))
     const [, later_shares] = spread(left_now, share, spent, later)
 
@@ -1573,6 +1578,7 @@ const PBPace = (() => {
         hours_left: py_round(hours_left, 3), unplanned: share === null,
         // Nothing is stored in the simulator: every part is derived.
         stored: false,
+        next_planned,
       },
       day_capacity_pct: py_round(day_capacity, 3),
       capacity_warning,
@@ -1697,153 +1703,104 @@ const PBPace = (() => {
     return parts.join(' | ')
   }
 
-  // ------------------------------------------------------------ night queue
+  // ------------------------------------------------------------ advice
 
-  function item_view(item) {
-    const out = {}
-    for (const k of ['id', 'title', 'repo', 'estimate_pct', 'independent', 'depends_on', 'status', 'reason',
-      'attempts', 'actual_pct']) out[k] = item[k] ?? null
-    return out
-  }
+  // advice.build for a simulator status: the same rows as advice.py, minus the ones the simulator never has
+  // (no stale account figures, no plan error, no five-hour burn).
+  const SAFETY_CODES = ['memory', 'weekly', 'weekly_scoped', 'five_hour', 'reserve']
+  const is_num = v => typeof v === 'number' && Number.isFinite(v)
 
-  function pick_next(items, budget, running_ids) {
-    const status = Object.fromEntries(items.map(i => [i.id, i.status]))
-    const pending = items.filter(i => i.status === 'pending')
-    if (!pending.length) {
-      if (items.some(i => i.status === 'running')) return [null, 'waiting']
-      return [null, items.some(i => i.status === 'deferred') ? 'blocked' : 'empty']
-    }
-    const runnable = []
-    let waiting = false
-    for (const item of pending) {
-      const deps = item.depends_on || []
-      if (deps.some(d => status[d] === 'deferred' || status[d] === undefined)) continue
-      if (deps.every(d => status[d] === 'done')) runnable.push(item)
-      else waiting = true
-    }
-    if (!runnable.length) return [null, waiting ? 'waiting' : 'blocked']
-    const running = items.filter(i => running_ids.has(i.id))
-    const exclusive = running.some(i => !i.independent)
-    for (const item of runnable) {
-      if (running.length && (exclusive || !item.independent)) continue
-      if (item.estimate_pct <= budget + 1e-9) return [item, null]
-    }
-    if (running.length) return [null, 'waiting']
-    return [null, 'budget']
-  }
-
-  // The run's end: its stored night_end (the simulator's runs always carry one).
-  function night_over(run, now) {
-    return now >= parse_iso(run.night_end)
-  }
-
-  function autonomous(now, calc, store, profile, start_run = false) {
-    const queue = store.queue
-    const pool = store.pool
-    const effective = calc.weekly.effective_pct
-    const night = calc.night
-    let run = queue.run
-    const reused = Boolean(start_run && run && run.night_date === night.date)
-    if (start_run && !reused) {
-      if (run) queue.past_runs = [...(queue.past_runs || []), run].slice(-14)
-      run = {
-        started_at: iso_ms(now), night_date: night.date, reset: calc.weekly.reset, used_at_start: effective,
-        night_end: night.end, allowance_pct: night.allowance_pct,
-        last_before_reset: night.last_before_reset, pool_spent_pct: 0.0,
-      }
-      queue.run = run
-    }
-    if (!run) {
-      return {
-        mode: 'autonomous', action: 'stop', may_start_next_item: false, max_parallel_agents: 0,
-        max_heavy_runs: calc.host.max_heavy_runs, budget_for_next_item_pct: 0.0, next_item: null,
-        wait_until: null, reasons: ['no queue run: start one with auto --start-run'], run: null,
-        stale: calc.data.stale, weekly_effective_pct: effective, five_hour_used_pct: calc.five_hour.used_pct,
-      }
-    }
-    const spent = Math.max(0.0, effective - run.used_at_start)
-    if (!night_over(run, now)) {
-      run.last_effective = effective
-      run.last_seen = iso_ms(now)
-    }
-    const budget = Math.max(0.0, run.allowance_pct - spent - calc.outstanding_holds_pct)
+  function build_advice(status, max_agents) {
     const reasons = []
-    let action = 'start'
-    let wait_until = null
-    const commit = calc.host.free_commit_mb
-    const floor = calc.host.min_free_commit_mb
-    const five = calc.five_hour
-    let stop = null
-    if (commit !== null && floor !== null && commit < floor) {
-      stop = `free commit ${py_fixed(commit / 1024, 1)} GB < ${floor_gb(floor)} GB`
-    } else if (night_over(run, now)) {
-      stop = 'night ended'
+    const reason = (code, effect, text, until = null, command = null) => reasons.push({ code, effect, text, until, command })
+    const host = status.host || {}
+    const data = status.data || {}
+    if (is_num(host.free_commit_mb) && is_num(host.min_free_commit_mb) && host.free_commit_mb < host.min_free_commit_mb) {
+      reason('memory', 'stop', `free memory ${py_fixed(host.free_commit_mb / 1024, 1)} GB < ${floor_gb(host.min_free_commit_mb)} GB, `
+        + 'a runaway process can crash the host')
     }
-    const running_ids = new Set([...queue.items, ...pool.items].filter(i => i.status === 'running').map(i => i.id))
-    let [item, why] = pick_next(queue.items, budget, running_ids)
-    let source = 'queue'
-    const pool_ok = run.last_before_reset && pool.approved_reset === calc.weekly.reset
-    if (item === null && pool_ok) {
-      const [pitem, pwhy] = pick_next(pool.items, budget, running_ids)
-      if (pitem !== null || why === 'empty' || why === 'blocked') {
-        item = pitem
-        why = pwhy
-        source = 'pool'
+    if (data.stale !== true) {
+      const five = status.five_hour || {}
+      if (is_num(five.used_pct) && is_num(five.threshold_pct) && five.used_pct >= five.threshold_pct) {
+        reason('five_hour', 'wait', `5h window ${py_fixed(five.used_pct, 0)}% >= ${py_fixed(five.threshold_pct, 0)}% stop, `
+          + `resets ${five.reset_local || 'later'}`, five.reset || null)
+      }
+      const weekly = status.weekly || {}
+      if ((weekly.effective_pct || 0) >= 100) {
+        const plain = is_num(weekly.seven_day_pct) && weekly.seven_day_pct >= 100
+        reason(plain ? 'weekly' : 'weekly_scoped', 'stop', 'weekly limit exhausted', weekly.reset || null)
       }
     }
-    if (stop === null && item === null) {
-      if (why === 'empty') stop = 'queue empty'
-      else if (why === 'blocked') stop = 'all remaining items need owner permission'
-      else if (why === 'budget') stop = 'night budget exhausted'
-      else {
-        action = 'wait'
-        reasons.push('waiting for running items or dependencies')
+    const reserve = status.reserve
+    if (is_object(reserve) && reserve.over === true) {
+      reason('reserve', 'wait', `weekly ${reserve.label} kept until ${reserve.release_text}: `
+        + `week used ${py_fixed(reserve.used_pct, 0)} % >= ${py_fixed(reserve.stop_at_pct, 0)} %`, reserve.release_at || null)
+    }
+    if (data.stale === true) {
+      reason('stale', 'wait', is_num(data.age_min) ? `usage data stale (${py_fixed(data.age_min, 0)} min)` : 'usage data stale')
+    }
+    const part = status.budget_part
+    const holds = is_num(status.outstanding_holds_pct) ? status.outstanding_holds_pct : 0.0
+    let budget = 0.0
+    if (is_object(part) && is_num(part.share_pct)) {
+      budget = py_round(Math.max(0.0, part.share_pct - (is_num(part.spent_pct) ? part.spent_pct : 0.0) - holds), 3)
+    }
+    if (data.stale !== true && is_object(part)) {
+      const share = is_num(part.share_pct) ? part.share_pct : null
+      const following = is_object(part.next_planned) ? part.next_planned : null
+      const word = part.kind === 'work' ? 'working-hours' : 'off-hours'
+      const weekly = status.weekly || {}
+      if (share === null || (share === 0 && following === null)) {
+        reason('unplanned', 'stop', `nothing is planned until the weekly reset at ${(weekly.reset_local || 'later').slice(0, 16)}`,
+          weekly.reset || null)
+      } else if (share === 0) {
+        const command = part.kind === 'work' ? `paceline plan set ${part.day} --work 0.5`
+          : `paceline plan set ${part.day} --off-hours 0.5`
+        reason('share_zero', 'wait', `this ${word} part has no share: nothing is planned until `
+          + `${following.start_local.slice(0, 16)}. To plan some now: ${command}`, following.start, command)
+      } else if (share > 0 && budget === 0) {
+        let text = `this ${word} part's share is used: ${py_fixed(part.spent_pct || 0, 1)} % of ${py_fixed(share, 1)} %`
+        if (holds > 0) text += `, ${py_fixed(holds, 1)} % held`
+        if (following) {
+          reason('share_used', 'wait', `${text}; the next planned part starts ${following.start_local.slice(0, 16)}`, following.start)
+        } else {
+          reason('share_used', 'stop', `${text}; nothing more is planned before the weekly reset`, weekly.reset || null)
+        }
       }
     }
-    if (stop) {
-      action = 'stop'
-      reasons.unshift(stop)
-    }
+    const effects = new Set(reasons.map(r => r.effect))
+    const action = effects.has('stop') ? 'stop' : effects.has('wait') ? 'wait' : 'start'
+    let agents = 0
     if (action === 'start') {
-      if (calc.data.stale) {
-        action = 'wait'
-        reasons.push(`usage data stale (${calc.data.age_min === null ? 'None' : py_str(calc.data.age_min)} min)`)
-      }
-      if (five.used_pct >= five.threshold_pct) {
-        action = 'wait'
-        wait_until = five.reset
-        reasons.push(`5h ${py_fixed(five.used_pct, 0)}% >= ${py_fixed(five.threshold_pct, 0)}%, wait for window reset`)
+      const heavy = is_num(host.max_heavy_runs) ? host.max_heavy_runs : 3
+      agents = Math.max(1, Math.min(Math.trunc(max_agents), Math.trunc(heavy)))
+    }
+    let wait_until = null
+    if (action === 'wait') {
+      for (const r of reasons) {
+        if (r.effect === 'wait' && r.until !== null && (wait_until === null || parse_iso(r.until) > parse_iso(wait_until))) {
+          wait_until = r.until
+        }
       }
     }
-    const heavy = calc.host.max_heavy_runs
-    const agents = action === 'stop' ? 0 : Math.max(1, Math.min(Math.trunc(profile.max_agents), heavy !== null ? heavy : 3))
-    const may = action === 'start' && item !== null
-    return {
-      mode: 'autonomous', action, may_start_next_item: may, max_parallel_agents: agents, max_heavy_runs: heavy,
-      budget_for_next_item_pct: py_round(budget, 3),
-      next_item: item ? { ...item_view(item), source } : null, wait_until, reasons,
-      run: {
-        night_date: run.night_date, allowance_pct: run.allowance_pct, spent_pct: py_round(spent, 3),
-        last_before_reset: run.last_before_reset, started_at: run.started_at, reused,
-        remaining_pct: py_round(Math.max(0.0, run.allowance_pct - spent), 3),
-      },
-      stale: calc.data.stale, weekly_effective_pct: effective, five_hour_used_pct: five.used_pct,
-    }
+    return { action, budget_pct: budget, agents, wait_until, reasons }
   }
 
-  // cmd_auto's printed line and exit code
-  function auto_line(result) {
-    let line = `auto: ${result.may_start_next_item ? 'START ' + result.next_item.id : result.action.toUpperCase()}`
-      + ` | budget ${py_fixed(result.budget_for_next_item_pct, 2)}% | agents <=${result.max_parallel_agents}`
-    if (result.run && result.run.reused) {
-      line += ` | run of ${result.run.night_date} kept, ${py_fixed(result.run.remaining_pct, 2)}% of`
-        + ` ${py_fixed(result.run.allowance_pct, 2)}% left`
+  // advice.line: the line `paceline advice` prints
+  function advice_line(adv) {
+    const texts = adv.reasons.map(r => r.text).join('; ')
+    if (adv.action === 'start') {
+      return `advice: START | budget ${py_fixed(adv.budget_pct, 2)}% | agents <=${adv.agents}`
+        + adv.reasons.filter(r => r.effect === 'limit').map(r => ` | ${r.text}`).join('')
     }
-    if (result.reasons.length) line += ' | ' + result.reasons.join('; ')
-    return line
+    if (adv.action === 'wait') {
+      if (adv.wait_until === null) return `advice: WAIT | ${texts}`
+      return `advice: WAIT until ${fmt_local(parse_iso(adv.wait_until)).slice(0, 16)} | ${texts}`
+    }
+    return `advice: STOP | ${texts}`
   }
 
-  const AUTO_EXIT = { start: EXIT_OK, wait: EXIT_WAIT, stop: EXIT_STOP }
+  const ADVICE_EXIT = { start: EXIT_OK, wait: EXIT_WAIT, stop: EXIT_STOP }
 
   // ------------------------------------------------------------ pre-agent hook
 
@@ -2122,27 +2079,15 @@ const PBPace = (() => {
     const holds = limit_reasons.limits.length + limit_reasons.reserve.length + limit_reasons.plan.length > 0
 
     const kind = kind_at(now, plan.work_hours)
-    let queue
+    let advice
     if (kind === 'off') {
-      const store = {
-        queue: {
-          run: null, next_id: 2, items: [{
-            id: 'Q1', title: 'simulated item', repo: 'example', estimate_pct: PINS.queue_item_estimate_pct,
-            independent: true, depends_on: [], status: 'pending', reason: null, attempts: 0, actual_pct: null,
-          }],
-        },
-        pool: { approved_on: null, approved_reset: null, next_id: 1, items: [] },
-      }
-      const result = autonomous(now, calc, store, profile, true)
-      queue = {
-        action: result.action, exit_code: AUTO_EXIT[result.action], line: auto_line(result), reasons: result.reasons,
-        budget_for_next_item_pct: result.budget_for_next_item_pct, max_parallel_agents: result.max_parallel_agents,
-        may_start_next_item: result.may_start_next_item,
-        wait_until: result.wait_until,
+      const adv = build_advice(calc, profile.max_agents)
+      advice = {
+        action: adv.action, exit_code: ADVICE_EXIT[adv.action], line: advice_line(adv), reasons: adv.reasons.map(r => r.text),
+        budget_pct: adv.budget_pct, agents: adv.agents, wait_until: adv.wait_until,
       }
     } else {
-      queue = { action: 'day', exit_code: null, line: null, reasons: [], budget_for_next_item_pct: null,
-        max_parallel_agents: null, may_start_next_item: false, wait_until: null }
+      advice = { action: 'day', exit_code: null, line: null, reasons: [], budget_pct: null, agents: null, wait_until: null }
     }
 
     // What the plan view shows per date from the current part on: the current share and the later parts'.
@@ -2173,7 +2118,7 @@ const PBPace = (() => {
       host: calc.host,
       forecast_unused_pct: calc.forecast_unused_pct,
       recommendation: rec,
-      queue,
+      advice,
       hook: { hard_limit: limits.length > 0, reasons: limits,
         reserve_stop: reserve_reasons.length > 0, reserve_reasons, ask: limits.length + reserve_reasons.length > 0, reason: limits.length ? `pace hard limit: ${limits.join('; ')}` : null,
         line_limit: pace_line(limit_status),
@@ -2209,8 +2154,8 @@ const PBPace = (() => {
       hardReason: r.hook.reason,
       reserveAsk: r.hook.ask && r.hook.reserve_stop,
       reserveReasons: r.hook.reserve_reasons ?? [],
-      decision: r.queue.action,
-      reasons: r.queue.reasons,
+      decision: r.advice.action,
+      reasons: r.advice.reasons,
       kind: r.kind,
       isOff: r.kind === 'off',
       marks,

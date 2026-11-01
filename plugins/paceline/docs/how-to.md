@@ -4,75 +4,19 @@
 
 Task guides for PaceLine. Each guide says when you need it, the steps, and how to tell it worked.
 Type the `/paceline:` commands in a session. Run the `paceline` commands in a session's Bash tool,
-or ask the agent to run them. The [reference](reference.md) lists every option.
+or ask the agent to run them. The [reference](reference.md) lists every option. The guides for
+context-watch and cache-watch, which moved to the PitCrew plugin, are in [PitCrew's how-to
+guides](../../pitcrew/docs/how-to.md).
 
-## Run a night queue
+## The night queue moved to the Stint plugin
 
-**When you need it:** you want the agent to work through a list of tasks while you sleep, within
+**When you need it:** you want the agent to work through a list of tasks while you are away, within
 what the week can spare.
 
-1. Keep the machine awake for the night.
-
-   **Windows**
-
-   `scripts/night-power.ps1` in the plugin directory turns off sleep on AC power and moves the
-   Windows Update active hours over the night, so a restart does not land mid-queue. Without a
-   switch it is a dry run that prints what it would change. Run it with `-Enable` before the night
-   and with `-Disable` after it, in an elevated PowerShell. The previous values are saved in
-   `<state>/night-power-state.json`. `-NightStart` and `-NightEnd` set the hours (default 0 and 8).
-   A night run now ends at the working start (09:00 by default), so pass the hours that match your
-   plan, for example `-NightStart 18 -NightEnd 9`.
-
-   **macOS**
-
-   Start the session under `caffeinate -i -s`, for example `caffeinate -i -s claude`.
-
-   **Linux**
-
-   Start it under `systemd-inhibit --what=sleep`, for example `systemd-inhibit --what=sleep claude`.
-2. Turn pace on, if it is off:
-
-   ```
-   /paceline:pace on
-   ```
-
-3. Add the items, each with an estimate in percent of the weekly limit:
-
-   ```
-   paceline queue add --title "Update the release notes" --repo agentpit-dev --estimate 2
-   paceline queue add --title "Rename the store keys" --repo agentpit-dev --estimate 3 --depends Q1
-   ```
-
-   Items get the IDs `Q1`, `Q2`, and so on. Add `--independent` to an item that may run beside other
-   independent items.
-
-   The queue runs on tonight's off-hours share, and the default off-hours mark is 0: with no mark,
-   `auto` has no allowance and stops. `paceline queue add` prints the command when tonight's share
-   is 0. Mark the night first, for example `paceline plan set today --off-hours 0.5`.
-4. Tell the agent to run the queue. It starts the run once:
-
-   ```
-   paceline auto --start-run
-   ```
-
-   Then, before each item, it runs `paceline auto` and follows its exit code:
-   - `0` (start): run `paceline queue start <id>` for the item named in the output, do the work, then
-     `paceline queue done <id>`. When the item's checks fail, run `paceline queue fail <id>` and fix
-     them; after 3 failures the item is deferred. When an item needs your permission, run `paceline
-     queue defer <id>`. Deferring an item also defers the items that depend on it.
-   - `10` (wait): wait, then run `paceline auto` again. With `--json`, `wait_until` says until when.
-   - `11` (stop): end the run.
-5. In the morning, the agent fills the report template `templates/morning-report.md` from `paceline
-   queue report` and the queue's state.
-
-**How to tell it worked:** `paceline queue report` prints the done, deferred, running, and pending
-items with their estimated and actual spend, for example `done 2 (est 5.00% act 4.10%), deferred 1,
-running 0, pending 0`. `paceline queue list` shows each item's status and, for a deferred item, the
-reason.
-
-The leftover pool works the same way with `--pool` (item IDs `L1`, `L2`, and so on). Approve it with
-`paceline queue --pool approve`; it runs only on the last night before the weekly reset. The
-[explanation](explanation.md#the-night-queues-decisions) says how `auto` decides.
+The night queue moved to the Stint plugin: install it with `/plugin install stint@agentpit`, queue
+items with `stint add` or `/stint:queue`, and run them with `/stint:run`. Stint obeys `paceline
+advice`, which keeps the budget, the agent count and the stops of this plugin in force. `paceline
+queue` and `paceline auto` print where they went and exit with status 2.
 
 ## Plan a week
 
@@ -97,20 +41,23 @@ day, a long one.
    paceline plan set tomorrow --work heavy --off-hours light
    ```
 
-   A part's share is fixed when the part starts. A mark for the part that is running, or for one
-   that has ended, is stored but changes nothing this week; the parts after it follow the new marks
-   at once. In a terminal tab of Claude Code Desktop, which has no session, the commands that write
-   (`plan set`, `plan reset`, `mode inform`, `mode limit`) refuse with `account not known yet
-   (desktop)`: run them from a session's Bash, or set `PACELINE_ACCOUNT_KEY` to the key that
-   `paceline status --json` shows as `data.account.key` there.
+   A part's share is fixed when the part starts. A mark for the part that is running splits it at
+   once: the part ends now and keeps its share and spending, and the rest starts now with a share
+   from what is left of the week by the new mark (while the away marker is on, the part is not split
+   and the command says so). A mark for a part that has ended is stored but changes nothing this
+   week; the parts after the running one follow the new marks at once. In a terminal tab of Claude
+   Code Desktop, which has no session, the commands that write (`plan set`, `plan reset`, `mode
+   inform`, `mode limit`) refuse with `account not known yet (desktop)`: run them from a session's
+   Bash, or set `PACELINE_ACCOUNT_KEY` to the key that `paceline status --json` shows as
+   `data.account.key` there.
 
    In Claude Code Desktop, open `/paceline:settings pane` and choose Calendar: a card per day of the
    week with its title, its ☼ and ☾ marks and their shares, and a bar on a grey track: the bar runs
    to the bar top and the grey is the room left. A part that has ended shows what it spent, or `not
    recorded` when the plan holds no spend for it. The days that have ended fold into one line that
-   unfolds when pressed. − and + change the mark of a part that has not started, through `paceline
-   plan set`; the part that is running and the ended ones show their marks without buttons. On a
-   phone the tab is read-only.
+   unfolds when pressed. − and + change the mark of a part that has not ended, through `paceline
+   plan set`; a change to the part that is running splits it at that moment. The ended parts show
+   their marks without buttons. On a phone the tab is read-only.
 3. Mark a weekday for every week with the template, and remove a day's marks:
 
    ```
@@ -151,112 +98,6 @@ week's other work to use up the allowance first.
    name. `paceline reserve 0` turns the reserve off and keeps the day and name. The settings pane
    has the same three rows under Weekly reserve.
 
-## Hold the cache while away
-
-**When you need it:** you step away from a session with a long context and want to come back to a
-warm cache. When a session sits idle for an hour, its one-hour prompt cache expires, and the next
-turn writes the whole context to the cache again.
-
-1. In that session, run:
-
-   ```
-   /paceline:cache-watch on
-   ```
-
-   It starts only when the session's main thread writes one-hour cache entries. It refuses a session
-   with five-minute entries, or with no cache entry yet, and says why. cache-watch keeps only the
-   main thread's cache: a session whose main thread writes five-minute entries is refused even when
-   its subagents write one-hour entries. The main thread's TTL is Claude Code's setting for the
-   session; subagent TTL settings do not change the decision.
-2. Leave the session idle. After every turn, a `Stop` hook waits in the background and wakes the
-   session `lead` minutes (5 by default) before the cache would expire, and no later than 52.5
-   minutes after the last request. The woken turn keeps the cache for another hour. The agent sends
-   one line, such as `Cache kept until 15:30 · wake 1 of 5 · reply stop to stop keeping it`, as a
-   push notification and ends the turn without a reply, so the line shows once. The push reaches
-   your phone when the session has Remote Control on and "Push when Claude decides" enabled in
-   `/config`. Only a session without the push tool gets the line as a reply instead. With a `lead`
-   up to 7, wakes come every 52.5 minutes; with a larger `lead`, every `60 - lead` minutes.
-3. Any message you send in the session resets the count. After `max` wakes (5 by default) in a row
-   without a message from you, watching stops. To stop earlier, reply `stop` or run
-   `/paceline:cache-watch off`. Ending the session also stops it, and so does a compaction, manual
-   or automatic: the compacted context starts a new cache, so a wake would keep nothing. `status`
-   then shows `off (compacted)`; run `on` again to watch the compacted session.
-
-What it cannot do:
-
-- It keeps only one-hour cache entries. When the main thread switches to five-minute entries,
-  watching stops, one wake tells you so, and `status` shows `off (five-minute cache)`. See [one-hour
-  entries only](limitations.md#cache-watch-keeps-only-one-hour-cache-entries) and [the
-  self-stop](limitations.md#cache-watch-stops-itself-when-the-main-thread-switches-to-five-minute-entries).
-- It keeps only the main thread's cache. A finished subagent that you resume after its cache expired
-  starts cold. See [main thread only](limitations.md#cache-watch-keeps-only-the-main-threads-cache).
-- It refuses a session with no cache entry yet. See [a cache entry
-  first](limitations.md#cache-watch-needs-a-cache-entry-first).
-- A computer that sleeps past the cache's expiry misses the wake and loses the cache. cache-watch
-  then turns off, `status` shows `off (cache expired before the wake)`, and your next message brings
-  a one-line notice. See
-  [sleep](limitations.md#a-computer-that-sleeps-past-the-caches-expiry-loses-the-cache).
-- It keeps no cache in `claude -p` runs. See [non-interactive
-  runs](limitations.md#cache-watch-does-nothing-in-non-interactive-runs).
-- Without Remote Control and "Push when Claude decides", no push reaches your phone. See [the
-  push](limitations.md#the-push-reaches-a-phone-only-with-remote-control).
-- In a terminal session whose context is at or above the idle compaction threshold, Claude Code is
-  expected to compact the conversation about 54 minutes after the last request ([Claude Code,
-  settings reference](https://code.claude.com/docs/en/settings-reference#idlecompaction), read
-  2026-10-15). cache-watch wakes the session no later than 52.5 minutes after the last request, so
-  the wake comes before idle compaction, and as a new request it restarts Claude Code's idle count.
-  When the wakes run out, cache-watch turns itself off and Claude Code can compact about 54 minutes
-  after the last wake. See [idle compaction after the last
-  wake](limitations.md#idle-compaction-can-run-after-cache-watchs-last-wake).
-
-A wake keeps the cache for far less than losing it costs. The woken turn reads the context from the
-cache; the first turn after the cache's expiry writes the whole context to the cache again, which by
-[Anthropic's API prices](https://platform.claude.com/docs/en/about-claude/pricing#prompt-caching)
-costs at least 20 times the read (a one-hour cache write is 2 times the input price, a cache read
-0.1 times or less). Each wake still counts against the five-hour limit; how much a cache read weighs
-in subscription limits is not published. With the defaults, that is at most five wakes per absence;
-see [each wake counts against the five-hour
-limit](limitations.md#each-wake-counts-against-the-five-hour-limit). The defaults live in
-`<state>/cache-watch.json` and are the same in every session on this machine. To change them, run
-`/paceline:cache-watch config --lead 10 --max 3`, or use the settings view (`/paceline:settings
-pane`); to change them for one session, pass the same options to `on`.
-
-**How to tell it worked:** `/paceline:cache-watch status` shows the session as `on`, with the cache
-expiry and the next wake, for example `<session id> · on · lead 5 min · wakes 0/5 · cache 1h ·
-expires 15:30 · next wake 15:22`.
-
-## Recover after a compaction
-
-**When you need it:** a session was compacted, and you or the agent need what the summary dropped.
-context-watch is on from install, so this works without setup.
-
-1. Before the compaction, context-watch watches the context. When the context first passes 85% and
-   then 95% of the auto-compaction point, the agent is told once per level to write its recovery
-   point to the task's status file. The levels reset after each compaction. With `--line on`,
-   context-watch also puts a line such as `context: 612k / 967k auto-compact point (63%)` on every
-   prompt; the line is off by default.
-2. At each compaction of the main conversation, automatic or `/compact`, PaceLine writes
-   `.claude/paceline/<session id>.md` in the project. It holds your last 3 prompts, the agent's last
-   2 replies, the last 5 tool calls with their inputs cut to 200 characters (without results), and
-   every file the agent wrote or edited in the session.
-3. The summary is told to keep the snapshot path. Right after the compaction, the agent is told to
-   read the snapshot and the task's status files before its next step.
-4. To read a snapshot yourself, open the file. `/paceline:context-watch status` prints the project's
-   snapshot folder.
-
-context-watch never vetoes, delays, or starts a compaction, and leaves subagent compactions alone.
-An error in context-watch leaves the turn as it was. With auto-compaction off, the line measures
-against the context window, and no warnings come. Snapshots older than 14 days are removed when a
-session starts in the project.
-
-To change it, run `/paceline:context-watch config`, for example `--levels 80,90` for earlier
-warnings, `--line on` to add a line such as `context: 612k / 967k auto-compact point (63%)` to every
-prompt, or `--days 30` to keep snapshots longer.
-
-**How to tell it worked:** after a compaction, `/paceline:context-watch status` counts the snapshot,
-for example `snapshots: /home/me/project/.claude/paceline (1 file)`, and the agent's next step
-starts by reading it.
-
 ## Keep usage current while idle
 
 **When you need it:** you want pace and status line plugins to show the exact figures `/usage`
@@ -271,10 +112,9 @@ PaceLine, pauses while the computer sleeps, and sends nothing while
 status` shows `last error: HTTP <status>` or `unexpected response`, PitBoard's model-scoped limits
 disappear after 15 minutes, and pace's model-scoped rules stop applying. Without usage-watch, the
 limits writer, the five-hour and weekly readings from each session's turns, pace's budget, and the
-night queue keep working, with data as of the last turn. The
-[limitations](limitations.md#usage-watch) list each case: [the
-login](limitations.md#limit-readings-need-a-claudeai-subscription-login), [off by
-default](limitations.md#usage-watch-is-off-by-default), [the
+advice keep working, with data as of the last turn. The [limitations](limitations.md#usage-watch)
+list each case: [the login](limitations.md#limit-readings-need-a-claudeai-subscription-login), [off
+by default](limitations.md#usage-watch-is-off-by-default), [the
 endpoint](limitations.md#usage-watch-reads-an-endpoint-outside-the-published-api), [an open
 session](limitations.md#usage-watch-needs-an-open-session),
 [sleep](limitations.md#a-sleeping-computer-pauses-usage-watch), and [the traffic
@@ -312,13 +152,14 @@ each session shows its own figures; so does a `claude` started from a Desktop te
 another account has a fresh reading; `paceline status --account <8 digits>` shows its figures.
 PaceLine keeps each account's readings in a partition of its own, and pace reads the partition of
 the account signed in now. Use a configuration directory per account (`CLAUDE_CONFIG_DIR`) when two
-terminal sessions on different accounts run at the same time, or when each needs its own profile and
-night queue (each account already has its own week plan). See [Each configuration directory keeps
-its own state](limitations.md#each-configuration-directory-keeps-its-own-state).
+terminal sessions on different accounts run at the same time, or when each needs its own profile
+(each account already has its own week plan). See [Each configuration directory keeps its own
+state](limitations.md#each-configuration-directory-keeps-its-own-state).
 
 1. Update with `/plugin marketplace update agentpit` and restart every open session. A session still
    on PaceLine 0.2.5 does not tag its readings and mixes the accounts until it restarts.
-2. Do not run `/login` during a night run. The run stops with `account changed during the run`.
+2. Do not run `/login` during an unattended run. Stint stops the run with `account changed during
+   the run`.
 3. Run `/login` and sign in to the other account.
 4. Run `/paceline:pace status`. It shows the new account's figures at once when that account has a
    partition from an earlier session. Otherwise it stops with `no usage data yet for the signed-in
@@ -345,7 +186,7 @@ figures at once.
 
 **When you need it:** a heavy process on this machine, such as a test run, a container or a large
 build, can use up free memory and crash the host, and you want PaceLine to ask before a launch and
-to stop the night queue while free memory is low.
+to stop unattended work while free memory is low.
 
 1. Turn the guard on. It is off by default: while it is off, PaceLine does not measure memory before
    a launch and no memory floor applies.
@@ -366,10 +207,10 @@ to stop the night queue while free memory is low.
    The [profile keys](reference.md#profile-keys) say what each key does.
 
 **How to tell it worked:** With free memory below `min_free_commit_mb`, an Agent or Workflow launch
-asks first and `paceline auto` stops the night queue. `paceline status` says `host memory unknown`
-when memory cannot be measured while the guard is on. `paceline profile set memory_guard false`
-turns the guard off again. To check it, run `paceline status --json`: `"guard": true` under `host`
-means the guard is on.
+asks first and `paceline advice` says stop to unattended work. `paceline status` says `host memory
+unknown` when memory cannot be measured while the guard is on. `paceline profile set memory_guard
+false` turns the guard off again. To check it, run `paceline status --json`: `"guard": true` under
+`host` means the guard is on.
 
 ## Change a profile setting
 
@@ -377,12 +218,12 @@ means the guard is on.
 fit your machine. Your working hours are part of the week plan; see [Plan a week](#plan-a-week).
 
 1. Look at the current values. `/paceline:settings` shows every setting and switch: a summary with
-   the four switches, a table for each group, a `●` before each value that differs from its default,
-   and the count of Advanced settings that differ, and `/paceline:settings pane` opens a pane where
-   you edit a value and save it with the same checks as `paceline profile set`; its Calendar tab
-   plans the week (see [Plan a week](#plan-a-week)). The PaceLine button opens the same pane, and a
-   second click closes it: in the CLI `[ PaceLine ]` follows PitBoard's button at the end of
-   PitBoard's row, and in Desktop `[ PaceLine ]` sits in the footer under the prompt; without
+   the three switches, a table for each group, a `●` before each value that differs from its
+   default, and the count of Advanced settings that differ, and `/paceline:settings pane` opens a
+   pane where you edit a value and save it with the same checks as `paceline profile set`; its
+   Calendar tab plans the week (see [Plan a week](#plan-a-week)). The PaceLine button opens the same
+   pane, and a second click closes it: in the CLI `[ PaceLine ]` follows PitBoard's button at the
+   end of PitBoard's row, and in Desktop `[ PaceLine ]` sits in the footer under the prompt; without
    PitBoard the CLI has no such button. In a session where PaceLine's hooks module does not run, or
    in a plain terminal, `paceline settings` prints the same list as text. The pane is read-only on a
    phone. A new skill needs a new session in Claude Code Desktop, so start one after you update
@@ -425,12 +266,17 @@ week](#keep-a-reserve-for-a-task-at-the-end-of-the-week)).
 ## Seat PaceLine as your organization's plugin
 
 **When you need it:** your organization manages Claude Code (a Team or Enterprise login, or a
-machine with managed settings) and context-watch does not run: see [the
-limitation](limitations.md#where-an-organization-manages-claude-code-context-watch-does-not-run).
-Claude Code's `sec-default` guard skips the hooks of a plugin you install yourself, but not of a
-plugin the organization's managed settings load from an administrator-only folder. Seating it there
-relaxes the organization's security settings, so it fits a small team whose owner decides that, and
-hardly a large organization.
+machine with managed settings) and you want the plugins' hooks modules to see every event. Claude
+Code's `sec-default` guard withholds the `classic.*` events and `session.compact` from the hooks
+module of a plugin you install yourself, but not from a plugin the organization's managed settings
+load from an administrator-only folder. PaceLine's own module uses none of the withheld events, so
+PaceLine runs in full under the guard. The seating still matters for PitBoard, whose compaction
+event the guard withholds (see [Where an organization manages Claude Code, PitBoard sees a
+compaction
+late](../../pitboard/docs/limitations.md#where-an-organization-manages-claude-code-pitboard-sees-a-compaction-late)),
+and, from the release that adds it, for PitCrew's context-watch. Seating it there relaxes the
+organization's security settings, so it fits a small team whose owner decides that, and hardly a
+large organization.
 
 One script per platform seats PaceLine and PitBoard together. It fetches each plugin from the public
 agentpit repository at its release tag, copies it into an administrator-only folder, writes a

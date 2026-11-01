@@ -1,0 +1,8 @@
+{
+  "name": "stint",
+  "version": "0.1.0",
+  "description": "A queue of unattended work for Claude Code. Queue items with `stint add`, leave, and `/stint:run` works them one at a time while `stint next` answers start, wait or stop: bounded by PaceLine's advice (budget, agents, waits, safety stops) when PaceLine is installed, and by its own stops at the weekly and five-hour limits when it is not. A module hands the limits Claude Code shows in the status line to state/stint, so Stint can stop without PaceLine. Takes over the queue PaceLine 0.6.0 and earlier kept. Requires Claude Code 2.1.287+ and Python 3.9+.",
+  "types": "./types/index.d.ts",
+  "author": {"name": "agentpit-lab", "url": "https://github.com/agentpit-lab"},
+  "keywords": ["night-queue", "unattended", "usage-limits", "pacing", "subagents", "hooks"]
+}

@@ -1,9 +1,11 @@
 // Pure part of the away marker's clearing: no engine calls, so tests reach it directly. The marker
 // itself, <state>/away.json, belongs to scripts/away.py.
 
-import { WAKE_MARK } from './context'
-
 export const AWAY_FILE = 'away.json'
+
+// The text PitCrew's cache-watch wake prompt carries (plugins/pitcrew/scripts/cache_watch.py, WAKE_MARK):
+// a wake is not the person's prompt, so it must not clear the marker.
+export const WAKE_MARK = 'cache-watch woke this session'
 
 // What clears the marker: $.fs cannot delete, and away.py reads a marker whose "on" is not true as off.
 export const CLEARED = '{"on": false}'

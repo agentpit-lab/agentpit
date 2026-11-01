@@ -68,19 +68,37 @@ export function pieSvg(pct: number, level: Level, size = 16): Piece {
   return { source: doc(size, size, pieBody(pct, level, size)), width: size, height: size, alt: `${clampPct(pct)}%` }
 }
 
+// Extra layers a bar draws beyond its fill.
+//   projected: a paler segment of the level colour up to the forecast at reset.
+//   projectedName: what the alt text calls that forecast; omitted, 'at reset'.
+export type BarExtra = { projected?: number; projectedName?: string }
+
+// The layer under the used fill: the forecast at reset, paler.
+function projectionLayer(e: BarExtra | undefined, used: number, level: Level, at: (pct: number) => number, y: number, h: number, rx: number): string {
+  if (e?.projected === undefined || e.projected <= used) return ''
+  return `<rect class="fill-${level}" fill-opacity="0.35" x="0" y="${y}" width="${at(e.projected).toFixed(1)}" height="${h}" rx="${rx}"/>`
+}
+
 // A limit as a bar with a tick where even pace would stand now: the share of the window gone.
 // Used past the tick means burning faster than the reset allows.
 // `markName` is what the alt text calls the tick.
-export function barSvg(pct: number, level: Level, pace: number | null, width = 40, markName = 'even pace'): Piece {
+export function barSvg(pct: number, level: Level, pace: number | null, width = 40, markName = 'even pace', extra?: BarExtra): Piece {
   const p = clampPct(pct)
   const fill = (p / 100) * width
+  const at = (v: number) => (clampPct(v) / 100) * width
   let body = `<rect class="disc" x="0" y="4" width="${width}" height="4" rx="2"/>`
+  body += projectionLayer(extra, p, level, at, 4, 4, 2)
   if (p > 0) body += `<rect class="fill-${level}" x="0" y="4" width="${fill.toFixed(1)}" height="4" rx="2"/>`
   if (pace !== null) {
     const x = Math.max(1, Math.min(width - 1, (clampPct(pace) / 100) * width))
     body += `<rect class="tick" x="${(x - 1).toFixed(1)}" y="1" width="2" height="10" rx="1"/>`
   }
-  return { source: doc(width, 12, body), width, height: 12, alt: pace === null ? `${p}%` : `${p}%, ${markName} ${clampPct(pace)}%` }
+  const height = 12
+  const notes = [
+    ...(extra?.projected !== undefined ? [`~${clampPct(extra.projected)}% ${extra.projectedName ?? 'at reset'}`] : []),
+  ]
+  const alt = (pace === null ? `${p}%` : `${p}%, ${markName} ${clampPct(pace)}%`) + notes.map(n => `, ${n}`).join('')
+  return { source: doc(width, height, body), width, height, alt }
 }
 
 // The thin rule between groups of readings; the image is wider than the line, which a surface
@@ -93,7 +111,7 @@ export function ruleSvg(height = 14, width = 9): Piece {
 // desktopBullets: what only the desktop card says (its own context ring), after the bullets, two at most.
 // bar: a limit drawn the card's full width: used, where the current pace leads by the reset (paler),
 // and the even-pace tick.
-export type CardBar = { used: number; projected?: number; tick: number | null; level: Level }
+export type CardBar = { used: number; projected?: number; tick: number | null; level: Level } & BarExtra
 // advice: the first bullet when the reading needs a decision, also kept apart for the popover.
 export type Card = { title: string; level?: Level; rows: [string, string, Tone?][]; bullets: string[]; advice?: string; desktopBullets?: string[]; bar?: CardBar }
 
@@ -140,17 +158,20 @@ export function ringMarksSvg(pie: { pct: number; level: Level } | null, idle: bo
 // A limit's wide bar from y down 6 px: used, the projection paler, the even-pace tick over both.
 function barParts(b: CardBar, y: number, w: number): string[] {
   const at = (pct: number) => (Math.max(0, Math.min(100, pct)) / 100) * w
-  const parts = [`<rect class="disc" x="0" y="${y}" width="${w}" height="6" rx="3"/>`]
-  if (b.projected !== undefined && b.projected > b.used)
-    parts.push(`<rect class="fill-${b.level}" fill-opacity="0.35" x="0" y="${y}" width="${at(b.projected).toFixed(1)}" height="6" rx="3"/>`)
+  const parts = [`<rect class="disc" x="0" y="${y}" width="${w}" height="6" rx="3"/>`, projectionLayer(b, b.used, b.level, at, y, 6, 3)]
   if (b.used > 0) parts.push(`<rect class="fill-${b.level}" x="0" y="${y}" width="${at(b.used).toFixed(1)}" height="6" rx="3"/>`)
   if (b.tick !== null) parts.push(`<rect class="tick" x="${Math.max(0, at(b.tick) - 1).toFixed(1)}" y="${y - 3}" width="2" height="12" rx="1"/>`)
   return parts
 }
 
 export function wideBarSvg(b: CardBar, width: number): Piece {
-  const alt = [`${Math.round(b.used)}% used`, ...(b.projected !== undefined ? [`~${Math.round(b.projected)}% at reset`] : []), ...(b.tick !== null ? [`even ${Math.round(b.tick)}%`] : [])].join(', ')
-  return { source: doc(width, 12, barParts(b, 3, width).join('')), width, height: 12, alt }
+  const alt = [
+    `${Math.round(b.used)}% used`,
+    ...(b.projected !== undefined ? [`~${Math.round(b.projected)}% ${b.projectedName ?? 'at reset'}`] : []),
+    ...(b.tick !== null ? [`even ${Math.round(b.tick)}%`] : []),
+  ].join(', ')
+  const height = 12
+  return { source: doc(width, height, barParts(b, 3, width).join('')), width, height, alt }
 }
 
 // A cache state that has no countdown left to draw: a flame while a reply is running, a snowflake

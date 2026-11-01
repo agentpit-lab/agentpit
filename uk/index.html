@@ -113,7 +113,7 @@ a.card strong { color: var(--accent); }
   <header>
     <h1>Документація agentpit</h1>
     <p>Посібники та інтерактивні сторінки для плагінів маркетплейсу agentpit для Claude Code.</p>
-    <p>З входом в акаунт Team або Enterprise і на комп&#x27;ютері з керованими налаштуваннями захист Claude Code <code>sec-default</code> вимикає context-watch у PaceLine і затримує те, що PitBoard показує після стиснення. Що працює далі і як адміністратор невеликої команди може це обійти, описано на сторінці «Обмеження» кожного плагіна.</p>
+    <p>З входом у Team або Enterprise чи на комп&#x27;ютері з керованими налаштуваннями захист Claude Code <code>sec-default</code> зупиняє context-watch, який належить PitCrew (у PaceLine до версії 0.6.0 включно), і затримує те, що PitBoard показує після стиснення. Що працює далі і як адміністратор невеликої команди може це обійти, описано на сторінці «Обмеження» кожного плагіна.</p>
   </header>
   <section>
     <h2>PitBoard</h2>
@@ -130,15 +130,37 @@ a.card strong { color: var(--accent); }
   </section>
   <section>
     <h2>PaceLine</h2>
-    <p>Захищає контекст сесії та ліміти використання передплати.</p>
+    <p>Тримає в порядку ліміти використання передплати.</p>
     <div class="cards">
-      <a class="card" href="../plugins/paceline/docs/uk/getting-started.html"><strong>Початок роботи</strong><span>Чотири функції і де pace подає сигнали.</span></a>
+      <a class="card" href="../plugins/paceline/docs/uk/getting-started.html"><strong>Початок роботи</strong><span>Його дві функції і де pace подає сигнали.</span></a>
       <a class="card" href="../plugins/paceline/docs/uk/budget-simulator.html"><strong>Симулятор бюджету</strong><span>Що скаже pace ще до того, як він це скаже.</span></a>
-      <a class="card" href="../plugins/paceline/docs/uk/how-to.html"><strong>Практичні інструкції</strong><span>Запустити нічну чергу, оголосити план, утримати кеш.</span></a>
+      <a class="card" href="../plugins/paceline/docs/uk/how-to.html"><strong>Практичні інструкції</strong><span>Запустити нічну чергу, оголосити план, тримати дані про використання актуальними.</span></a>
       <a class="card" href="../plugins/paceline/docs/uk/explanation.html"><strong>Пояснення</strong><span>Як бюджет, прогноз і нічна черга ухвалюють рішення.</span></a>
       <a class="card" href="../plugins/paceline/docs/uk/reference.html"><strong>Довідник</strong><span>Команди, коди виходу, ключі профілю, файли і формати.</span></a>
       <a class="card" href="../plugins/paceline/docs/uk/troubleshooting.html"><strong>Усунення проблем</strong><span>Pace здається неактивним, бюджет виглядає неправильним, дані застаріли.</span></a>
       <a class="card" href="../plugins/paceline/docs/uk/limitations.html"><strong>Обмеження</strong><span>Чого плагін не вміє і що працює далі.</span></a>
+    </div>
+  </section>
+  <section>
+    <h2>PitCrew</h2>
+    <p>Тримає в порядку контекст сесії та кеш промпту: попередження і знімки навколо стиснення та утримувач кешу для сесії, яка простоює.</p>
+    <div class="cards">
+      <a class="card" href="../plugins/pitcrew/docs/uk/getting-started.html"><strong>Початок роботи</strong><span>Встановити плагін і побачити, що працює одразу.</span></a>
+      <a class="card" href="../plugins/pitcrew/docs/uk/how-to.html"><strong>Практичні інструкції</strong><span>Утримати кеш, відновити після стиснення, вибрати між обома.</span></a>
+      <a class="card" href="../plugins/pitcrew/docs/uk/reference.html"><strong>Довідник</strong><span>Команди, параметри, файли, змінні та hooks.</span></a>
+      <a class="card" href="../plugins/pitcrew/docs/uk/troubleshooting.html"><strong>Усунення проблем</strong><span>Немає попередження, немає знімка, нагляд не запустився.</span></a>
+      <a class="card" href="../plugins/pitcrew/docs/uk/limitations.html"><strong>Обмеження</strong><span>Чого плагін не вміє і що працює далі.</span></a>
+    </div>
+  </section>
+  <section>
+    <h2>Stint</h2>
+    <p>Черга роботи без нагляду для Claude Code, обмежена порадою PaceLine або власними зупинками за лімітами.</p>
+    <div class="cards">
+      <a class="card" href="../plugins/stint/docs/uk/getting-started.html"><strong>Початок роботи</strong><span>Встановити плагін, поставити елемент у чергу і запустити його.</span></a>
+      <a class="card" href="../plugins/stint/docs/uk/how-to.html"><strong>Практичні інструкції</strong><span>Поставити роботу в чергу, спланувати сьогоднішню частку, працювати без PaceLine, перейти з черги PaceLine.</span></a>
+      <a class="card" href="../plugins/stint/docs/uk/reference.html"><strong>Довідник</strong><span>Команди, параметри, файли, змінні та порядок відповіді.</span></a>
+      <a class="card" href="../plugins/stint/docs/uk/troubleshooting.html"><strong>Усунення проблем</strong><span>Черга одразу зупиняється, чекає без показників, PaceLine не знайдено.</span></a>
+      <a class="card" href="../plugins/stint/docs/uk/limitations.html"><strong>Обмеження</strong><span>Чого плагін не вміє і що працює далі.</span></a>
     </div>
   </section>
   <section>

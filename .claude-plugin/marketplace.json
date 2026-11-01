@@ -1,19 +1,31 @@
 {
   "name": "agentpit",
   "owner": {"name": "agentpit-lab", "url": "https://github.com/agentpit-lab"},
-  "description": "Claude Code plugins that keep a session's context and a subscription's usage limits in view (PaceLine and PitBoard), and give database access at three levels (dbWise).",
+  "description": "Claude Code plugins that keep a session's context, its prompt cache and a subscription's usage limits in view (PaceLine, PitBoard and PitCrew), run queued work while you are away (Stint), and give database access at three levels (dbWise).",
   "plugins": [
     {
       "name": "paceline",
       "source": "./plugins/paceline",
-      "description": "Keeps a Claude Code session's context and a subscription's usage limits in view: warnings and snapshots around auto-compaction, a prompt cache kept alive while a session is idle, a per-hour budget against the five-hour and weekly limits, and exact usage readings.",
-      "tags": ["usage-limits", "pacing", "prompt-cache", "context", "compaction", "subagents", "night-queue", "hooks"]
+      "description": "Keeps a Claude Code subscription's usage limits in view: a per-hour budget against the five-hour and weekly limits, and exact usage readings.",
+      "tags": ["usage-limits", "pacing", "subagents", "hooks"]
     },
     {
       "name": "pitboard",
       "source": "./plugins/pitboard",
       "description": "A status row for Claude Code in the CLI and in Desktop: context against the auto-compaction point, the prompt cache's time to live and hit rate, and the five-hour and weekly limits with their pace.",
       "tags": ["statusline", "ui", "context-window", "auto-compact", "usage-limits", "function-hooks"]
+    },
+    {
+      "name": "pitcrew",
+      "source": "./plugins/pitcrew",
+      "description": "Keeps a Claude Code session's context and prompt cache in shape: warnings and snapshots around auto-compaction (context-watch), and a prompt cache kept alive while a session is idle (cache-watch).",
+      "tags": ["prompt-cache", "context", "compaction", "usage-limits", "hooks"]
+    },
+    {
+      "name": "stint",
+      "source": "./plugins/stint",
+      "description": "A queue of unattended work for Claude Code: runs queued items one at a time while you are away, bounded by PaceLine's advice or, without PaceLine, by its own stops at the weekly and five-hour limits.",
+      "tags": ["night-queue", "unattended", "usage-limits", "subagents", "function-hooks"]
     },
     {
       "name": "dbwise",

@@ -62,6 +62,27 @@ export type WeekView = {
   cardLevel: Level
   // PaceLine's week plan measured at this moment, null when its file is missing or not usable.
   plan: PlanView | null
+  // the week reads 0% while the five-hour window has grown since the reset: the account's
+  // whole percent hides a spend under 1 point.
+  isUsedUnderOne: boolean
+  // The forecast at the reset (null: too little data).
+  forecast: ForecastView | null
+  // The last whole-percent step of this week (weekStep).
+  step: WeekStep | null
+}
+
+// the week forecast: the plain average since the last reset, held to the reset.
+export type ForecastView = {
+  // The week's use at the reset at that average, unclamped.
+  atReset: number
+  // When the week reaches 100% at that average (linear), or null when it lasts to the reset.
+  runsOutAt: number | null
+  // %/h since the reset: the week's average rate.
+  rate: number
+  // the use now at that rate (the rounded figure read through its last step).
+  usedNow: number
+  // True from 1 h to 48 h into the week: the average rests on little time, the values are marked "≈".
+  isApprox: boolean
 }
 
 // The reserve of the plan file as the Week card reads it. none: no reserve (0%); unknown: the release
@@ -76,12 +97,16 @@ export type ReserveView =
 // The part of PaceLine's week plan that holds now, measured against the week's usage. Percentages are
 // points of the week, times are epoch milliseconds, spans are hours.
 export type PlanView = {
+  // no whole point spent in the part, yet the five-hour window grew since it began.
+  isSpentUnderOne: boolean
   // The effective mode: inform_until is applied.
   mode: 'inform' | 'limit'
   start: number
   end: number
   // The part's fixed share, null for an unplanned part or week.
   share: number | null
+  // the part's kind in the file, 'work', 'off' or null when the file does not say.
+  kind: string | null
   usedAtStart: number
   // Weekly usage since the part began, at least 0.
   spent: number
@@ -102,8 +127,6 @@ export type PlanView = {
   budget: number | null
   // The weekly rate within the part in %/h, null while the part is under an hour old or without samples.
   pace: number | null
-  // Where the plan expects the week's usage now, whole percent in 0-100; null without a share.
-  tick: number | null
   reserve: ReserveView
 }
 
@@ -151,6 +174,8 @@ export type ViewInput = {
   accountKey?: string | null
   // paceline's week plan file, read for accountKey; used only when planOf finds it usable.
   weekPlan?: StatusWeekPlan | null
+  // this account's last model request on this machine (ms), for "<1".
+  requestAt?: number | null
 }
 
 const TTL_MARGIN_MS = 5000
@@ -178,7 +203,7 @@ export function parseBurn(text: string): StatusBurn | null {
     isNumber(r.used_pct) &&
     typeof r.resets_at === 'string' &&
     isNumber(r.threshold_pct) &&
-    isNumber(r.budget_per_hour_pct) &&
+    isNumberOrNull(r.budget_per_hour_pct) &&
     isNumberOrNull(r.rate_per_hour_pct) &&
     isTextOrNull(r.threshold_at) &&
     typeof r.limited === 'boolean'
@@ -446,10 +471,15 @@ function burnRate(pct: number, resetsAt: string | undefined, samples: StatusSamp
   return Math.max(0, ((pct - base.pct) / (now - base.t)) * HOUR)
 }
 
+// Under this much of the five-hour window left, no even budget is computed.
+export const FIVE_BUDGET_MIN_MS = 15 * 60_000
+
 function fiveView(limit: StatusLimit | undefined, isExact: boolean, samples: StatusSample[], now: number, burn: StatusBurn | null, accountKey: string | null): FiveView | null {
   if (!limit) return null
   const resetAt = limit.resetsAt ? Date.parse(limit.resetsAt) : null
   const resetInMs = resetAt === null ? null : Math.max(0, resetAt - now)
+  // Too little of the window is left for an even budget to mean anything.
+  const isUnderFloor = resetInMs !== null && resetInMs < FIVE_BUDGET_MIN_MS
   const key = windowKey(limit.resetsAt)
   const age = burn ? now - Date.parse(burn.computed_at) : NaN
   // The snapshot stands in only for the figure it was computed from: this account, this window, this
@@ -472,7 +502,7 @@ function fiveView(limit: StatusLimit | undefined, isExact: boolean, samples: Sta
       pct: limit.percentUsed,
       resetInMs,
       ratePerHour: burn.rate_per_hour_pct,
-      evenPerHour: burn.budget_per_hour_pct,
+      evenPerHour: isUnderFloor ? null : burn.budget_per_hour_pct,
       fullAt: Number.isFinite(thresholdAt) ? thresholdAt : null,
       isExact,
       level,
@@ -481,7 +511,7 @@ function fiveView(limit: StatusLimit | undefined, isExact: boolean, samples: Sta
     }
   }
   const ratePerHour = burnRate(limit.percentUsed, limit.resetsAt, samples, now, 90 * 60_000, 10 * 60_000)
-  const evenPerHour = resetInMs && resetInMs > 0 ? (100 - limit.percentUsed) / (resetInMs / HOUR) : null
+  const evenPerHour = !isUnderFloor && resetInMs && resetInMs > 0 ? (100 - limit.percentUsed) / (resetInMs / HOUR) : null
   const fullAt = ratePerHour && ratePerHour > 0 ? now + ((100 - limit.percentUsed) / ratePerHour) * HOUR : null
   const isBeforeReset = fullAt !== null && resetAt !== null && fullAt < resetAt
   const level: Level =
@@ -515,6 +545,46 @@ export type PlanInput = {
   resetsAt: string | undefined
   // The week's own samples, empty where the figure is of an unknown account.
   samples: StatusSample[]
+  // the five-hour samples and the last request, for isSpentUnderOne.
+  fiveSamples?: StatusSample[]
+  requestAt?: number | null
+}
+
+// the account gives whole percents, so a week or part under 1 point reads 0. The
+// five-hour window steps about six times finer: it grew after `since` when two of its readings, both
+// taken after it, rise within one window, or a window that opened after it reads above 0.
+const FIVE_WINDOW_MS = 5 * 3600_000
+// A request of the account after `since` spent something too, before any figure moves.
+export function spentSince(samples: StatusSample[], requestAt: number | null | undefined, since: number): boolean {
+  return (typeof requestAt === 'number' && requestAt >= since) || fiveGrewSince(samples, since)
+}
+// paceline's last-request-<key>.json: the instant of the account's newest request, only for version 1
+// and the same account. Never throws.
+export function parseLastRequest(text: string | null, key: string): number | null {
+  if (text === null) return null
+  let raw: unknown
+  try {
+    raw = JSON.parse(text)
+  } catch {
+    return null
+  }
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null
+  const r = raw as Record<string, unknown>
+  if (r.version !== 1 || r.account !== key || typeof r.requested_at !== 'string') return null
+  const at = Date.parse(r.requested_at)
+  return Number.isFinite(at) ? at : null
+}
+export function fiveGrewSince(samples: StatusSample[], since: number): boolean {
+  const s = [...samples].sort((a, b) => a.t - b.t)
+  for (let k = 0; k < s.length; k++) {
+    const b = s[k]!
+    if (b.t <= since) continue
+    const opened = b.resetsAt ? Date.parse(b.resetsAt) - FIVE_WINDOW_MS : NaN
+    if (Number.isFinite(opened) && opened >= since && b.pct > 0) return true
+    const a = s[k - 1]
+    if (a && a.t >= since && a.resetsAt === b.resetsAt && b.pct > a.pct) return true
+  }
+  return false
 }
 
 // The week plan measured now, by paceline's rule (spent, allowed and the 1-point tolerance of its plan
@@ -560,8 +630,10 @@ export function planOf(file: StatusWeekPlan | null | undefined, i: PlanInput): P
     start,
     end,
     share,
+    kind: file.part.kind ?? null,
     usedAtStart,
     spent,
+    isSpentUnderOne: spent < 1 && spentSince(i.fiveSamples ?? [], i.requestAt, start),
     allowed,
     isAbove: allowed !== null && spent > allowed + PLAN_TOLERANCE_PCT,
     lead,
@@ -573,13 +645,67 @@ export function planOf(file: StatusWeekPlan | null | undefined, i: PlanInput): P
       share === null ? null : Math.min(Math.max(0, share - spent) / Math.max((end - now) / HOUR, 1e-9), file.five_hour_to_week_pct / 5),
     // The look-back is the part's own age, up to 6 hours; in the part's first hour there is no rate.
     pace: now - start < HOUR ? null : burnRate(i.pct, i.resetsAt, i.samples, now, Math.min(6 * HOUR, now - start), HOUR),
-    tick: allowed === null ? null : Math.round(Math.min(100, Math.max(0, usedAtStart + allowed))),
     reserve,
   }
 }
 
+// the week forecast. The rate is the plain average since the last reset (used over the
+// hours elapsed since the week's start, reset - 7 d), held to the reset. No forecast in the first hour; from
+// 1 h to 48 h the values are approximate (isApprox); after 48 h they are not. A backtest on real history
+// showed that splitting the week into work and off hours gains at most 1.7 points, so the simple rule stands.
+export const FORECAST_MIN_HOURS = 1
+export const FORECAST_APPROX_HOURS = 48
+
+// the account rounds the week to whole percents, so a figure that has just stepped up
+// stands for about half a point less. The moment of the last step pins the use then: the figure less half
+// a point. null when the samples show no step up in this week.
+export type WeekStep = { t: number; used: number }
+export function weekStep(samples: StatusSample[], pct: number, resetsAt: string | undefined): WeekStep | null {
+  const resetAt = resetsAt ? Date.parse(resetsAt) : NaN
+  if (!Number.isFinite(resetAt) || pct <= 0) return null
+  const start = resetAt - 7 * 24 * HOUR
+  const s = samples.filter(x => x.t >= start && x.resetsAt !== null && Math.abs(Date.parse(x.resetsAt) - resetAt) < PLAN_WEEK_TOLERANCE_MS).sort((a, b) => a.t - b.t)
+  for (let k = s.length - 1; k > 0; k--) {
+    if (s[k]!.pct === pct && s[k - 1]!.pct < pct) return { t: s[k]!.t, used: pct - 0.5 }
+  }
+  return null
+}
+
+// the average rate since `from` of a whole-percent figure: from the last step when there
+// is one, held between the bounds the rounding leaves now (the figure plus or minus half a point).
+export function roundedRate(used: number, from: number, now: number, step: { t: number; used: number } | null): number {
+  const h = (now - from) / HOUR
+  if (h <= 0) return 0
+  const low = Math.max(0, used - 0.5) / h
+  const high = (used + 0.5) / h
+  if (!step || step.t <= from) return Math.max(0, used) / h
+  const stepRate = Math.max(0, step.used) / ((step.t - from) / HOUR)
+  return Math.min(high, Math.max(low, stepRate))
+}
+
+export function weekForecast(i: { now: number; pct: number; resetsAt: string | undefined; step?: WeekStep | null }): ForecastView | null {
+  const { now, pct } = i
+  const resetAt = i.resetsAt ? Date.parse(i.resetsAt) : NaN
+  if (!Number.isFinite(resetAt) || resetAt <= now) return null
+  const start = resetAt - 7 * 24 * HOUR
+  const elapsedH = (now - start) / HOUR
+  if (elapsedH < FORECAST_MIN_HOURS) return null
+  const rate = roundedRate(pct, start, now, i.step ?? null)
+  // The use now at that rate, so the forecast does not restart from the rounded figure.
+  // Held to 100: the rounded rate can overshoot a week at 100 %, and the estimate and "Runs out" must not.
+  const usedNow = Math.min(100, rate * elapsedH)
+  const atReset = rate * elapsedH + rate * ((resetAt - now) / HOUR)
+  return {
+    atReset,
+    runsOutAt: atReset > 100 && rate > 0 ? now + ((100 - usedNow) / rate) * HOUR : null,
+    rate,
+    usedNow,
+    isApprox: elapsedH < FORECAST_APPROX_HOURS,
+  }
+}
+
 const LEVEL_RANK: Record<Level, number> = { calm: 0, watch: 1, act: 2 }
-const higher = (a: Level, b: Level): Level => (LEVEL_RANK[b] > LEVEL_RANK[a] ? b : a)
+export const higher = (a: Level, b: Level): Level => (LEVEL_RANK[b] > LEVEL_RANK[a] ? b : a)
 
 // The Plan row's level: above the share is watch in inform mode and act in limit mode; within, an
 // unplanned part and an unplanned week have none.
@@ -659,7 +785,17 @@ export function buildView(i: ViewInput): View {
               pct: weekPct,
               resetsAt: week.merged?.resetsAt,
               samples: weekSamples,
+              fiveSamples: five.isFromFile && isUnknown ? [] : i.fiveSamples,
+              requestAt: i.requestAt,
             })),
+            isUsedUnderOne:
+              weekPct < 1 &&
+              !!week.merged?.resetsAt &&
+              spentSince(five.isFromFile && isUnknown ? [] : i.fiveSamples, i.requestAt, Date.parse(week.merged.resetsAt) - 7 * 24 * HOUR),
+            ...(() => {
+              const step = weekStep(weekSamples, weekPct, week.merged?.resetsAt)
+              return { step, forecast: weekForecast({ now: i.now, pct: weekPct, resetsAt: week.merged?.resetsAt, step }) }
+            })(),
           },
     scoped: i.scoped.map(b => ({ ...b, level: weekLevel(b.percentUsed) })),
     costUsd: i.measure?.costUsd ?? null,

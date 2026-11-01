@@ -58,7 +58,7 @@ export type StatusBurn = {
   used_pct: number
   resets_at: string
   threshold_pct: number
-  budget_per_hour_pct: number
+  budget_per_hour_pct: number | null
   rate_per_hour_pct: number | null
   threshold_at: string | null
   threshold_at_local?: string | null
@@ -122,6 +122,7 @@ declare module 'claude-code' {
       fiveBurn: StatusBurn | null
       // paceline's week plan file for the held account, null when absent or unreadable.
       weekPlan: StatusWeekPlan | null
+      requestAt: number | null
       account: { key: string | null; isFileUnknown: boolean } | null
       nowMs: number
       desktopNow: number

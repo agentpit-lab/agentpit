@@ -110,7 +110,8 @@ PowerShell 7 on Windows. Start a new session.
 
 ## A model-scoped limit disappears
 
-A reading such as `Fable` leaves the limits group.
+A reading such as `Fable` leaves the row. It is in the row only while amber or red; the `/pitboard`
+pane lists it at any level.
 
 **Cause:** PitBoard shows the model-scoped limits only from an exact reading by PaceLine's
 usage-watch that is at most 15 minutes old, and only until the week they belong to resets. They

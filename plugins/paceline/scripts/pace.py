@@ -26,6 +26,7 @@ from pathlib import Path
 # limits_file.py sits beside this script: the state directory, the lock and the merge of
 # rate-limits.json, shared with the hooks.
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import advice  # noqa: E402
 import away  # noqa: E402
 import five_burn  # noqa: E402
 import limits_file  # noqa: E402
@@ -74,12 +75,11 @@ PROFILE_DEFAULTS = {
 # Values that tune the implementation rather than how the operator works (intent 0047): fixed here, not in
 # the profile. pages/paceline-budget/port.js copies the ones it reads; the golden test keeps them equal.
 LEASE_TTL_MIN = 30  # the lease of a hold without a key
+ADVICE_REFRESH_FIVE_HOUR_PCT = 85.0  # from this five-hour usage, advice merges the inbox sooner:
+ADVICE_REFRESH_CACHE_SEC = 125  # when the data is older than this
 AGENT_LEASE_TTL_MIN = 240  # the lease of a keyed hold (a gate, a hook-held subagent)
 USAGE_SNAPSHOT_MAX_AGE_SEC = 300  # a command merges the inbox first when the data is older
 CAPACITY_WARN_RATIO = 0.9  # status warns when the week's rest reaches this share of the working hours' capacity
-AUTO_REFRESH_FIVE_HOUR_PCT = 85.0  # from this five-hour usage, auto merges the inbox sooner:
-AUTO_REFRESH_CACHE_SEC = 125  # when the data is older than this
-GATE_FIX_ATTEMPTS = 3  # failed fixes before a queue item is deferred
 CALIBRATION_MIN_DAYS = 14  # the history calibrate needs
 RESERVE_LOWER_UNUSED_PCT = 10.0  # calibrate proposes a lower reserve when the weeks left more than this unused
 
@@ -260,13 +260,11 @@ def locked(sd, timeout=20.0, name="pace.lock"):
 
 
 class Store:
-    """The four pace state files, read and written together under the lock."""
+    """The two pace state files, read and written together under the lock."""
 
     FILES = {
         "profile": ("pace-profile.json", None),
         "holds": ("pace-holds.json", {"holds": [], "completed": []}),
-        "queue": ("night-queue.json", {"run": None, "next_id": 1, "items": []}),
-        "pool": ("leftover-pool.json", {"approved_on": None, "approved_reset": None, "next_id": 1, "items": []}),
     }
 
     def __init__(self, sd):
@@ -798,8 +796,8 @@ def window_effective(record, now, model):
     return (0.0 if rolled else effective_used(record, model)), reset
 
 
-def compute(now, profile, usage, model=None, commit_mb=None, outstanding=0.0, runs=None, *, plan=None, entry=None):
-    """Every number the recommendation and the autonomous parameters are built from.
+def compute(now, profile, usage, model=None, commit_mb=None, outstanding=0.0, *, plan=None, entry=None):
+    """Every number the recommendation and the advice are built from.
 
     Pure: it reads no file and writes none. `plan` is the account's normalised plan dict (None reads as the
     default plan); `entry` is the current part's fixed entry, derived in memory from the history when None."""
@@ -880,7 +878,8 @@ def compute(now, profile, usage, model=None, commit_mb=None, outstanding=0.0, ru
         "normal_pct_kind": entry["kind"],
         "budget_part": {"kind": entry["kind"], "day": entry["day"], "start": iso_ms(e_start), "end": iso_ms(e_end),
                         "share_pct": _r3(share), "spent_pct": round(spent, 3), "part_hours": round(part_hours, 3),
-                        "hours_left": round(hours_left, 3), "unplanned": share is None, "stored": stored},
+                        "hours_left": round(hours_left, 3), "unplanned": share is None, "stored": stored,
+                        "next_planned": figures["next_planned"]},
         "day_capacity_pct": round(day_capacity, 3),
         "capacity_warning": capacity_warning,
         "in_day_hours": kind_now == "work",
@@ -948,9 +947,14 @@ def plan_figures(now, profile, usage, plan, entry, tz, seven_used, reset, host_p
     day_capacity += sum(part.hours * per_hour_cap * stop / 100.0
                         for part in later if part.weight > 0)
     night = night_info(now, reset, tz, profile, entry, later, later_shares, spent, host_pct)
+    # The first later part that carries weight: where the next planned work starts (None when there is none).
+    following = next((part for part in later if part.weight > 0), None)
+    next_planned = None if following is None else {
+        "start": iso_ms(following.start), "start_local": fmt_local(following.start, tz),
+        "day": following.day.isoformat(), "kind": following.kind}
     return {"entry": entry, "kind_now": kind_now, "start": e_start, "end": e_end, "share": share, "spent": spent,
             "part_hours": part_hours, "hours_left": hours_left, "budget": budget_per_hour, "normal": normal_rate,
-            "stored": stored, "day_capacity": day_capacity, "night": night}
+            "stored": stored, "day_capacity": day_capacity, "night": night, "next_planned": next_planned}
 
 
 def unplanned_figures(now, profile, tz, seven_used, reset, host_pct, plan=None,
@@ -975,7 +979,7 @@ def unplanned_figures(now, profile, tz, seven_used, reset, host_pct, plan=None,
             "part_hours": hours_left, "hours_left": hours_left, "budget": 0.0,
             "normal": (100.0 - reserve_pct) / 168.0, "stored": False,
             "day_capacity": hours_left * k / 5.0 * float(profile["five_hour_stop_pct"]) / 100.0,
-            "night": empty_night(entry["day"], reset, host_pct)}
+            "night": empty_night(entry["day"], reset, host_pct), "next_planned": None}
 
 
 def empty_night(day, reset, host_pct):
@@ -1202,60 +1206,6 @@ def mark_overlap(registry):
             r["overlapped"] = True
 
 
-# ---------------------------------------------------------------- queue
-
-def item_view(item):
-    return {k: item.get(k) for k in ("id", "title", "repo", "estimate_pct", "independent", "depends_on",
-                                     "status", "reason", "attempts", "actual_pct")}
-
-
-def defer_with_dependents(items, root_id, reason, now):
-    deferred = []
-    todo = [root_id]
-    while todo:
-        current = todo.pop()
-        for item in items:
-            if item["status"] in ("pending", "running") and (
-                    item["id"] == current or current in item.get("depends_on", [])):
-                item["status"] = "deferred"
-                item["reason"] = reason if item["id"] == root_id else f"depends on deferred {current}"
-                item["finished_at"] = iso_ms(now)
-                deferred.append(item)
-                todo.append(item["id"])
-    return deferred
-
-
-def pick_next(items, budget, running_ids):
-    """First runnable pending item that fits the budget. Returns (item, reason_when_none)."""
-    status = {i["id"]: i["status"] for i in items}
-    pending = [i for i in items if i["status"] == "pending"]
-    if not pending:
-        if any(i["status"] == "running" for i in items):
-            return None, "waiting"
-        return None, "blocked" if any(i["status"] == "deferred" for i in items) else "empty"
-    runnable, waiting = [], False
-    for item in pending:
-        deps = item.get("depends_on", [])
-        if any(status.get(d) in ("deferred", None) for d in deps):
-            continue
-        if all(status.get(d) == "done" for d in deps):
-            runnable.append(item)
-        else:
-            waiting = True
-    if not runnable:
-        return None, "waiting" if waiting else "blocked"
-    running = [i for i in items if i["id"] in running_ids]
-    exclusive = any(not i.get("independent") for i in running)
-    for item in runnable:
-        if running and (exclusive or not item.get("independent")):
-            continue
-        if item["estimate_pct"] <= budget + 1e-9:
-            return item, None
-    if running:
-        return None, "waiting"
-    return None, "budget"
-
-
 # ---------------------------------------------------------------- calibration
 
 def calibrate(history, store, now, profile, model, plan=None):
@@ -1348,9 +1298,6 @@ def calibrate(history, store, now, profile, model, plan=None):
                                         "proposed": round(max(0.1, median), 2),
                                         "evidence": f"median actual {median:.2f}% over {len(agents)} subagents"})
     ratios = [c["actual_pct"] / c["estimate_pct"] for c in clean if not c.get("key")]
-    for key in ("queue", "pool"):
-        ratios += [i["actual_pct"] / i["estimate_pct"] for i in store[key]["items"]
-                   if i["status"] == "done" and i.get("actual_pct") is not None and i.get("estimate_pct")]
     if len(ratios) >= 3:
         median = statistics.median(ratios)
         result["evidence"]["estimate_ratio_median"] = round(median, 2)
@@ -1397,8 +1344,6 @@ class Context:
         usage = self.get_usage(store["profile"], allow_merge, max_age)
         record = usage.get("record")
         eff = window_effective(record, self.now, self.model)[0] if record and record.get("seven_day") else 0.0
-        queue = store["queue"]
-        runs = [r for r in [queue.get("run")] + queue.get("past_runs", []) if r]
         if plan is NOT_GIVEN:
             try:
                 plan = self.plan_of(usage)
@@ -1406,7 +1351,7 @@ class Context:
                 limits_file.trace_failure("plan.load", self.sd, error=error)
                 plan = None
         result = compute(self.now, store["profile"], usage, self.model, memory_mb(store["profile"], report),
-                         outstanding_pct(store["holds"], eff), runs, plan=plan, entry=entry)
+                         outstanding_pct(store["holds"], eff), plan=plan, entry=entry)
         fallback = result.pop("_plan_exception", None)  # internal: the fallback's exception, never published
         if result.get("plan_error"):
             limits_file.trace_failure("plan.compute", self.sd, error=fallback, reason=result["plan_error"])
@@ -1467,7 +1412,7 @@ def cmd_status(ctx):
                 raise
             # No weekly record, whatever the reason: the gate still needs the host's free memory, so the
             # JSON answer is partial instead of an error (the figures of the week are absent, data is stale).
-            emit(ctx.args, "", no_week_status(ctx, store, error, report=not launch_key))
+            emit(ctx.args, "", with_advice(ctx, store, no_week_status(ctx, store, error, report=not launch_key)))
             return EXIT_OK
         except PaceError:
             store.save()
@@ -1475,8 +1420,90 @@ def cmd_status(ctx):
         if launch_key:
             calc["launch_hold"] = hold_launch(store, ctx, launch_key)
         store.save()
-    emit(ctx.args, line, calc)
+    emit(ctx.args, line, with_advice(ctx, store, calc))
     return EXIT_OK
+
+
+def with_advice(ctx, store, status):
+    """The status dict with the unattended-work advice built from it, last, so it reads the finished answer.
+
+    A failure leaves the key out and goes to the debug log: the hook then builds the advice from the status
+    itself (pace_pre_agent.advice_of), so no stop depends on this build."""
+    try:
+        return dict(status, advice=advice.build(status, int(store["profile"]["max_agents"])))
+    except Exception as error:  # noqa: BLE001 - the status answer never fails for the advice
+        limits_file.trace_failure("status.advice", ctx.sd, error=error)
+        return status
+
+
+def get_advice(ctx):
+    """(the advice, the profile) of this moment, from the status path without a launch key.
+
+    The current part is fixed like `status` does it, under pace.lock; without the week's figures the advice
+    is built from the no-week answer."""
+    ctx.get_usage(read_profile(ctx.sd))
+    for refresh in (False, True):
+        with locked(ctx.sd):
+            store = Store(ctx.sd)
+            housekeeping(store, ctx.now)
+            try:
+                _line, calc = status_report(ctx, store, launch=False, report=True)
+            except NoWeekError as error:
+                calc = no_week_status(ctx, store, error, report=True)
+            except PaceError:
+                store.save()
+                raise
+            store.save()
+        five_hour, data = calc.get("five_hour") or {}, calc.get("data") or {}
+        age_sec = (data.get("age_min") or 0) * 60
+        if refresh or not ((five_hour.get("used_pct") or 0) >= ADVICE_REFRESH_FIVE_HOUR_PCT
+                           and data.get("source") != "file" and age_sec >= ADVICE_REFRESH_CACHE_SEC):
+            break
+        # Near the five-hour ceiling, older data can hide a window that is already full: merge what
+        # the sessions have handed over since, once.
+        ctx.get_usage(store["profile"], max_age=ADVICE_REFRESH_CACHE_SEC)
+    profile = store["profile"]
+    return advice.build(calc, int(profile["max_agents"])), profile
+
+
+def advice_path(sd, key):
+    return sd / f"advice-{key}.json"
+
+
+def write_advice(sd, data):
+    """Write the advice file of its account: UTF-8, LF line ends (write_text would give CRLF on Windows), a
+    temporary file replaced into place so a reader never sees half of it."""
+    path = advice_path(sd, data["account"])
+    tmp = path.with_name(f"{path.name}.{os.getpid()}.{uuid.uuid4().hex[:6]}.tmp")
+    try:
+        with tmp.open("w", encoding="utf-8", newline="\n") as handle:
+            handle.write(json.dumps(data, indent=2, ensure_ascii=False) + "\n")
+        for attempt in range(40):
+            try:
+                os.replace(tmp, path)
+                return
+            except PermissionError:
+                # Windows refuses the replace while a reader holds the file open.
+                if attempt == 39:
+                    raise
+                time.sleep(0.05)
+    finally:
+        tmp.unlink(missing_ok=True)
+
+
+def cmd_advice(ctx):
+    given, profile = get_advice(ctx)
+    key = given["account"]
+    if key:
+        # The file lets a reader without a process see the last answer (its `computed_at` says how old).
+        try:
+            ctx.sd.mkdir(parents=True, exist_ok=True)
+            write_advice(ctx.sd, given)
+        except OSError as error:
+            limits_file.trace_failure("advice.write", ctx.sd, error=error)
+    tz = load_zone(profile["timezone"])
+    emit(ctx.args, advice.line(given, lambda text: fmt_local(parse_iso(text), tz)), given)
+    return {"start": EXIT_OK, "wait": EXIT_WAIT, "stop": EXIT_STOP}[given["action"]]
 
 
 def _valid_reset(bucket):
@@ -1559,6 +1586,7 @@ def restrictive_stops(sd, now, profile, model=None):
              "accounts": keys}
     if five is not None:
         stops["five_hour"] = {"used_pct": five[0], "threshold_pct": float(profile["five_hour_stop_pct"]),
+                              "reset": iso_ms(five[1]) if five[1] else None,
                               "reset_local": fmt_local(five[1], tz) if five[1] else None}
     return stops
 
@@ -1628,219 +1656,8 @@ def status_report(ctx, store, launch=False, report=False):
     return status_line(calc, rec), calc
 
 
-def night_end_of(run, tz):
-    """The instant a night run ends: its stored night_end, or for a run stored before the week plan the
-    default working start of its night_date (that was the morning's date)."""
-    stored = safe_iso(run.get("night_end"))
-    if stored is not None:
-        return stored
-    start = week.parse_work_hours(week.DEFAULT_WORK_HOURS)[0]
-    return week.local_instant(dt.date.fromisoformat(run["night_date"]), start, tz)
-
-
-def night_over(run, now, tz):
-    return now >= night_end_of(run, tz)
-
-
-def switch_stop(now, store, session=None, sd=None):
-    """The stop result when a run started under one account and another is signed in, else None.
-
-    Without readings for the new account no figures can be computed, so autonomous never runs; the
-    stop must not wait for them.
-    """
-    run = store["queue"].get("run")
-    run_key = (run or {}).get("account")
-    key, _ = own_account(session, sd)
-    if not (run_key and key and run_key != key):
-        return None
-    profile = store["profile"]
-    reasons = ["account changed during the run"]
-    if night_over(run, now, load_zone(profile["timezone"])):
-        reasons.append("night ended")
-    return {"mode": "autonomous", "action": "stop", "may_start_next_item": False, "max_parallel_agents": 0,
-            "max_heavy_runs": None, "budget_for_next_item_pct": 0.0, "next_item": None,
-            "wait_until": None, "reasons": reasons, "run": None, "stale": True,
-            "weekly_effective_pct": None, "five_hour_used_pct": None}
-
-
-def cmd_auto(ctx):
-    ctx.get_usage(read_profile(ctx.sd))
-    with locked(ctx.sd):
-        store = Store(ctx.sd)
-        housekeeping(store, ctx.now)
-        keep_plan_current(ctx, store)
-        store.save()
-    try:
-        calc = ctx.calc(store)
-        age_sec = (calc["data"]["age_min"] or 0) * 60
-        if (calc["five_hour"]["used_pct"] >= AUTO_REFRESH_FIVE_HOUR_PCT and calc["data"]["source"] != "file"
-                and age_sec >= AUTO_REFRESH_CACHE_SEC):
-            # Near the five-hour ceiling, older data can hide a window that is already full: merge what
-            # the sessions have handed over since.
-            calc = ctx.calc(store, max_age=AUTO_REFRESH_CACHE_SEC)
-    except PaceError as error:
-        stopped = switch_stop(ctx.now, store, ctx.session, ctx.sd)
-        if stopped:
-            emit(ctx.args, f"auto: STOP | {'; '.join(stopped['reasons'])}", stopped)
-            return EXIT_STOP
-        result = {"mode": "autonomous", "action": "wait", "may_start_next_item": False, "max_parallel_agents": 0,
-                  "max_heavy_runs": None, "budget_for_next_item_pct": 0.0, "next_item": None,
-                  "wait_until": None, "reasons": [str(error)], "run": None, "stale": True,
-                  "weekly_effective_pct": None, "five_hour_used_pct": None}
-        emit(ctx.args, f"auto: WAIT | {error}", result)
-        return EXIT_WAIT
-    profile = store["profile"]
-    tz = load_zone(profile["timezone"])
-    with locked(ctx.sd):
-        store = Store(ctx.sd)
-        result = autonomous(ctx.now, calc, store, profile, tz, ctx.args.start_run)
-        store.save()
-    line = (f"auto: {'START ' + result['next_item']['id'] if result['may_start_next_item'] else result['action'].upper()}"
-            f" | budget {result['budget_for_next_item_pct']:.2f}% | agents <={result['max_parallel_agents']}")
-    if result["run"] and result["run"]["reused"]:
-        line += f" | run of {result['run']['night_date']} kept, {result['run']['remaining_pct']:.2f}% of" \
-                f" {result['run']['allowance_pct']:.2f}% left"
-    if result["reasons"]:
-        line += " | " + "; ".join(result["reasons"])
-    emit(ctx.args, line, result)
-    return {"start": EXIT_OK, "wait": EXIT_WAIT, "stop": EXIT_STOP}[result["action"]]
-
-
-def autonomous(now, calc, store, profile, tz, start_run=False):
-    queue, pool = store["queue"], store["pool"]
-    effective = calc["weekly"]["effective_pct"]
-    night = calc["night"]
-    run = queue.get("run")
-    current_key = (calc["data"].get("account") or {}).get("key")
-    reused = bool(start_run and run and run.get("night_date") == night["date"])
-    if start_run and not reused:
-        if run:
-            queue["past_runs"] = (queue.get("past_runs", []) + [run])[-14:]
-        run = {"started_at": iso_ms(now), "night_date": night["date"], "reset": calc["weekly"]["reset"],
-               "used_at_start": effective, "account": current_key,
-               "night_end": night["end"], "allowance_pct": night["allowance_pct"],
-               "last_before_reset": night["last_before_reset"], "pool_spent_pct": 0.0}
-        queue["run"] = run
-        store.touch("queue")
-    if not run:
-        return {"mode": "autonomous", "action": "stop", "may_start_next_item": False, "max_parallel_agents": 0,
-                "max_heavy_runs": calc["host"]["max_heavy_runs"],
-                "budget_for_next_item_pct": 0.0, "next_item": None, "wait_until": None,
-                "reasons": ["no queue run: start one with auto --start-run"], "run": None,
-                "stale": calc["data"]["stale"], "weekly_effective_pct": effective,
-                "five_hour_used_pct": calc["five_hour"]["used_pct"]}
-    spent = max(0.0, effective - run["used_at_start"])
-    run_key = run.get("account")
-    switched = bool(run_key and current_key and run_key != current_key)
-    lost = bool(run_key and not current_key)
-    # The figures of another account, or of none, must not become this run's last known figures.
-    if not (switched or lost) and not night_over(run, now, tz):
-        run["last_effective"] = effective
-        run["last_seen"] = iso_ms(now)
-        store.touch("queue")
-    budget = max(0.0, run["allowance_pct"] - spent - calc["outstanding_holds_pct"])
-    reasons, action, wait_until = [], "start", None
-    commit = calc["host"]["free_commit_mb"]
-    floor = calc["host"]["min_free_commit_mb"]
-    five = calc["five_hour"]
-    stop = None
-    if switched:
-        stop = "account changed during the run"
-    elif commit is not None and floor is not None and commit < floor:
-        stop = f"free commit {commit / 1024:.1f} GB < {floor_gb(floor)} GB"
-    elif night_over(run, now, tz):
-        stop = "night ended"
-    running_ids = {i["id"] for i in queue["items"] + pool["items"] if i["status"] == "running"}
-    item, why = pick_next(queue["items"], budget, running_ids)
-    source = "queue"
-    pool_ok = (run.get("last_before_reset") and pool.get("approved_reset") == calc["weekly"]["reset"])
-    if item is None and pool_ok:
-        pitem, pwhy = pick_next(pool["items"], budget, running_ids)
-        if pitem is not None or why in ("empty", "blocked"):
-            item, why, source = pitem, pwhy, "pool"
-    if stop is None and item is None:
-        if why == "empty":
-            stop = "queue empty"
-        elif why == "blocked":
-            stop = "all remaining items need owner permission"
-        elif why == "budget":
-            stop = "night budget exhausted"
-        else:
-            action = "wait"
-            reasons.append("waiting for running items or dependencies")
-    if stop:
-        action = "stop"
-        reasons.insert(0, stop)
-    elif lost:
-        action = "wait"
-        reasons.insert(0, "account unknown")
-    if action == "start":
-        if calc["data"]["stale"]:
-            action = "wait"
-            reasons.append(f"usage data stale ({calc['data']['age_min']} min)")
-        if five["used_pct"] >= five["threshold_pct"]:
-            action = "wait"
-            wait_until = five["reset"]
-            reasons.append(f"5h {five['used_pct']:.0f}% >= {five['threshold_pct']:.0f}%, wait for window reset")
-    night_burn = None
-    if action == "start" and five.get("burn") and five["reset"]:
-        # compute() projected to the five-hour stop; the night run's cap is the same projection.
-        rate = five["burn"]["rate_per_hour_pct"]
-        measured = {"rate": rate, "base_at": parse_iso(five["burn"]["base_at"]), "span_min": five["burn"]["span_min"]}
-        projected = five_burn.project(rate, five["used_pct"], float(profile["five_hour_stop_pct"]), now,
-                                      parse_iso(five["reset"]))
-        if projected["limited"]:
-            night_burn = five_burn.burn_view(measured, projected, False, tz)
-    heavy = calc["host"]["max_heavy_runs"]
-    agents = 0 if action == "stop" else max(1, min(int(profile["max_agents"]), heavy if heavy is not None else 3))
-    if night_burn:
-        agents = five_burn.cap(agents, night_burn)
-        reasons.append(five_burn.reason(night_burn, five["reset_local"]))
-        if agents == 0:
-            action = "wait"
-            wait_until = five["reset"]
-    may = action == "start" and item is not None
-    return {"mode": "autonomous", "action": action, "may_start_next_item": may,
-            "max_parallel_agents": agents, "max_heavy_runs": heavy,
-            "budget_for_next_item_pct": round(budget, 3), "next_item": dict(item_view(item), source=source) if item else None,
-            "wait_until": wait_until, "reasons": reasons,
-            "run": {"night_date": run["night_date"], "allowance_pct": run["allowance_pct"], "spent_pct": round(spent, 3),
-                    "last_before_reset": run["last_before_reset"], "started_at": run["started_at"],
-                    "reused": reused, "remaining_pct": round(max(0.0, run["allowance_pct"] - spent), 3)},
-            "stale": calc["data"]["stale"], "weekly_effective_pct": effective,
-            "five_hour_used_pct": five["used_pct"]}
-
-
-def tonight_hint(ctx, calc, profile):
-    """(the hint of `queue add` or None, tonight's off-hours share or None). The hint is given when tonight's
-    off-hours part exists and carries no weight: the queue would not run."""
-    night = calc["night"]
-    share = night["share_pct"]
-    if night["mark"] is None:  # no off-hours part tonight: the week resets before they begin
-        return None, None
-    if night["weight"] != 0:
-        return None, share
-    day = dt.date.fromisoformat(night["date"])
-    if not night["current"]:
-        return (f"tonight's off-hours share is 0: the queue will not run. To plan some: paceline plan set "
-                f"{day.isoformat()} --off-hours 0.5"), share
-    tz = load_zone(profile["timezone"])
-    until = fmt_local(parse_iso(night["end"]), tz)[11:16]
-    nxt = day + DAY
-    reset = parse_iso(calc["weekly"]["reset"])
-    plan = ctx.plan_of(ctx.usage) or new_plan()
-    owns = any(p.day == nxt and p.kind == "off"
-               for p in week.parts(reset - WEEK, reset, tz, plan["work_hours"], plan))
-    plan_cmd = (f"paceline plan set {nxt.isoformat()} --off-hours 0.5" if owns
-                else f"paceline plan template set {week.WEEKDAYS[nxt.weekday()]} --off-hours 0.5")
-    return (f"tonight's off-hours share is fixed at 0 until {until}: the queue will not run tonight. "
-            f"To plan the next night: {plan_cmd}"), share
-
-
-def mutate(ctx, fn, need_calc=True, tonight=False):
-    """Run fn(store) under the lock, save, then print one confirmation line with the new budget.
-
-    `tonight` (queue add) adds the hint line about tonight's off-hours share and the two tonight_* payload keys."""
+def mutate(ctx, fn, need_calc=True):
+    """Run fn(store) under the lock, save, then print one confirmation line with the new budget."""
     with locked(ctx.sd):
         store = Store(ctx.sd)
         housekeeping(store, ctx.now)
@@ -1852,19 +1669,8 @@ def mutate(ctx, fn, need_calc=True, tonight=False):
             line = f"{line}; {budget_suffix(calc)}"
             payload = dict(payload, budget_per_hour_pct=calc["budget_per_hour_pct"],
                            night_allowance_pct=calc["night"]["allowance_pct"])
-            if tonight:
-                try:
-                    hint, share = tonight_hint(ctx, calc, store["profile"])
-                except Exception as error:  # noqa: BLE001 - the item is saved; a hint never fails the command
-                    limits_file.trace_failure("queue.tonight_hint", ctx.sd, error=error)
-                    hint, share = None, None
-                payload = dict(payload, tonight_off_share_pct=share, tonight_off_hint=hint)
-                if hint:
-                    line = f"{line}\n{hint}"
         except PaceError as error:
             line = f"{line}; budget unavailable ({error})"
-            if tonight:
-                payload = dict(payload, tonight_off_share_pct=None, tonight_off_hint=None)
     emit(ctx.args, line, payload)
     return code
 
@@ -2273,6 +2079,12 @@ class PlanAccess:
             raise
         self.entry = None
         self.skipped = False  # a write was skipped because the clock is ahead of the wall clock
+        # The split of the current part (split_current): the plan's mark for it when it was fixed, whether the
+        # command named the part itself, and what save() did.
+        self.mark_at_fix = None
+        self.asked_current = False
+        self.split = None
+        self.split_refused = None
 
     def need_week(self):
         if self.week is None:
@@ -2289,6 +2101,7 @@ class PlanAccess:
                 # save (OSError) keeps the file, since the stored plan did not change.
                 drop_week_plan(self.ctx, self.key, error)
                 raise
+            self.mark_at_fix = current_mark(self)
             publish_week_plan(self)
         return self.entry
 
@@ -2299,8 +2112,11 @@ class PlanAccess:
         return self.entry
 
     def save(self):
+        """Store the plan. A change that gave the current part another mark splits it here, so every command
+        that writes the plan gets the rule (split_current); the result is in self.split or self.split_refused."""
         if self.ctx.now > limits_file.wall_clock() + FUTURE_SLACK:
             self.skipped = True
+        self.split = split_current(self) or self.split
         save_plan(self.ctx.sd, self.key, self.plan, self.ctx.now, self.week[1] if self.week else None, self.tz)
         publish_week_plan(self)
 
@@ -2518,10 +2334,41 @@ def build_plan_view(access):
     for part, later_share in zip(later, shares):
         items.append(make(part, "later", later_share, None))
 
+    def joined(pieces):
+        """One object for the pieces a split left of a part (the same day and kind, oldest first): it runs from the
+        first piece's start to the last one's end, and spans their hours, weights, shares and spending; the rest
+        (state, allowance, flags) is the last piece's. `segments` lists the pieces for a view that draws the cut."""
+        if len(pieces) == 1:
+            return pieces[0]
+        first, last = pieces[0], pieces[-1]
+
+        def total(key):
+            values = [p[key] for p in pieces if p[key] is not None]
+            return round(sum(values), 3) if values else None
+
+        # Each split hands the rest of the part the whole share still unplanned, so the pieces' shares overlap
+        # and their sum overstates it (seen live: 36 % twice read as 72 %). The share is the last piece that
+        # has one; a current part keeps the last piece's share (None when it has none, as the gates read it) and
+        # spending, which its share and pro rata measure.
+        shares = [p["share_pct"] for p in pieces if p["share_pct"] is not None]
+        if last["state"] == "current":
+            share = last["share_pct"]
+        else:
+            share = shares[-1] if shares else None
+        obj = dict(last, start=first["start"], start_local=first["start_local"],
+                   hours=round(sum(p["hours"] for p in pieces), 3), weight=round(sum(p["weight"] for p in pieces), 6),
+                   share_pct=share,
+                   spent_pct=last["spent_pct"] if last["state"] == "current" else total("spent_pct"),
+                   segments=[dict(p) for p in pieces])
+        obj["cut"] = obj["hours"] < obj["full_hours"] - 1e-9
+        raw_share[id(obj)] = raw_share[id(last)]
+        return obj
+
     def day_list(objs, first):
         by_date = {}
         for obj in objs:
-            by_date.setdefault(obj["day"], {})[obj["kind"]] = obj
+            by_date.setdefault(obj["day"], {}).setdefault(obj["kind"], []).append(obj)
+        by_date = {d: {k: joined(v) for k, v in kinds.items()} for d, kinds in by_date.items()}
         out, day = [], first
         last = max(dt.date.fromisoformat(o["day"]) for o in objs)
         while day <= last:
@@ -2589,8 +2436,10 @@ def plan_text(view, profile):
                 if share is None:
                     text += f" ◀ now spent {part['spent_pct']:.1f}"
                 else:
-                    text += (f" ◀ now spent {part['spent_pct']:.1f} of {share:.1f} "
-                             f"(pro rata {part['allowed_pct']:.1f})")
+                    # A part joined from split halves whose current half has no share has no pro rata.
+                    text += f" ◀ now spent {part['spent_pct']:.1f} of {share:.1f}"
+                    if part["allowed_pct"] is not None:
+                        text += f" (pro rata {part['allowed_pct']:.1f})"
                 if part["estimated"]:
                     text += " estimated"
             elif part["state"] == "ended" and part["spent_pct"] is not None:
@@ -2731,8 +2580,108 @@ def _no_effect(access, day, kinds):
     return out
 
 
-NO_EFFECT_TEXT = {"current": "is the current part, fixed at its start", "ended": "has ended",
-                  "outside-week": "lies outside this week"}
+NO_EFFECT_TEXT = {"current": "is the current part, not split now", "ended": "has ended",
+                  "outside-week": "lies outside this week", "unchanged": "already has that mark"}
+
+
+def current_mark(access):
+    """The plan's mark now for the part of the stored current entry, or None without a stored current entry."""
+    entry = access.entry
+    if entry is None or not access.stored(entry):
+        return None
+    return week.marks_for(dt.date.fromisoformat(entry["day"]), access.plan)[entry["kind"]]
+
+
+def split_current(access):
+    """Split the current part at now when the plan now gives it another mark; None when nothing was split.
+
+    PlanAccess.save() calls it before the plan is stored. `access.mark_at_fix` is the plan's mark for the part
+    when it was fixed; `access.asked_current` is True when the command named the current part itself (a part
+    whose recorded mark differs from the plan's is then split even if this change left the plan's mark as it was).
+    The stored part ends now and keeps its share and spending; the rest becomes a new current part that starts
+    now: used_at_start is the week's usage now, and its share is what the part-start rule gives from the week's
+    remainder (week.fix_share) by the new weight. Later parts follow from it as usual. While PaceLine's away
+    marker is on nothing is split: access.split_refused says so and the mark stays stored for later parts."""
+    entry, plan, tz = access.entry, access.plan, access.tz
+    before = access.mark_at_fix
+    if before is None or access.week is None or entry is None or not access.stored(entry):
+        return None
+    new = current_mark(access)
+    recorded = entry_part(entry)
+    # An entry stored before marks were recorded has none: the plan's mark when it was fixed stands in.
+    recorded_mark = recorded.mark if _is_number(entry.get("mark")) else before
+    if abs(new - recorded_mark) < 1e-9 or (not access.asked_current and abs(new - before) < 1e-9):
+        return None
+    if away.read(access.ctx.sd)["on"]:
+        access.split_refused = {"kind": entry["kind"], "day": entry["day"], "mark": new}
+        return None
+    now = parse_iso(iso_ms(access.ctx.now))
+    used_now, reset = access.week
+    start, end = parse_iso(entry["start"]), parse_iso(entry["end"])
+    state = reserve_state(plan, reset, tz)
+    hours = (end - now) / HOUR
+    cut = week.Part(recorded.day, recorded.kind, now, end, recorded.full_hours, hours, new,
+                    new * hours / recorded.full_hours)
+    chain = [cut] + week.parts(end, reset, tz, plan["work_hours"], plan)
+    left_start = week.left(used_now, state.kept(now))
+    share = week.fix_share(left_start, chain)
+    # A reading older than the staleness bound may lack points spent since: the share is then an estimate.
+    seen = (access.usage.get("record") or {}).get("_at")
+    old = seen is None or (now - seen).total_seconds() / 60.0 > STALE_THRESHOLD_MIN
+    fresh = {"day": entry["day"], "kind": entry["kind"], "start": iso_ms(now), "end": entry["end"],
+             "week_reset": entry["week_reset"], "share_pct": share, "unplanned": share is None,
+             "used_at_start": used_now, "estimated": old, "left_at_start": left_start,
+             "weights": {"part": cut.weight, "total": sum(p.weight for p in chain)}, "prompted": False,
+             "fixed_at": iso_ms(now), "mark": new, "full_hours": recorded.full_hours}
+    previous_share = entry["share_pct"]
+    if now <= start:
+        # The part began this very millisecond: nothing of it is left to keep, so the new entry replaces it.
+        plan["fixed"] = [e for e in plan["fixed"] if e is not entry]
+    else:
+        entry["end"] = iso_ms(now)
+    plan["fixed"].append(fresh)
+    access.entry = fresh
+    return {"kind": entry["kind"], "day": entry["day"], "at": iso_ms(now), "mark": new, "share_pct": _r3(share),
+            "previous_share_pct": _r3(previous_share), "estimated": old}
+
+
+def split_line(split):
+    """The command's message for a split: the change applies from now."""
+    share = split["share_pct"]
+    rest = f"{share:.1f} % of the week" if share is not None else "no share"
+    text = (f"{split['day']} {KIND_GLYPH[split['kind']]} is the current part: the change applies from now "
+            f"(the part is split here, the rest has {rest})")
+    return text + "; the last reading of the week is old, so the share is an estimate" if split["estimated"] else text
+
+
+def refused_line(refused):
+    return (f"{refused['day']} {KIND_GLYPH[refused['kind']]} is the current part and PaceLine's away marker is on: "
+            f"the part is not split, the mark is stored for later parts (the operator's next message clears the "
+            f"marker; `paceline away off` does too)")
+
+
+def _after_split(access, silent):
+    """The no-effect list once the plan is saved: the current part's own entry is gone when it was split, and
+    reads "unchanged" when its mark was already the one set (it stays "current" when the split was refused)."""
+    out = []
+    for kind, why in silent:
+        if why == "current" and access.entry is not None and access.stored(access.entry) \
+                and kind == access.entry["kind"] and access.split_refused is None:
+            if access.split is not None:
+                continue
+            why = "unchanged"
+        out.append((kind, why))
+    return out
+
+
+def _split_lines(access):
+    """The lines a command adds after it saved the plan: the split, or why the current part was not split."""
+    text = ""
+    if access.split:
+        text += "\n" + split_line(access.split)
+    if access.split_refused:
+        text += "\n" + refused_line(access.split_refused)
+    return text
 
 
 def _marks_line(label, marks):
@@ -2767,7 +2716,7 @@ def cmd_plan(ctx):
     sub = getattr(ctx.args, "plan_cmd", None)
     if sub is None:
         return plan_show(ctx)
-    return {"set": plan_set, "reset": plan_reset, "template": plan_template}[sub](ctx)
+    return {"set": plan_set, "reset": plan_reset, "template": plan_template, "offer": plan_offer}[sub](ctx)
 
 
 def plan_show(ctx):
@@ -2796,13 +2745,21 @@ def plan_set(ctx):
         day = picked[0]
         access.need_entry()
         silent = _no_effect(access, day, list(marks))
+        access.asked_current = access.entry["day"] == day.isoformat() and access.entry["kind"] in marks
         stored = access.plan["days"].setdefault(day.isoformat(), {})
         stored.update(marks)
         access.save()
+        split = access.split
+        silent = _after_split(access, silent)
         lines = [_marks_line(day.isoformat(), marks)]
         lines += [f"{day} {KIND_GLYPH[kind]} {NO_EFFECT_TEXT[why]}: stored, this week's plan does not change"
                   for kind, why in silent]
-        payload = {"date": day.isoformat(), "entry": dict(stored),
+        if split:
+            lines.append(split_line(split))
+        if access.split_refused:
+            lines.append(refused_line(access.split_refused))
+        payload = {"date": day.isoformat(), "entry": dict(stored), "split": split,
+                   "split_refused": access.split_refused,
                    "no_effect": [{"kind": kind, "reason": why} for kind, why in silent], "plan": access.view()}
         return "\n".join(lines), payload
     return plan_command(ctx, True, body, check)
@@ -2818,15 +2775,19 @@ def plan_reset(ctx):
             picked.append(resolve_day(access, a.day).isoformat())
 
     def body(access):
+        asked = not picked or (access.entry is not None and picked[0] == access.entry["day"])
         if picked:
             day = picked[0]
             removed = [day] if access.plan["days"].pop(day, None) is not None else []
         else:
             removed = sorted(access.plan["days"])
             access.plan["days"] = {}
+        access.asked_current = asked and bool(removed)
         access.save()
         text = ("reset " + ", ".join(removed)) if removed else "nothing to reset"
-        return text, {"removed": removed, "plan": access.view()}
+        text += _split_lines(access)
+        return text, {"removed": removed, "split": access.split, "split_refused": access.split_refused,
+                      "plan": access.view()}
     return plan_command(ctx, True, body, check)
 
 
@@ -2872,15 +2833,102 @@ def plan_template(ctx):
             stored = plan["template"].setdefault(name, {})
             stored.update(marks)
             access.save()
-            return _marks_line(name, marks), {"weekday": name, "entry": dict(stored), "plan": access.view()}
+            text = _marks_line(name, marks) + _split_lines(access)
+            return text, {"weekday": name, "entry": dict(stored), "split": access.split,
+                          "split_refused": access.split_refused, "plan": access.view()}
         removed = [name] if name and plan["template"].pop(name, None) is not None else []
         if name is None:
             removed = [w for w in week.WEEKDAYS if w in plan["template"]]
             plan["template"] = {}
         access.save()
-        return (("reset " + ", ".join(removed)) if removed else "nothing to reset"), {"removed": removed,
-                                                                                    "plan": access.view()}
+        text = ("reset " + ", ".join(removed)) if removed else "nothing to reset"
+        return text + _split_lines(access), {"removed": removed, "split": access.split,
+                                             "split_refused": access.split_refused, "plan": access.view()}
     return plan_command(ctx, sub != "show", body)
+
+
+# ---------------------------------------------------------------- the off-hours offer
+
+# The prompt hook waits for this command: a busy lock answers nothing after a moment, never after seconds.
+OFFER_LOCK_WAIT_SEC = 0.5
+OFFER_ANSWERS = "light, normal or heavy"
+
+
+def offer_path(sd, key):
+    """<state>/plan-offer-<key>.json: the part of the week the operator was last offered planning for, and how it
+    ended ("offered" or "refused"). A key that is not 16 lower-case hex digits names plan-offer-unknown.json."""
+    valid = isinstance(key, str) and limits_file.ACCOUNT_KEY.fullmatch(key)
+    return sd / f"plan-offer-{key if valid else limits_file.UNKNOWN_ACCOUNT}.json"
+
+
+def offer_part(entry):
+    """What names a part for the offer: its date, kind and week. A split of the part keeps all three, so the
+    rest of a part that was split by a plan change is the same part and is not offered again."""
+    return {"day": entry["day"], "kind": entry["kind"], "week_reset": entry["week_reset"]}
+
+
+def offer_marked(plan, entry):
+    """True when the operator set the part's mark: a dated mark of its day or a template mark of its weekday."""
+    day = dt.date.fromisoformat(entry["day"])
+    kind = entry["kind"]
+    dated = plan["days"].get(entry["day"]) or {}
+    weekday = plan["template"].get(week.WEEKDAYS[day.weekday()]) or {}
+    return dated.get(kind) is not None or weekday.get(kind) is not None
+
+
+def offer_unplanned(entry, plan):
+    """True for an off part at the default off mark that carries no share or no weight: the operator works
+    where nothing was planned. A part whose mark the operator set (offer_marked) is theirs and is not offered."""
+    return (entry["kind"] == "off" and (entry["share_pct"] is None or float(entry["weights"]["part"]) <= 0)
+            and not offer_marked(plan, entry))
+
+
+def offer_text(entry):
+    return (f"PaceLine: the operator is working in off-hours that this week's plan gives no share. Ask them once "
+            f"whether to plan it: {OFFER_ANSWERS}. If they answer, run `paceline plan set {entry['day']} "
+            f"--off-hours <answer> < /dev/null`; if they say no, run `paceline plan offer --refuse < /dev/null`.")
+
+
+def plan_offer(ctx):
+    """`paceline plan offer`: print the one-line offer when it is due and record it as made, else print nothing.
+
+    Due: pace is on, the current part is an unplanned off part at the default mark (offer_unplanned), and the part was neither
+    offered nor refused yet. With --refuse: record that the operator said no, which holds until the part ends.
+    One state file per account, written under pace.lock like the plan."""
+    ctx.get_usage(read_profile(ctx.sd))
+    refuse = bool(ctx.args.refuse)
+    text, state = None, None
+    with locked(ctx.sd, timeout=OFFER_LOCK_WAIT_SEC):
+        if not limits_file.pace_enabled(ctx.sd):
+            raise PaceError("pace is off; nothing recorded" if refuse else "pace is off")
+        access = PlanAccess(ctx, {"profile": read_profile(ctx.sd)}, writes=True)
+        access.need_week()
+        entry = access.fix()
+        if entry is None or not access.stored(entry) or access.key is None:
+            raise PaceError("no stored current part to offer for")
+        path = offer_path(ctx.sd, access.key)
+        try:
+            known = read_json(path, None)
+        except PaceError:
+            known = None
+        part = offer_part(entry)
+        seen = isinstance(known, dict) and all(known.get(k) == v for k, v in part.items())
+        if refuse:
+            state = "refused"
+        elif not seen and offer_unplanned(entry, access.plan):
+            state, text = "offered", offer_text(entry)
+        if state and ctx.now <= limits_file.wall_clock() + FUTURE_SLACK:
+            ctx.sd.mkdir(parents=True, exist_ok=True)
+            write_json(path, {**part, "state": state, "at": iso_ms(ctx.now)})
+    if refuse:
+        line = f"off-hours offer: refused for {part['day']} {KIND_GLYPH[part['kind']]}, not repeated until it ends"
+    else:
+        line = text or ""
+    if ctx.args.json:
+        print(json.dumps({"offer": text, "state": state, "part": part}, indent=2, ensure_ascii=False))
+    elif line:
+        print(line)
+    return EXIT_OK
 
 
 def cmd_mode(ctx):
@@ -3201,180 +3249,6 @@ def cmd_hold(ctx):
     raise PaceError("unknown hold command")
 
 
-def cmd_queue(ctx):
-    a = ctx.args
-    key = "pool" if a.pool else "queue"
-    prefix = "L" if a.pool else "Q"
-    if a.q_cmd == "add":
-        def fn(store):
-            data = store[key]
-            deps = [d.strip() for d in (a.depends or "").split(",") if d.strip()]
-            known = {i["id"] for i in data["items"]}
-            missing = [d for d in deps if d not in known]
-            if missing:
-                raise PaceError(f"unknown dependencies: {', '.join(missing)}")
-            item = {"id": f"{prefix}{data['next_id']}", "title": a.title, "repo": a.repo, "estimate_pct": a.estimate,
-                    "independent": a.independent, "depends_on": deps, "status": "pending", "reason": None,
-                    "attempts": 0, "added_at": iso_ms(ctx.now), "started_at": None, "finished_at": None,
-                    "actual_pct": None, "hold_id": None, "used_at_start": None}
-            data["next_id"] += 1
-            data["items"].append(item)
-            store.touch(key)
-            pending = sum(i["estimate_pct"] for i in data["items"] if i["status"] == "pending")
-            return (f"{key} {item['id']} added ({a.estimate:.2f}%), pending total {pending:.2f}%",
-                    {"item": item, "pending_total_pct": pending}, EXIT_OK)
-        return mutate(ctx, fn, tonight=not a.pool)
-    if a.q_cmd in ("list", "report"):
-        with locked(ctx.sd):
-            store = Store(ctx.sd)
-        data = store[key]
-        items = data["items"]
-        if a.q_cmd == "report":
-            since = parse_iso(data.get("run", {}).get("started_at")) if key == "queue" and data.get("run") else None
-            touched = [i for i in items if since is None or (i.get("finished_at") and parse_iso(i["finished_at"]) >= since)
-                       or i["status"] in ("running", "pending")]
-            report = {"run": data.get("run"),
-                      "done": [item_view(i) for i in touched if i["status"] == "done"],
-                      "deferred": [item_view(i) for i in touched if i["status"] == "deferred"],
-                      "running": [item_view(i) for i in touched if i["status"] == "running"],
-                      "pending": [item_view(i) for i in touched if i["status"] == "pending"]}
-            report["estimate_sum_pct"] = round(sum(i["estimate_pct"] for i in report["done"]), 3)
-            report["actual_sum_pct"] = round(sum(i["actual_pct"] or 0 for i in report["done"]), 3)
-            text = (f"done {len(report['done'])} (est {report['estimate_sum_pct']:.2f}% act {report['actual_sum_pct']:.2f}%),"
-                    f" deferred {len(report['deferred'])}, running {len(report['running'])}, pending {len(report['pending'])}")
-            emit(a, text, report)
-            return EXIT_OK
-        text = "\n".join(f"{i['id']} [{i['status']}] {i['estimate_pct']:.2f}% {'indep ' if i['independent'] else ''}"
-                         f"deps={','.join(i['depends_on']) or '-'} {i['title']} ({i['repo']})"
-                         + (f" reason: {i['reason']}" if i.get("reason") else "") for i in items) or f"{key} empty"
-        payload = {"items": items}
-        if a.pool:
-            payload.update(approved_on=data.get("approved_on"), approved_reset=data.get("approved_reset"))
-        emit(a, text, payload)
-        return EXIT_OK
-    if a.q_cmd == "approve":
-        if not a.pool:
-            raise PaceError("approve applies to the leftover pool: use --pool")
-
-        def fn(store):
-            record = ctx.get_usage(store["profile"]).get("record")
-            reset = window_effective(record, ctx.now, ctx.model)[1] if record and record.get("seven_day") else None
-            tz = load_zone(store["profile"]["timezone"])
-            store["pool"]["approved_on"] = ctx.now.astimezone(tz).date().isoformat()
-            store["pool"]["approved_reset"] = iso_ms(reset) if reset else None
-            store.touch("pool")
-            n = sum(1 for i in store["pool"]["items"] if i["status"] == "pending")
-            return (f"leftover pool approved on {store['pool']['approved_on']} for the window ending "
-                    f"{store['pool']['approved_reset']}, {n} pending item(s)", {"pool": store["pool"]}, EXIT_OK)
-        return mutate(ctx, fn, need_calc=False)
-
-    def find_item(data, item_id):
-        for i in data["items"]:
-            if i["id"].lower() == item_id.lower():
-                return i
-        raise PaceError(f"no {key} item {item_id}")
-
-    needs_effective = a.q_cmd in ("start", "done", "fail", "defer")
-    effective = None
-    if needs_effective:
-        effective = current_effective(ctx)
-
-    def release_item(store, item, actual, why):
-        reg = store["holds"]
-        for r in list(reg["holds"]):
-            if r["id"] == item.get("hold_id"):
-                close_hold(reg, r, ctx.now, effective, actual, why)
-                reg["holds"].remove(r)
-                store.touch("holds")
-        item["hold_id"] = None
-
-    if a.q_cmd == "start":
-        def fn(store):
-            data = store[key]
-            item = find_item(data, a.id)
-            if item["status"] != "pending":
-                raise PaceError(f"{item['id']} is {item['status']}, not pending")
-            pid = a.pid if a.pid is not None else claude_pid()
-            r = {"id": f"H-{uuid.uuid4().hex[:8]}", "kind": "queue", "label": item["title"], "session_id": ctx.session,
-                 "pid": pid, "image": process_image(pid) or None, "estimate_pct": item["estimate_pct"],
-                 "acquired_at": iso_ms(ctx.now), "renewed_at": iso_ms(ctx.now),
-                 "used_at_acquire": effective or 0.0, "item_id": item["id"]}
-            store["holds"]["holds"].append(r)
-            mark_overlap(store["holds"])
-            item.update(status="running", started_at=iso_ms(ctx.now), hold_id=r["id"], used_at_start=effective)
-            if key == "pool" and store["queue"].get("run"):
-                store["queue"]["run"]["pool_spent_pct"] = store["queue"]["run"].get("pool_spent_pct", 0.0) + item["estimate_pct"]
-                store.touch("queue")
-            store.touch(key, "holds")
-            return f"{item['id']} started, hold {r['id']} {item['estimate_pct']:.2f}%", {"item": item, "hold": r}, EXIT_OK
-        return mutate(ctx, fn)
-    if a.q_cmd == "done":
-        def fn(store):
-            data = store[key]
-            item = find_item(data, a.id)
-            actual = a.actual
-            if actual is None and effective is not None and item.get("used_at_start") is not None:
-                actual = max(0.0, effective - item["used_at_start"])
-            release_item(store, item, actual, "done")
-            item.update(status="done", finished_at=iso_ms(ctx.now), actual_pct=None if actual is None else round(actual, 3),
-                        reason=None)
-            store.touch(key)
-            act = "?" if actual is None else f"{actual:.2f}"
-            return f"{item['id']} done, estimate {item['estimate_pct']:.2f}% actual {act}%", {"item": item}, EXIT_OK
-        return mutate(ctx, fn)
-    if a.q_cmd in ("defer", "fail"):
-        def fn(store):
-            data = store[key]
-            item = find_item(data, a.id)
-            if a.q_cmd == "fail":
-                item["attempts"] = item.get("attempts", 0) + 1
-                limit = GATE_FIX_ATTEMPTS
-                if item["attempts"] < limit:
-                    store.touch(key)
-                    return (f"{item['id']} failed attempt {item['attempts']}/{limit}, keep fixing",
-                            {"item": item, "deferred": []}, EXIT_OK)
-                reason = a.reason or f"gates failed after {limit} fix attempts"
-            else:
-                reason = a.reason or "needs owner permission"
-            release_item(store, item, None, "deferred")
-            deferred = defer_with_dependents(data["items"], item["id"], reason, ctx.now)
-            for d in deferred:
-                if d is not item and d.get("hold_id"):
-                    release_item(store, d, None, "deferred")
-            store.touch(key)
-            ids = ",".join(d["id"] for d in deferred)
-            return f"deferred {ids}: {reason}", {"deferred": [item_view(d) for d in deferred]}, EXIT_OK
-        return mutate(ctx, fn)
-    if a.q_cmd == "retry":
-        def fn(store):
-            item = find_item(store[key], a.id)
-            item.update(status="pending", reason=None, attempts=0, finished_at=None)
-            store.touch(key)
-            return f"{item['id']} back to pending", {"item": item}, EXIT_OK
-        return mutate(ctx, fn, need_calc=False)
-    if a.q_cmd == "remove":
-        def fn(store):
-            data = store[key]
-            item = find_item(data, a.id)
-            dependents = [i["id"] for i in data["items"] if item["id"] in i.get("depends_on", [])
-                          and i["status"] in ("pending", "running")]
-            if dependents:
-                raise PaceError(f"{item['id']} has dependents {','.join(dependents)}; defer or remove them first")
-            data["items"].remove(item)
-            store.touch(key)
-            return f"{item['id']} removed", {"removed": item}, EXIT_OK
-        return mutate(ctx, fn, need_calc=False)
-    if a.q_cmd == "clear-done":
-        def fn(store):
-            data = store[key]
-            before = len(data["items"])
-            data["items"] = [i for i in data["items"] if i["status"] != "done"]
-            store.touch(key)
-            return f"cleared {before - len(data['items'])} done item(s)", {}, EXIT_OK
-        return mutate(ctx, fn, need_calc=False)
-    raise PaceError("unknown queue command")
-
-
 def cmd_calibrate(ctx):
     with locked(ctx.sd):
         store = Store(ctx.sd)
@@ -3578,11 +3452,9 @@ def _settings_plan_key(ctx):
 
 def settings_report(ctx):
     """Everything `paceline settings` shows, as the JSON object of the spec's shared design."""
-    import cache_watch
-    import context_watch
     import usage_watch
-    # Only what the view shows is read: the profile (in memory, nothing is saved), the watcher files, the
-    # switches. A damaged night queue, pool or hold registry file cannot reach it.
+    # Only what the view shows is read: the profile (in memory, nothing is saved), the usage-watch switch, the
+    # switches. A damaged hold registry file cannot reach it.
     with locked(ctx.sd):
         profile, _changed = load_stored_profile(ctx.sd / "pace-profile.json")
         stored_zone = profile.get("timezone")
@@ -3590,12 +3462,9 @@ def settings_report(ctx):
         profile["timezone"] = zone_name
         if followed:
             profile["timezone_confirmed"] = True
-        context = context_watch.load_settings(ctx.sd)
-        cache = cache_watch.load_defaults(directory=ctx.sd)
         marker = away.read(ctx.sd)
         switches = {"pace": limits_file.pace_enabled(ctx.sd), "usage_watch": usage_watch.is_on(ctx.sd),
-                    "away": {"on": marker["on"], "set_at": marker["set_at"] if isinstance(marker["set_at"], str) else None},
-                    "context_watch": context["on"]}
+                    "away": {"on": marker["on"], "set_at": marker["set_at"] if isinstance(marker["set_at"], str) else None}}
         plan_key, plan_note = _settings_plan_key(ctx)
         plan_file = None if plan_note else str(plan_path(ctx.sd, plan_key))  # no file while the account is unknown
         plan_hours, plan_reserve = None, dict(RESERVE_DEFAULTS)
@@ -3628,22 +3497,10 @@ def settings_report(ctx):
         "profile": {k: {"value": profile[k], "default": json.loads(json.dumps(PROFILE_DEFAULTS[k]))}
                     for k in PROFILE_DEFAULTS if k not in PROFILE_INTERNAL_KEYS},
         "plan": {"work_hours": work_hours, **reserve_rows},
-        "context_watch": {
-            "line": {"value": context["line"], "default": context_watch.DEFAULTS["line"], "range": "on or off"},
-            "levels": {"value": context["levels"], "default": context_watch.DEFAULTS["levels"],
-                       "range": "%d-%d, rising" % context_watch.LEVEL_RANGE},
-            "snapshot_days": {"value": context["snapshot_days"], "default": context_watch.DEFAULTS["snapshot_days"],
-                              "range": "%d-%d" % context_watch.DAYS_RANGE}},
-        "cache_watch": {
-            "lead_minutes": {"value": cache["lead_minutes"], "default": cache_watch.DEFAULTS["lead_minutes"],
-                             "range": "%d-%d" % cache_watch.LEAD_RANGE},
-            "max_wakes": {"value": cache["max_wakes"], "default": cache_watch.DEFAULTS["max_wakes"],
-                          "range": "%d-%d" % cache_watch.MAX_RANGE}},
         "switches": switches,
         "timezone": timezone,
-        "files": {"profile": str(ctx.sd / "pace-profile.json"), "context_watch": str(context_watch.settings_path(ctx.sd)),
-                  "cache_watch": str(cache_watch.defaults_path(ctx.sd)),
-                  "plan": plan_file},
+        "moved": dict(MOVED_GROUPS),
+        "files": {"profile": str(ctx.sd / "pace-profile.json"), "plan": plan_file},
     }
 
 
@@ -3676,7 +3533,7 @@ def settings_text(report):
     onoff = lambda on: "on" if on else "off"  # noqa: E731
     zone = report["timezone"]
     lines = [f"PaceLine settings. Switches: pace {onoff(sw['pace'])}, usage-watch {onoff(sw['usage_watch'])}, "
-             f"away {onoff(sw['away']['on'])}, context-watch {onoff(sw['context_watch'])}",
+             f"away {onoff(sw['away']['on'])}",
              "A * marks a value that differs from its default.", ""]
     lines.append(f"Time zone: {zone['mode']} mode, stored {zone['stored']}, in use {zone['effective']}, "
                  f"detected {zone['detected'] or 'nothing'}{'' if zone['usable'] else ' (not usable here)'}")
@@ -3698,9 +3555,7 @@ def settings_text(report):
         if k == "memory_guard":
             profile_rows.update({m: report["profile"][m] for m in MEMORY_GUARD_KEYS if m in report["profile"]})
     lines += ["", f"Profile ({report['files']['profile']}):",
-              *rows(profile_rows, profile_marked, notes=MEMORY_GUARD_KEYS), "",
-              f"context-watch ({report['files']['context_watch']}):", *rows(report["context_watch"]), "",
-              f"cache-watch defaults ({report['files']['cache_watch']}):", *rows(report["cache_watch"])]
+              *rows(profile_rows, profile_marked, notes=MEMORY_GUARD_KEYS), "", MOVED_LINE]
     return NL.join(lines)
 
 
@@ -3734,8 +3589,9 @@ SWITCH_OFF_NOTE = "the hooks add nothing; every paceline command still runs"
 
 
 def remove_all_week_plans(sd):
-    """Remove every week-plan-*.json of the state directory; a failure is traced by unlink_week_plan."""
-    for path in sd.glob("week-plan-*.json"):
+    """Remove every week-plan-*.json and plan-offer-*.json (the off-hours offer's record) of the state
+    directory; a failure is traced by unlink_week_plan."""
+    for path in [*sd.glob("week-plan-*.json"), *sd.glob("plan-offer-*.json")]:
         unlink_week_plan(sd, path)
 
 
@@ -4029,7 +3885,7 @@ def build_parser():
 
     parser = argparse.ArgumentParser(
         prog="paceline", parents=[common],
-        description="Subscription usage pacing, plus the cache-watch, context-watch and usage-watch groups.")
+        description="Subscription usage pacing, plus the usage-watch and away groups.")
     sub = parser.add_subparsers(dest="cmd", required=True)
     sub.add_parser("on", parents=[common], help="turn the pace hooks on")
     sub.add_parser("off", parents=[common], help="turn the pace hooks off (every command still runs)")
@@ -4037,8 +3893,8 @@ def build_parser():
     status.add_argument("--launch-key", help="also take a short-lived launch hold under this key, counted after the report")
     status.add_argument("--account", metavar="KEY", help="report this account's partition instead of the signed-in one: "
                         "the first 4 or more hex digits of a key in rate-limits.json")
-    sub.add_parser("auto", parents=[common], help="autonomous parameters for the next queue item").add_argument(
-        "--start-run", action="store_true", help="begin a new night run: fix tonight's allowance and baseline")
+    sub.add_parser("advice", parents=[common], help="may unattended work start: start, wait or stop (exit 0, 10 or 11), "
+                   "with the budget and agents; writes advice-<account>.json")
     sub.add_parser("calibrate", parents=[common], help="propose parameter corrections from history")
     sim = sub.add_parser("simulate", parents=[common],
                          help="replay a week through the budget with your profile (a model: one reading per hour, "
@@ -4075,6 +3931,10 @@ def build_parser():
     p.add_argument("--off-hours", dest="off_hours", metavar="V", help="mark for the off-hours after them")
     p = psub.add_parser("reset", parents=[common], help="remove a day's marks, or every day's")
     p.add_argument("day", nargs="?")
+    p = psub.add_parser("offer", parents=[common], help="the off-hours offer a prompt hook makes: print its line when "
+                        "the current off part is unplanned (default mark, no share) and was not offered yet; "
+                        "--refuse records a no")
+    p.add_argument("--refuse", action="store_true", help="the operator said no: no offer again until the part ends")
     tpl = psub.add_parser("template", parents=[common], help="the weekday marks every week starts from")
     tsub = tpl.add_subparsers(dest="tpl_cmd")
     tsub.add_parser("show", parents=[common], help="the template (the default)")
@@ -4107,7 +3967,7 @@ def build_parser():
     r.add_argument("--label", default="")
     r.add_argument("--key", help="caller's own id, such as a hook's agent_id: one active hold per key and session")
     r.add_argument("--pid", type=int, help="owning Claude process (default: nearest claude* ancestor)")
-    r.add_argument("--item", help="queue item id this hold belongs to")
+    r.add_argument("--item", help="Stint item id this hold belongs to")
     rsub.add_parser("renew", parents=[common]).add_argument("id")
     r = rsub.add_parser("release", parents=[common])
     r.add_argument("id", nargs="?")
@@ -4118,42 +3978,26 @@ def build_parser():
     for name in ("prune", "list", "reconcile"):
         rsub.add_parser(name, parents=[common])
 
-    q = sub.add_parser("queue", parents=[common], help="night queue and leftover pool (--pool)")
-    q.add_argument("--pool", action="store_true", default=argparse.SUPPRESS, help="operate on the leftover pool")
-    qsub = q.add_subparsers(dest="q_cmd", required=True)
-    qp = argparse.ArgumentParser(add_help=False, parents=[common])
-    qp.add_argument("--pool", action="store_true", default=argparse.SUPPRESS, help="operate on the leftover pool")
-    x = qsub.add_parser("add", parents=[qp])
-    x.add_argument("--title", required=True)
-    x.add_argument("--repo", required=True)
-    x.add_argument("--estimate", type=float, required=True)
-    x.add_argument("--independent", action="store_true")
-    x.add_argument("--depends", help="comma-separated item ids")
-    for name in ("list", "report", "approve", "clear-done"):
-        qsub.add_parser(name, parents=[qp])
-    x = qsub.add_parser("start", parents=[qp])
-    x.add_argument("id")
-    x.add_argument("--pid", type=int)
-    x = qsub.add_parser("done", parents=[qp])
-    x.add_argument("id")
-    x.add_argument("--actual", type=float)
-    for name in ("defer", "fail"):
-        x = qsub.add_parser(name, parents=[qp])
-        x.add_argument("id")
-        x.add_argument("--reason")
-    for name in ("retry", "remove"):
-        qsub.add_parser(name, parents=[qp]).add_argument("id")
-
     # paceline.py hands these groups to their own modules before this parser runs; they are listed
     # here so that --help shows them.
-    for name, about in GROUPS.items():
+    for name, about in {**GROUPS, **{name: "moved to the Stint plugin" for name in MOVED_COMMANDS}}.items():
         sub.add_parser(name, help=about, add_help=False).add_argument("rest", nargs=argparse.REMAINDER)
     return parser
 
 
+# The groups that now belong to the PitCrew plugin, and the plugin that owns each.
+MOVED_GROUPS = {"context-watch": "pitcrew", "cache-watch": "pitcrew"}
+MOVED_LINE = "context-watch and cache-watch moved to the PitCrew plugin: /pitcrew:context-watch, /pitcrew:cache-watch."
+
+# The commands that now belong to the Stint plugin, with the line each prints.
+MOVED_COMMANDS = {
+    "queue": "paceline queue moved to the Stint plugin: run stint add|list|report|start|done|fail|defer|retry|remove|"
+             "clear-done, or /stint:queue",
+    "auto": "paceline auto moved to the Stint plugin: run stint next, or /stint:run"}
+
+MOVED_ABOUT = "moved to the PitCrew plugin"
 GROUPS = {"away": "tell the launch gate that you are away, so it denies a launch it would ask about: on|off|status",
-          "cache-watch": "keep an idle session's one-hour prompt cache alive: on|off|status|config",
-          "context-watch": "context against the auto-compaction point: config|status",
+          **{group: MOVED_ABOUT for group in MOVED_GROUPS},
           "usage-watch": "read the account's exact usage through Claude Code: on|off|status"}
 
 
@@ -4162,22 +4006,31 @@ def cmd_simulate(ctx):
     return simulate.main(ctx, sys.modules[__name__])
 
 
+def moved_group(group):
+    """One line on stderr, nothing on stdout, exit status 2: the two groups that moved to the PitCrew plugin."""
+    print(f"paceline {group} moved to the PitCrew plugin: run pitcrew {group} ..., or /pitcrew:{group}",
+          file=sys.stderr)
+    return EXIT_USAGE
+
+
+def moved_command(command):
+    """One line on stderr, nothing on stdout, exit status 2: the two commands that moved to the Stint plugin."""
+    print(MOVED_COMMANDS[command], file=sys.stderr)
+    return EXIT_USAGE
+
+
 def cmd_group(ctx):
     if ctx.args.cmd == "away":
         import away
         return away.main(ctx.args.rest)
-    if ctx.args.cmd == "cache-watch":
-        import cache_watch
-        return cache_watch.main(ctx.args.rest)
-    if ctx.args.cmd == "usage-watch":
-        import usage_watch
-        return usage_watch.main(ctx.args.rest)
-    import context_watch
-    return context_watch.main(ctx.args.rest)
+    if ctx.args.cmd in MOVED_GROUPS:
+        return moved_group(ctx.args.cmd)
+    import usage_watch
+    return usage_watch.main(ctx.args.rest)
 
 
 COMMON_DEFAULTS = {"json": False, "model": None, "session": None, "no_merge": False, "now": None,
-                   "state_dir": None, "pool": False}
+                   "state_dir": None}
 
 
 def with_defaults(args):
@@ -4202,6 +4055,21 @@ def value_options(parser):
             elif action.option_strings and action.nargs != 0:
                 found.update(action.option_strings)
     return found
+
+
+def first_command(tokens, takes_value):
+    """The first non-option token, or None. Skips an option that takes a value (in `takes_value`, or an
+    abbreviation argparse would accept for one) together with its value; an `--option=value` token carries
+    its own."""
+    skip = False
+    for token in tokens:
+        if skip:
+            skip = False
+        elif token.startswith("--") and "=" not in token and any(o.startswith(token) for o in takes_value):
+            skip = True
+        elif not token.startswith("-"):
+            return token
+    return None
 
 
 def old_hold_command(tokens, takes_value):
@@ -4231,15 +4099,21 @@ def main(argv=None):
     with contextlib.suppress(AttributeError, ValueError):
         sys.stdout.reconfigure(encoding="utf-8")
     parser = build_parser()
-    old = old_hold_command(sys.argv[1:] if argv is None else argv, value_options(parser))
+    tokens = sys.argv[1:] if argv is None else argv
+    first = first_command(tokens, value_options(parser))
+    if first in MOVED_GROUPS:
+        return moved_group(first)
+    if first in MOVED_COMMANDS:
+        return moved_command(first)
+    old = old_hold_command(tokens, value_options(parser))
     if old:
         print(f"paceline: reserve {old} is now paceline hold {old} (reserve sets the weekly reserve)", file=sys.stderr)
         return EXIT_USAGE
     args = with_defaults(parser.parse_args(argv))
     ctx = Context(args)
     TRACE_DIR = ctx.sd
-    handlers = {"status": cmd_status, "auto": cmd_auto, "plan": cmd_plan, "hold": cmd_hold, "reserve": cmd_reserve,
-                "queue": cmd_queue, "calibrate": cmd_calibrate, "simulate": cmd_simulate, "profile": cmd_profile,
+    handlers = {"status": cmd_status, "advice": cmd_advice, "plan": cmd_plan, "hold": cmd_hold, "reserve": cmd_reserve,
+                "calibrate": cmd_calibrate, "simulate": cmd_simulate, "profile": cmd_profile,
                 "settings": cmd_settings, "mode": cmd_mode,
                 "merge": cmd_merge, "doctor": cmd_doctor, "on": cmd_switch, "off": cmd_switch,
                 "cache-watch": cmd_group, "context-watch": cmd_group, "usage-watch": cmd_group}

@@ -1,5 +1,33 @@
 # Changelog
 
+## 0.1.19 - 2026-11-01
+
+### Changed
+
+- The row is one layout: `Ctx │ Cache │ 5h │ Part · 7d │`. The Part block (`☼` for working hours, `☾` for
+  off-hours) shows the points spent in the current part of PaceLine's week plan over its share, with a tick at the
+  share of the part's time gone and a paler forecast at its end. `Hit` and a model-scoped limit that is calm are in
+  the `/pitboard` pane only; a model-scoped limit shows in the row from amber.
+- The cards in the row are short (the reset in the title, `Pace` as `3.2 of 4.1%/h`, the hit rates on the Cache
+  card, the Part card's hours in its title); the pane keeps every row.
+- The 7d, 5h and Part bars draw a forecast to the end of their period. The week forecast is the average since
+  the reset, marked `≈` before 48 hours into the week and absent in the first hour; the Part card's `Pace` is the
+  part's average, from 15 minutes in.
+- Figures follow the account's whole percent: `<1`, `~` and one decimal mark estimates, and PaceLine's last-request
+  file tells whether anything was spent in a period that began after the last step.
+- In the CLI a detail line wraps between label-value pairs, and the Desktop width estimate is made per character
+  (a limit of about a third of a cell is documented as PB-18).
+
+### Fixed
+
+- The 5h `Budget` reads `n/a (under 15 min left)` in the last 15 minutes before the reset instead of a huge rate.
+- `Overspent` and `Spare` follow the same rounding as the Part card's `Spent`.
+
+### Removed
+
+- The 0055 plan tick on the week bar and the Week card's `Plan`, `Spare`, `Overspent` and `Budget` rows; the Part
+  card carries the plan's figures.
+
 ## 0.1.18 - 2026-10-31
 
 ### Added
