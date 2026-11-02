@@ -1,6 +1,6 @@
 {
   "name": "paceline",
-  "version": "0.7.2",
+  "version": "0.7.3",
   "description": "Keeps a Claude Code session's subscription limits in shape. pace (off until turned on): a per-hour budget against the five-hour and weekly limits, a plain pace line for the model before Agent and Workflow launches in limit mode, safety stops that make a launch ask (a five-hour stop at 95 %, the weekly reserve until its release day, the weekly limit used up), subagent holds. The night queue moved to the Stint plugin. usage-watch (off until turned on): reads the account's exact usage and its model-scoped weekly limits through Claude Code every 125 seconds, so the limits stay current while sessions are idle; needs a claude.ai login. context-watch and cache-watch moved to the PitCrew plugin. Keeps the limit readings in state/paceline/rate-limits.json under $CLAUDE_CONFIG_DIR, else ~/.claude. Requires Claude Code 2.1.287+ and Python 3.9+.",
   "types": "./types/index.d.ts",
   "author": {"name": "agentpit-lab", "url": "https://github.com/agentpit-lab"},

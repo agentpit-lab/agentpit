@@ -21,7 +21,9 @@ administrator-only path that lists it by a relative source. This script:
 5. Copies each plugin's data directory to the new plugin id, then disables the user-scope
    copies (<plugin>@agentpit) so the plugins do not load twice.
 
-Run it again to update: it mirrors the latest release over the installed copy.
+Run it again to update: it mirrors the latest release over the installed copy and keeps
+every plugin already seated. A seated plugin is removed only when you ask: with -Remove, or
+with a yes at the question -Plugins can raise.
 Where the organization has server-managed settings, the admin console must carry
 "managedSourcesBehavior": "merge", or Claude Code ignores this machine's plugin keys.
 Needs git on PATH unless -Source is given.
@@ -34,12 +36,20 @@ latest selected; a run without a console (scheduled, redirected) takes the lates
 .PARAMETER Plugins
 The plugins to seat, from paceline, pitboard, pitcrew and stint; the default is
 paceline, pitboard and pitcrew. Stint's module needs no seating, so it is left out by
-default. pwsh -File passes -Plugins paceline,pitboard as one string, which fails the name
+default. A plugin already seated and left out is kept, or asked about in a console, never
+removed silently. pwsh -File passes -Plugins paceline,pitboard as one string, which fails the name
 check: run the script from a PowerShell 7 prompt, or through pwsh -Command, to name more
 than one.
 
+.PARAMETER Remove
+Removes seated plugins and gives you your own copy back: -Remove stint. Naming a plugin in
+-Remove and in -Plugins or -Version is an error; a name that is not seated changes nothing.
+pwsh -File passes -Remove stint,pitcrew as one string, which fails the name check: run the
+script from a PowerShell 7 prompt, or through pwsh -Command, to name more than one.
+
 .PARAMETER Latest
-Takes the latest release of every plugin not pinned by -Version, without asking.
+Takes the latest release of every plugin not pinned by -Version, without asking anything,
+the removal question included (seated plugins left out are kept).
 
 .PARAMETER Source
 A local marketplace folder that holds plugins\<name>, used for every plugin instead of
@@ -62,8 +72,12 @@ param(
     [string[]]$Version = @(),
     [switch]$Latest,
     [string]$Source,
+    # The known plugin list also appears in the second ValidateSet, in $known and in install-agentpit-org.sh.
     [ValidateSet('paceline', 'pitboard', 'pitcrew', 'stint')]
     [string[]]$Plugins = @('paceline', 'pitboard', 'pitcrew'),
+    # Same list as the ValidateSet above; keep them and $known in step.
+    [ValidateSet('paceline', 'pitboard', 'pitcrew', 'stint')]
+    [string[]]$Remove = @(),
     [switch]$SkipUserPlugins,
     [switch]$Uninstall
 )
@@ -71,6 +85,9 @@ param(
 $ErrorActionPreference = 'Stop'
 # ValidateSet ignores case; tags, paths and ids do not.
 $Plugins = @($Plugins | ForEach-Object ToLowerInvariant | Select-Object -Unique)
+$Remove = @($Remove | ForEach-Object ToLowerInvariant | Select-Object -Unique)
+# Same list as the two ValidateSets above and in install-agentpit-org.sh; keep them in step.
+$known = @('paceline', 'pitboard', 'pitcrew', 'stint')
 
 $marketplace = 'agentpit-org'
 $userMarketplace = 'agentpit'
@@ -113,6 +130,20 @@ function Set-AdminOnlyAcl([string]$Path) {
     }
 }
 
+$pinned = @{}
+foreach ($pin in $Version) {
+    $name, $value = $pin -split '=', 2
+    if (-not $value) { throw '-Version takes <plugin>=<version>' }
+    $pinned[$name] = $value.TrimStart('v')
+}
+
+if ($PSBoundParameters.ContainsKey('Plugins')) {
+    $clash = @($known | Where-Object { $_ -in $Remove -and $_ -in $Plugins })
+    if ($clash) { throw "-Remove names a plugin that -Plugins seats: $($clash -join ', ')" }
+}
+$clash = @($known | Where-Object { $_ -in $Remove -and $pinned.ContainsKey($_) })
+if ($clash) { throw "-Remove names a plugin that -Version pins: $($clash -join ', ')" }
+
 if ($Uninstall) {
     if (Test-Path -LiteralPath $dropIn) { Remove-Item -LiteralPath $dropIn; Write-Host "Removed $dropIn" }
     if (Test-Path -LiteralPath $target) { Remove-Item -LiteralPath $target -Recurse; Write-Host "Removed $target" }
@@ -121,12 +152,55 @@ if ($Uninstall) {
     return
 }
 
-$pinned = @{}
-foreach ($pin in $Version) {
-    $name, $value = $pin -split '=', 2
-    if (-not $value -or $name -notin $Plugins) { throw "-Version takes <plugin>=<version> for one of: $($Plugins -join ', ')" }
-    $pinned[$name] = $value.TrimStart('v')
+$interactive = -not $Latest -and [Environment]::UserInteractive -and
+    -not [Console]::IsInputRedirected -and -not [Console]::IsOutputRedirected
+
+# The plugins already seated are the ones the existing drop-in enables, read by pattern, line
+# by line: the file is this script's own output (or the shell installer's), which puts each
+# key and its true on one line.
+$seated = @()
+if ((Test-Path -LiteralPath $dropIn) -or (Get-Item -LiteralPath $dropIn -Force -ErrorAction SilentlyContinue)) {
+    $cannotRead = "Cannot read $dropIn; fix or delete it, or run with -Uninstall."
+    try {
+        if (-not (Test-Path -LiteralPath $dropIn -PathType Leaf)) { throw 'not a file' }
+        $lines = @(Get-Content -LiteralPath $dropIn -ErrorAction Stop)
+    }
+    catch { throw $cannotRead }
+    $seen = @()
+    foreach ($line in $lines) {
+        foreach ($match in [regex]::Matches([string]$line, '"([a-z0-9-]+)@agentpit-org"\s*:\s*true')) {
+            if ($match.Groups[1].Value -notin $seen) { $seen += $match.Groups[1].Value }
+        }
+    }
+    $unknown = @($seen | Where-Object { $_ -notin $known })
+    if ($unknown) { throw "$dropIn seats plugins this installer does not know: $($unknown -join ', '); fix or delete it, or run with -Uninstall." }
+    $seated = @($known | Where-Object { $_ -in $seen })
 }
+
+# Requested: the plugins asked for (-Plugins or the default) minus -Remove, plus the pinned
+# seated ones. Extra: seated, not requested, not removed. The final set is requested plus the
+# extra the run keeps; it replaces $Plugins from here on.
+$base = @($Plugins | Where-Object { $_ -notin $Remove })
+$carry = @($known | Where-Object { $_ -in $seated -and $_ -notin $base -and $_ -notin $Remove })
+$allowed = @($base) + @($carry)
+foreach ($name in $pinned.Keys) {
+    if ($name -notin $allowed) { throw "-Version takes <plugin>=<version> for one of: $($allowed -join ', ')" }
+}
+$requested = @($base) + @($known | Where-Object { $_ -in $carry -and $pinned.ContainsKey($_) })
+$extra = @($known | Where-Object { $_ -in $seated -and $_ -notin $requested -and $_ -notin $Remove })
+if (-not $requested -and -not $extra) { throw 'Nothing to seat: -Remove leaves no plugin. To remove them all, run with -Uninstall.' }
+
+$dropping = @($known | Where-Object { $_ -in $seated -and $_ -in $Remove })
+$kept = $extra
+if ($extra -and $PSBoundParameters.ContainsKey('Plugins') -and $interactive) {
+    Write-Host -NoNewline "Seated now but not in -Plugins: $($extra -join ', '). Remove them? Each gets your own copy back. [y/N] "
+    $yes = [Console]::ReadKey($true).Key -eq 'Y'
+    Write-Host $(if ($yes) { 'y' } else { 'N' })
+    if ($yes) { $dropping = @($known | Where-Object { $_ -in $dropping -or $_ -in $extra }); $kept = @() }
+}
+$Plugins = @($requested) + @($known | Where-Object { $_ -in $kept })
+if ($dropping) { Write-Host "Removing seated plugins: $($dropping -join ', ')." }
+if ($kept) { Write-Host "Kept seated plugins outside this run's set: $($kept -join ', '). To remove one, run again with -Remove <name>." }
 
 # The plugin's release versions, newest first.
 function Get-ReleaseVersions([string]$Plugin) {
@@ -167,9 +241,6 @@ function Select-Version([string]$Plugin, [string[]]$Versions) {
         & $draw
     }
 }
-
-$interactive = -not $Latest -and [Environment]::UserInteractive -and
-    -not [Console]::IsInputRedirected -and -not [Console]::IsOutputRedirected
 
 function Get-ReleaseTag([string]$Plugin) {
     if ($pinned.ContainsKey($Plugin)) { return "$Plugin--v$($pinned[$Plugin])" }
@@ -248,7 +319,10 @@ try {
     }
     $json = $settings | ConvertTo-Json -Depth 6
     $null = $json | ConvertFrom-Json   # invalid managed JSON stops Claude Code from starting
-    Set-Content -LiteralPath $dropIn -Value $json -Encoding utf8NoBOM
+    # Write beside the drop-in, then rename: a truncated drop-in would drop seated plugins on the next rerun.
+    $dropInTmp = "$dropIn.tmp"
+    Set-Content -LiteralPath $dropInTmp -Value $json -Encoding utf8NoBOM
+    Move-Item -LiteralPath $dropInTmp -Destination $dropIn -Force
     Write-Host "Wrote $dropIn"
 
     Set-AdminOnlyAcl $root

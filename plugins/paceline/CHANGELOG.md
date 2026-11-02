@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.7.3 - 2026-11-02
+
+### Changed
+
+- The how-to section on seating the plugin as your organization's plugin says that rerunning the
+  installer keeps every plugin already seated, asks before removing one a `-Plugins` list leaves out, and
+  removes one only with `-Remove` (`--remove`). Documentation only; the installers ship in `tools/`.
+
 ## 0.7.2 - 2026-11-01
 
 ### Fixed

@@ -11,17 +11,23 @@
 # id and disables the user-scope copies.
 #
 # Run it as yourself, not with sudo: it calls sudo for the system paths and needs your
-# home for the rest. Run it again to update. Where the organization has server-managed
+# home for the rest. Run it again to update: a rerun keeps every plugin already seated, and
+# removes one only when you ask (--remove, or a yes at the question --plugins can raise). Where the organization has server-managed
 # settings, the admin console must carry "managedSourcesBehavior": "merge".
 # Needs git unless --source is given.
 #
-# Usage: install-agentpit-org.sh [--plugins <name>,<name>...] [--version <plugin>=<version>]... [--latest]
+# Usage: install-agentpit-org.sh [--plugins <name>,<name>...] [--remove <name>,<name>...]
+#                                [--version <plugin>=<version>]... [--latest]
 #                                [--source <marketplace dir>] [--skip-user-plugins] [--uninstall]
 #   --plugins  the plugins to seat, from paceline, pitboard, pitcrew and stint, comma-separated:
 #              --plugins paceline,pitboard; the default is paceline,pitboard,pitcrew (Stint's
-#              module needs no seating)
+#              module needs no seating). A plugin already seated and left out is kept, or asked
+#              about in a terminal, never removed silently
+#   --remove   removes seated plugins and gives you your own copy back: --remove stint; it may
+#              repeat. Naming a plugin in --remove and in --plugins or --version is an error
 #   --version  pins a plugin to a release: --version pitboard=0.1.14
-#   --latest   takes the latest release of every plugin not pinned, without asking
+#   --latest   takes the latest release of every plugin not pinned, without asking anything,
+#              the removal question included (seated plugins left out are kept)
 #   --source   a local marketplace folder with plugins/<name>, used instead of GitHub
 # A run in a terminal offers each plugin's last ten releases with the latest first, through
 # fzf when it is installed and a numbered list otherwise; Enter keeps the latest. A run
@@ -31,8 +37,12 @@ set -eu
 marketplace=agentpit-org
 user_marketplace=agentpit
 repository=https://github.com/agentpit-lab/agentpit
+# The known plugin list also appears in Install-AgentpitOrg.ps1 (two ValidateSets and $known); keep them in step.
 known="paceline pitboard pitcrew stint"
+# The default list also appears in Install-AgentpitOrg.ps1 (the -Plugins default); keep them in step.
 plugins="paceline pitboard pitcrew"
+plugins_given=0
+remove=
 pins=
 latest=0
 source_dir=
@@ -41,16 +51,27 @@ uninstall=0
 
 while [ $# -gt 0 ]; do
     case $1 in
-        --plugins|--version|--source) [ $# -ge 2 ] || { echo "$1 needs a value" >&2; exit 2; } ;;
+        --plugins|--remove|--version|--source) [ $# -ge 2 ] || { echo "$1 needs a value" >&2; exit 2; } ;;
     esac
     case $1 in
         --plugins)
-            plugins=
+            plugins=; plugins_given=1
             for name in $(printf '%s' "$2" | tr ',' ' '); do
                 case " $known " in *" $name "*) ;; *) echo "--plugins takes one or more of: $known" >&2; exit 2 ;; esac
                 case " $plugins " in *" $name "*) ;; *) plugins="$plugins${plugins:+ }$name" ;; esac
             done
             [ -n "$plugins" ] || { echo "--plugins takes one or more of: $known" >&2; exit 2; }
+            shift 2 ;;
+        --remove)
+            list=
+            for name in $(printf '%s' "$2" | tr ',' ' '); do
+                case " $known " in *" $name "*) ;; *) echo "--remove takes one or more of: $known" >&2; exit 2 ;; esac
+                case " $list " in *" $name "*) ;; *) list="$list${list:+ }$name" ;; esac
+            done
+            [ -n "$list" ] || { echo "--remove takes one or more of: $known" >&2; exit 2; }
+            for name in $list; do
+                case " $remove " in *" $name "*) ;; *) remove="$remove${remove:+ }$name" ;; esac
+            done
             shift 2 ;;
         --version)
             [ "${2%%=*}" != "$2" ] || { echo "--version takes <plugin>=<version>" >&2; exit 2; }
@@ -63,9 +84,35 @@ while [ $# -gt 0 ]; do
     esac
 done
 
+has() {  # $1: a name, $2: a space-separated list -> 0 when the list holds it
+    case " $2 " in *" $1 "*) return 0 ;; esac
+    return 1
+}
+
+known_order() {  # $1: names -> those names in known order
+    ordered=
+    for k in $known; do
+        if has "$k" "$1"; then ordered="$ordered${ordered:+ }$k"; fi
+    done
+    echo "$ordered"
+}
+
+join_names() {  # $1: space-separated names -> a comma-and-space list
+    printf '%s' "$1" | sed 's/ /, /g'
+}
+
+if [ "$plugins_given" -eq 1 ]; then
+    clash=
+    for name in $remove; do
+        if has "$name" "$plugins"; then clash="$clash${clash:+ }$name"; fi
+    done
+    [ -z "$clash" ] || { echo "--remove names a plugin that --plugins seats: $(join_names "$(known_order "$clash")")" >&2; exit 2; }
+fi
+clash=
 for pin in $pins; do
-    case " $plugins " in *" ${pin%%=*} "*) ;; *) echo "--version takes <plugin>=<version> for one of: $plugins" >&2; exit 2 ;; esac
+    if has "${pin%%=*}" "$remove"; then clash="$clash${clash:+ }${pin%%=*}"; fi
 done
+[ -z "$clash" ] || { echo "--remove names a plugin that --version pins: $(join_names "$(known_order "$clash")")" >&2; exit 2; }
 
 if [ "$(id -u)" -eq 0 ]; then
     echo "Run as your own user; the script calls sudo where it needs it." >&2
@@ -105,6 +152,72 @@ if [ "$uninstall" -eq 1 ]; then
     echo "Removed $drop_in and $target. Restart Claude Code sessions to apply."
     exit 0
 fi
+
+# The plugins already seated are the ones the existing drop-in enables, read by pattern, line
+# by line: the file is this script's own output (or the PowerShell installer's), which puts
+# each key and its true on one line.
+seated=
+if [ -e "$drop_in" ] || [ -L "$drop_in" ]; then
+    # Read through sudo: the file may be root-only. LC_ALL=C keeps [a-z] from matching capitals.
+    # </dev/null keeps sudo (use_pty) from swallowing an answer typed ahead of the removal prompt.
+    sudo test -f "$drop_in" </dev/null || { echo "Cannot read $drop_in; fix or delete it, or run with --uninstall." >&2; exit 1; }
+    content=$(sudo cat "$drop_in" </dev/null) \
+        || { echo "Cannot read $drop_in; fix or delete it, or run with --uninstall." >&2; exit 1; }
+    found=$(printf '%s\n' "$content" | LC_ALL=C grep -o '"[a-z0-9-][a-z0-9-]*@agentpit-org"[[:space:]]*:[[:space:]]*true') || [ $? -eq 1 ] \
+        || { echo "Cannot read $drop_in; fix or delete it, or run with --uninstall." >&2; exit 1; }
+    unknown=
+    for name in $(printf '%s\n' "$found" | LC_ALL=C sed 's/^"\([a-z0-9-]*\)@.*/\1/'); do
+        if has "$name" "$known"; then
+            if ! has "$name" "$seated"; then seated="$seated${seated:+ }$name"; fi
+        elif ! has "$name" "$unknown"; then
+            unknown="$unknown${unknown:+ }$name"
+        fi
+    done
+    [ -z "$unknown" ] || { echo "$drop_in seats plugins this installer does not know: $(join_names "$unknown"); fix or delete it, or run with --uninstall." >&2; exit 1; }
+    seated=$(known_order "$seated")
+fi
+
+# Requested: the plugins asked for (--plugins or the default) minus --remove, plus the pinned
+# seated ones. Extra: seated, not requested, not removed. The final set is requested plus the
+# extra the run keeps; it replaces $plugins from here on.
+base=
+for name in $plugins; do
+    if ! has "$name" "$remove"; then base="$base${base:+ }$name"; fi
+done
+carry=
+for name in $seated; do
+    if ! has "$name" "$base" && ! has "$name" "$remove"; then carry="$carry${carry:+ }$name"; fi
+done
+allowed="$base${carry:+${base:+ }$carry}"
+pinned=
+for pin in $pins; do
+    has "${pin%%=*}" "$allowed" || { echo "--version takes <plugin>=<version> for one of: $(join_names "$allowed")" >&2; exit 2; }
+    if has "${pin%%=*}" "$carry"; then pinned="$pinned${pinned:+ }${pin%%=*}"; fi
+done
+requested=$base
+pinned=$(known_order "$pinned")
+[ -z "$pinned" ] || requested="$requested${requested:+ }$pinned"
+extra=
+for name in $seated; do
+    if ! has "$name" "$requested" && ! has "$name" "$remove"; then extra="$extra${extra:+ }$name"; fi
+done
+[ -n "$requested$extra" ] || { echo "Nothing to seat: --remove leaves no plugin. To remove them all, run with --uninstall." >&2; exit 2; }
+
+dropping=
+for name in $seated; do
+    if has "$name" "$remove"; then dropping="$dropping${dropping:+ }$name"; fi
+done
+kept=$extra
+if [ -n "$extra" ] && [ "$plugins_given" -eq 1 ] && [ "$latest" -eq 0 ] && [ -t 0 ] && [ -t 2 ]; then
+    printf 'Seated now but not in --plugins: %s. Remove them? Each gets your own copy back. [y/N] ' "$(join_names "$extra")" >&2
+    read -r answer </dev/tty || answer=
+    case $answer in
+        y|Y|yes|Yes|YES) dropping=$(known_order "$dropping $extra"); kept= ;;
+    esac
+fi
+plugins="$requested${kept:+${requested:+ }$kept}"
+[ -z "$dropping" ] || echo "Removing seated plugins: $(join_names "$dropping")."
+[ -z "$kept" ] || echo "Kept seated plugins outside this run's set: $(join_names "$kept"). To remove one, run again with --remove <name>."
 
 release_versions() {  # $1: plugin -> its release versions, newest first
     git ls-remote --tags --refs "$repository" "$1--v*" \
@@ -198,7 +311,8 @@ sudo tee "$target/.claude-plugin/marketplace.json" >/dev/null <<EOF
 EOF
 
 enabled=$(echo "$ids" | sed 's/"\([^"]*\)"/"\1": true/g')
-sudo tee "$drop_in" >/dev/null <<EOF
+# Write beside the drop-in, then rename: a truncated drop-in would drop seated plugins on the next rerun.
+sudo tee "$drop_in.tmp" >/dev/null <<EOF
 {
   "extraKnownMarketplaces": {
     "$marketplace": { "source": { "source": "directory", "path": "$target" } }
@@ -207,6 +321,7 @@ sudo tee "$drop_in" >/dev/null <<EOF
   "appendPlugins": [ $ids ]
 }
 EOF
+sudo mv -f "$drop_in.tmp" "$drop_in"
 echo "Wrote $drop_in"
 
 # The directory and every directory above it must be writable by root only.

@@ -253,12 +253,16 @@ writes a managed settings file that enables it there, and disables your own copi
 
    In a terminal the script lists the last ten releases of each plugin with the latest selected, and
    Enter keeps it. `-Version pitboard=0.1.14` (`--version` in sh) pins a release; `-Latest`
-   (`--latest`) takes the latest of each without asking, as a run without a terminal does. `-Plugins
-   paceline,pitboard` (`--plugins` in sh) seats another set, from `paceline`, `pitboard`, `pitcrew`
-   and `stint`; Stint's module needs no seating, and a plugin left out of the set gets your own copy
-   back. Under `pwsh -File`, `-Plugins` receives `paceline,pitboard` as one string, so run the
-   script from a PowerShell 7 prompt or through `pwsh -Command`. Unreleased builds install only from
-   a local folder with `-Source` (`--source`).
+   (`--latest`) takes the latest of each without asking, as a run without a terminal does, and asks
+   nothing else. A rerun keeps every plugin already seated, so a plain run seats the default three
+   plus whatever is seated. `-Plugins paceline,pitboard` (`--plugins` in sh) seats another set, from
+   `paceline`, `pitboard`, `pitcrew` and `stint`; Stint's module needs no seating. When that list
+   leaves out a seated plugin, the script asks in a terminal whether to remove it, with No as the
+   default, and keeps it without a terminal. `-Remove stint` (`--remove` in sh) removes a plugin
+   without asking, and a removed plugin gets your own copy back. Under `pwsh -File`, `-Plugins`
+   receives `paceline,pitboard` as one string, so run the script from a PowerShell 7 prompt or
+   through `pwsh -Command`. Unreleased builds install only from a local folder with `-Source`
+   (`--source`).
 
    The script writes two paths. Windows: `C:\Program Files\ClaudeCode\plugins\agentpit-org` and
    `C:\Program Files\ClaudeCode\managed-settings.d\50-agentpit-org.json`. macOS: the same two under
@@ -270,7 +274,8 @@ writes a managed settings file that enables it there, and disables your own copi
 `tier append`, and no line says `bypassed by`. `claude plugin list` does not show a plugin loaded in
 place from a managed folder.
 
-To update, run the script again. To undo, run it with `-Uninstall` (`--uninstall`): it removes the
-folder and the managed file and enables your own copies again. The managed file applies to every
-login on the machine, a personal one included, and seats the guard there too: another plugin with a
-hooks module that you install from a marketplace loses the same events on that login.
+To update, run the script again: it keeps the plugins already seated. To undo, run it with
+`-Uninstall` (`--uninstall`): it removes the folder and the managed file and enables your own copies
+again. The managed file applies to every login on the machine, a personal one included, and seats
+the guard there too: another plugin with a hooks module that you install from a marketplace loses
+the same events on that login.
