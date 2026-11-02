@@ -284,11 +284,11 @@ and the `/pitboard` pane.
 
 Model and effort colours name a model or an effort level and carry no state. In the CLI detail line,
 the model name, the advisor's model and the effort level take a theme colour by hue; the CLI row
-colours the advisor's model the same way, and the pane colours the model name beside Session.
-Desktop colours only the advisor's model name, in the row's Advisor group, with fixed hex; its model
-and effort sit in Desktop's own footer, which PitBoard does not colour. An advisor model of no known
-family is drawn in sand italics in Desktop, and an inactive advisor is dimmed and struck through in
-Desktop and in the terminal.
+colours the advisor's model the same way, and the pane colours the model name that is the Session
+card's label. Desktop colours only the advisor's model name, in the row's Advisor group, with fixed
+hex; its model and effort sit in Desktop's own footer, which PitBoard does not colour. An advisor
+model of no known family is drawn in sand italics in Desktop, and an inactive advisor is dimmed and
+struck through in Desktop and in the terminal.
 
 A model name is matched against these families without regard to case, and the first family in table
 order wins. A name that matches none of them takes the last row.
@@ -318,12 +318,15 @@ on in `success`. Every text colour reaches a 4.5:1 contrast on Claude Code's lig
 except on the light theme Sonnet and effort high (`suggestion`, 4.4:1) and Fable (`bashBorder`,
 3.7:1). The Desktop row and cards keep their own fixed colours.
 
-The five-hour limit turns red when its Pace is above its Budget. Budget is the pace that lasts
-exactly to the reset, so a higher Pace reaches 100% before the reset: the same condition as Runs
-out. The row also turns red from 90% used and amber from 70%. With PaceLine's projection (see
-[Budget, At reset, Runs out](#budget-at-reset-runs-out)), the five-hour limit turns red when
-PaceLine reports that the window would reach its threshold before the reset, and Pace above Budget
-alone does not colour it.
+The five-hour limit turns red when its Pace is above its Budget, and from 90% used; it turns amber
+from 70%. Budget is the pace that lasts exactly to the reset, so a higher Pace reaches 100% before
+the reset: the same condition as Runs out. With PaceLine's projection (see [Budget, At reset, Runs
+out](#budget-at-reset-runs-out)), the limit turns red from 90% used, or while PaceLine's burn file
+marks the window `limited`: the window would reach PaceLine's threshold before the reset, and
+PaceLine's limit data is at most 30 minutes old. PitBoard reads the burn file only while it is at
+most 3 minutes old; an older file is ignored, and the pane uses its own Pace and Budget. The pane's
+verdict, its Next entry and the card follow that same rule, so they turn red together, and never on
+stale data.
 
 The weekly limit and the model-scoped limits take their colour on the row from the percentage used
 only: amber from 80%, red from 95%. Inside the Week card, `At reset` is amber from 80% and `Runs

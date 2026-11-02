@@ -1,5 +1,33 @@
 # Changelog
 
+## 0.1.21 - 2026-11-02
+
+### Changed
+
+- The `/pitboard` pane opens with a verdict, a forecast line for the week and a Next list of what happens next,
+  then folds every card into one line under Limits, This conversation and Session. The layout follows the
+  pane's own width on every surface: values wrap instead of being cut, and below 60 columns the bars move into
+  the unfolded cards.
+- The terminal pane draws its bars in cells, with the forecast in dim grey.
+- Cache hit rates on a folded line round down.
+- The 5h card in the row and in the CLI detail line shows the Threshold row and the hold advice only while
+  PaceLine marks the window limited, which needs its limit data to be at most 30 minutes old. Before, it showed them
+  whenever PaceLine's threshold time fell before the reset.
+
+### Added
+
+- The pane's Session card names the signed-in account by its e-mail address, which the pane reads from
+  `oauthAccount.emailAddress` in `.claude.json`. The row, its cards and the CLI detail line do not show it.
+- Pressing a card unfolds its rows; `How it is computed` unfolds its explanations; `Unfold all` and `How the
+  numbers work` open every card or every explanation at once. The cards open folded and stay as left while the
+  pane is open.
+- `PITBOARD_SCENARIO`, a development variable listed in the reference: it names a JSON file the pane draws
+  from instead of live readings, and says so on its first line.
+
+### Removed
+
+- The pane's Needs attention section: the verdict and Next carry what it said.
+
 ## 0.1.20 - 2026-11-01
 
 ### Fixed

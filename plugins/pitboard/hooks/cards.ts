@@ -141,8 +141,6 @@ function advisorText(m: StatusMeta): string {
   return `advisor ${name}${isActive ? '' : ' (inactive)'}`
 }
 
-// What needs a decision now, most urgent first, with its advice; the detail cards quote it.
-
 // Until the first reply after a compaction no hit is counted, and the cached history is the old one.
 function rebuiltNote(k: CacheView): string {
   return k.hitAvg === null
@@ -150,55 +148,6 @@ function rebuiltNote(k: CacheView): string {
     : 'the last turn wrote the history to the cache again'
 }
 
-export function alerts(v: View): { level: Level; head: string; advice: string }[] {
-  const out: { level: Level; head: string; advice: string }[] = []
-  const c = v.context
-  if (c && c.level !== 'calm') {
-    out.push({
-      level: c.level,
-      head: c.isAuto ? `Context ${pct0(c.pct)}` : `Context ${pct0(c.pct)} of the full window`,
-      advice: !c.isAuto
-        ? 'auto-compact is off'
-        : c.turnsLeft !== null
-          ? `~${c.turnsLeft} turns to auto-compact`
-          : 'auto-compact is near',
-    })
-  }
-  const k = v.cache
-  if (k.level !== 'calm') {
-    const rewrite = k.rewrite !== null ? `${kilo(k.rewrite)} tokens` : 'the whole context'
-    const ratio = `${k.isRatioFloor ? '≥' : '~'}${k.ratio}×`
-    if (k.state === 'cold') out.push({ level: k.level, head: 'Cache is cold', advice: `the next turn writes ${rewrite} again (${ratio} a warm one)` })
-    else if (k.state === 'warm' && k.leftMs !== null)
-      out.push({
-        level: k.level,
-        head: k.level === 'act' ? `Cache cools in ${mmss(k.leftMs)}` : `Cache ${mmss(k.leftMs)} left`,
-        advice: k.isRebuilt
-          ? rebuiltNote(k)
-          : `a reply now keeps it; a cold turn writes ${rewrite} again (${ratio} a warm one)`,
-      })
-  }
-  const f = v.five
-  if (f && f.level !== 'calm') {
-    const reset = f.resetInMs !== null ? `resets in ${span(f.resetInMs)}` : 'reset unknown'
-    if (f.fullAt !== null && f.resetInMs !== null && f.fullAt < v.now + f.resetInMs)
-      out.push({
-        level: 'act',
-        head: f.isPaceline ? `5h window reaches ${pct0(f.targetPct)} at ${clock(f.fullAt, v.meta)}` : `5h limit hits 100% at ${clock(f.fullAt, v.meta)}`,
-        advice: `${reset} · pace ${rate(f.ratePerHour)} vs budget ${rate(f.evenPerHour)} · hold subagents`,
-      })
-    else if (f.pct >= 70) out.push({ level: f.level, head: `5h limit ${pct0(f.pct)}`, advice: reset })
-    else out.push({ level: f.level, head: `5h pace ${rate(f.ratePerHour)}`, advice: `above the budget ${rate(f.evenPerHour)} · ${pct0(f.pct)} used, ${reset}` })
-  }
-  // A model-scoped weekly limit past calm, worded as the five-hour one; it resets on its own or the week's clock.
-  for (const b of v.scoped) {
-    if (b.level === 'calm') continue
-    const own = b.resetsAt ? Date.parse(b.resetsAt) : NaN
-    const resetAt = Number.isFinite(own) ? own : (v.week?.resetAt ?? null)
-    out.push({ level: b.level, head: `${b.name} limit ${pct0(b.percentUsed)}`, advice: resetAt !== null ? `resets in ${span(Math.max(0, resetAt - v.now))}` : 'reset unknown' })
-  }
-  return out.sort((a, b) => (a.level === b.level ? 0 : a.level === 'act' ? -1 : 1))
-}
 // Where readings run as one list (the pane, a CLI detail line) Budget follows Pace, as it stands
 // under Pace in the card's two columns.
 export const listOrder = (rows: Card['rows']) => {
@@ -393,7 +342,7 @@ const accountRows = (isUnknown: boolean): Rows => (isUnknown ? [['Account', 'unk
 function fiveCard(v: View, isRow = false): Card {
   const f = v.five
   if (!f) return { title: '5h limit', rows: [], bullets: ['No reading yet.'] }
-  const isShort = f.fullAt !== null && f.resetInMs !== null && f.fullAt < v.now + f.resetInMs
+  const isShort = f.isFilling && f.fullAt !== null
   // Where the current pace leaves the window at its reset.
   const projected = f.ratePerHour !== null && f.resetInMs !== null ? f.pct + f.ratePerHour * (f.resetInMs / HOUR_MS) : null
   const forecast: Rows =
@@ -878,6 +827,7 @@ export function readings(v: View, scope: 'row' | 'pane' = 'row'): { gauges: Gaug
     ? {
         title: displayModel(m.model),
         rows: [
+          ...(scope === 'pane' && m.account ? ([['Account', m.account]] as Rows) : []),
           ['Effort', m.effort ?? 'n/a'],
           ['Advisor', advisorOn ? advisorOn.replace(/^advisor /, '') : 'off', isInactive ? 'watch' : undefined],
           ['Claude Code', m.version],
@@ -1009,3 +959,400 @@ export function rowFit(v: View, columns: number): { style: LimitStyle; info: boo
 }
 
 export const limitStyle = (v: View, columns: number): LimitStyle => rowFit(v, columns).style
+
+// The pane: a verdict, what happens next, and the cards folded into groups. Everything below is
+// plain data; draw.tsx lays it out.
+
+// Minutes and seconds without a leading zero, as the mockups show them (4:12).
+const mss = (ms: number) => mmss(ms).replace(/^0/, '')
+
+export type PaneValue = {
+  text: string
+  // A level or `on`, or `cold` for a cold cache; `color` is a theme key that overrides it (model, effort).
+  tone?: Tone | 'cold'
+  color?: string
+}
+
+export type PaneGroup = 'limits' | 'conversation' | 'session'
+export const PANE_GROUPS: { id: PaneGroup; title: string }[] = [
+  { id: 'limits', title: 'Limits' },
+  { id: 'conversation', title: 'This conversation' },
+  { id: 'session', title: 'Session' },
+]
+
+export type PaneCard = {
+  key: string
+  group: PaneGroup
+  label: string
+  labelColor?: string
+  // A state glyph after the label: Part's sun, Context's auto-compact arrow.
+  mark?: string
+  markTone?: Tone
+  level: Level
+  // The folded line's values, in the order shown, parted by " · " where they wrap.
+  values: PaneValue[]
+  bar?: CardBar
+  // The unfolded card: every row, the advice, and the explanations behind "How it is computed".
+  rows: Card['rows']
+  advice?: string
+  explain: string[]
+}
+
+const NOT_EXPLANATION = 'Full detail: /pitboard'
+
+// A clock time, with the weekday once it is more than 18 hours away.
+const when = (at: number, v: View) => clock(at, v.meta, at - v.now > 18 * HOUR_MS)
+
+// The part's lead over what its share allows by now, as the Part card words it: from the estimate when there is one.
+const leadOf = (pm: PartModel, p: PlanView) => (pm.estimate !== null && p.allowed !== null ? pm.estimate - p.allowed : p.lead)
+
+// A pane bar takes the colour of the value beside it, its forecast the paler shade of the same.
+const withLevel = (bar: CardBar | undefined, level: Level): CardBar | undefined => (bar ? { ...bar, level } : undefined)
+
+export function paneCards(v: View, isRemote = false): PaneCard[] {
+  const { gauges, info, advisor } = readings(v, 'pane')
+  const m = v.meta
+  const out: PaneCard[] = []
+  const g = (key: string) => gauges.find(x => x.key === key)
+  const explainOf = (card: Card, extra: string[] = []) => [
+    ...card.bullets.filter(b => b !== card.advice && b !== NOT_EXPLANATION),
+    ...extra,
+    ...(isRemote ? (card.desktopBullets ?? []) : []),
+  ]
+  const f = v.five
+  const five = g('five')
+  if (five) {
+    const resetAt = f && f.resetInMs !== null ? v.now + f.resetInMs : null
+    out.push({
+      key: 'five',
+      group: 'limits',
+      label: '5h',
+      level: five.level,
+      values: f ? [{ text: pct0(f.pct), tone: five.level }, { text: resetAt !== null ? `resets ${when(resetAt, v)}` : 'reset unknown' }] : [{ text: 'no reading yet' }],
+      bar: withLevel(five.card.bar, five.level),
+      rows: five.card.rows,
+      advice: five.card.advice,
+      explain: explainOf(five.card),
+    })
+  }
+  const part = g('part')
+  const pm = partOf(v)
+  if (part && pm) {
+    const p = v.week!.plan!
+    const spent = pm.isSpentUnderOne ? '<1' : pts(pm.estimate ?? pm.spent)
+    const level = higher(pm.level, pm.isOver ? 'watch' : 'calm')
+    out.push({
+      key: 'part',
+      group: 'limits',
+      label: 'Part',
+      mark: pm.glyph,
+      markTone: level,
+      level,
+      values: [
+        { text: pm.share === null ? `${spent} pts spent` : `${spent} of ${pts(pm.share)} pts`, tone: level },
+        { text: pm.share === null ? 'no share' : `ends ${when(p.end, v)}` },
+      ],
+      bar: withLevel(part.card.bar, level),
+      rows: part.card.rows,
+      advice: part.card.advice,
+      explain: explainOf(part.card),
+    })
+  }
+  const week = g('week')
+  const w = v.week
+  if (week && w) {
+    const fc = w.forecast
+    const forecast: PaneValue | null = fc
+      ? fc.runsOutAt !== null
+        ? { text: `runs out ${when(fc.runsOutAt, v)}`, tone: 'act' }
+        : { text: `${fc.isApprox ? '≈' : '~'}${pct0(fc.atReset)} at ${w.resetAt !== null ? when(w.resetAt, v) : 'the reset'}`, tone: fc.atReset >= 80 ? 'watch' : undefined }
+      : w.resetAt !== null
+        ? { text: `resets ${when(w.resetAt, v)}` }
+        : null
+    out.push({
+      key: 'week',
+      group: 'limits',
+      label: 'Week',
+      level: w.level,
+      values: [{ text: week.value ?? '', tone: w.level }, ...(forecast ? [forecast] : [])],
+      bar: withLevel(week.card.bar, w.level),
+      rows: week.card.rows,
+      advice: week.card.advice,
+      explain: explainOf(week.card),
+    })
+  }
+  for (const sg of gauges.filter(x => x.key.startsWith('scoped-'))) {
+    const b = v.scoped.find(x => `scoped-${x.name}` === sg.key)
+    const own = b?.resetsAt ? Date.parse(b.resetsAt) : NaN
+    const resetAt = Number.isFinite(own) ? own : (w?.resetAt ?? null)
+    out.push({
+      key: sg.key,
+      group: 'limits',
+      label: sg.label,
+      level: sg.level,
+      values: [{ text: sg.value ?? '', tone: sg.level }, ...(resetAt !== null ? [{ text: `resets ${when(resetAt, v)}` }] : [])],
+      bar: withLevel({ used: Math.round(sg.pct ?? 0), tick: null, level: sg.level }, sg.level),
+      rows: sg.card.rows,
+      advice: sg.card.advice,
+      explain: explainOf(sg.card),
+    })
+  }
+  const c = v.context
+  const ctx = g('context')
+  if (ctx) {
+    out.push({
+      key: 'context',
+      group: 'conversation',
+      label: 'Context',
+      ...(c?.isAuto ? { mark: AUTO_MARK, markTone: 'on' as Tone } : {}),
+      level: ctx.level,
+      values: c
+        ? [
+            { text: pct0(c.pct), tone: c.level },
+            { text: c.isAuto ? `${kilo(Math.max(0, c.limit - c.used))} to auto-compact` : 'auto-compact off', tone: c.isAuto ? undefined : 'watch' },
+          ]
+        : [{ text: 'no response yet' }],
+      ...(c ? { bar: { used: Math.round(c.pct), tick: null, level: c.level } } : {}),
+      rows: ctx.card.rows,
+      advice: ctx.card.advice,
+      explain: explainOf(ctx.card),
+    })
+  }
+  if (advisor && m?.advisor) {
+    const view = advisorView(advisorText(m))
+    out.push({
+      key: 'advisor',
+      group: 'conversation',
+      label: 'Advisor',
+      level: 'calm',
+      values: [
+        { text: view.name ?? 'off', color: view.name ? modelColor(view.name) : undefined },
+        { text: view.isInactive ? 'inactive' : 'active', tone: view.isInactive ? 'watch' : undefined },
+      ],
+      rows: advisor.rows,
+      explain: explainOf(advisor),
+    })
+  }
+  const cacheG = g('cache')
+  if (cacheG) {
+    const k = v.cache
+    // Rounded down: "100%" claims no miss at all, so 99.6% reads 99%.
+    const hitPct = (n: number) => `${Math.floor(n)}%`
+    const hits = [k.hitLast !== null ? `${hitPct(k.hitLast)} now` : null, k.hitAvg !== null ? `${hitPct(k.hitAvg)} session` : null].filter(x => x !== null)
+    const state: PaneValue =
+      k.state === 'hot'
+        ? { text: 'replying' }
+        : k.state === 'cold'
+          ? { text: 'cold', tone: 'cold' }
+          : k.state === 'warm' && k.leftMs !== null
+            ? k.level === 'calm'
+              ? { text: `warm ${Math.floor(k.leftMs / 60_000)} min left` }
+              : { text: `cools in ${mss(k.leftMs)}`, tone: k.level }
+            : { text: 'n/a' }
+    const hit = hitCard(v)
+    out.push({
+      key: 'cache',
+      group: 'conversation',
+      label: 'Cache',
+      level: k.state === 'cold' ? 'calm' : k.level,
+      values: [state, ...(hits.length ? [{ text: `hits ${hits.join(', ')}` }] : [])],
+      rows: [...cacheG.card.rows, ['Hit, last turn', hit.rows[0]?.[1] ?? 'n/a'], ['Hit, session', hit.rows[1]?.[1] ?? 'n/a']],
+      advice: cacheG.card.advice,
+      explain: explainOf(cacheG.card, hit.bullets),
+    })
+  }
+  if (m) {
+    const model = displayModel(m.model)
+    out.push({
+      key: 'info',
+      group: 'session',
+      label: model,
+      labelColor: modelColor(model),
+      level: 'calm',
+      values: [
+        { text: m.effort ?? 'n/a', color: m.effort ? (EFFORT_COLORS[m.effort] ?? DIM) : undefined },
+        ...(m.branch ? [{ text: m.branch }] : []),
+        ...(v.elapsedMs !== null ? [{ text: span(v.elapsedMs) }] : []),
+        ...(v.costUsd !== null ? [{ text: `$${v.costUsd.toFixed(2)} at API prices` }] : []),
+      ],
+      rows: info.rows,
+      explain: explainOf(info),
+    })
+  }
+  // A gauge added to `readings` and not listed above still shows: its label, value, rows and bar. The
+  // group follows the gauge's kind (context and cache gauges are the conversation's, the rest limits).
+  // `hit` is part of the Cache card.
+  const handled = new Set(['five', 'part', 'week', 'context', 'cache', 'hit'])
+  for (const x of gauges) {
+    if (handled.has(x.key) || x.key.startsWith('scoped-')) continue
+    out.push({
+      key: x.key,
+      group: x.group === 'context' || x.group === 'cache' ? 'conversation' : 'limits',
+      label: x.label,
+      level: x.level,
+      values: [{ text: x.value ?? 'n/a', tone: x.level }],
+      bar: withLevel(x.card.bar, x.level),
+      rows: x.card.rows,
+      advice: x.card.advice,
+      explain: explainOf(x.card),
+    })
+  }
+  return out
+}
+
+export type Verdict = { level: Level; sentence: string; advice: string[]; forecast: { text: string; level: Level } | null }
+
+// The leading reading: the highest level, and among equals the limits first (5h, Part, the week, a
+// model-scoped limit), then the cache, then context.
+export function paneVerdict(v: View): Verdict {
+  type Lead = { level: Level; rank: number; sentence: string; advice: string[] }
+  const leads: Lead[] = []
+  const f = v.five
+  const pause = (ms: number | null) => (ms !== null ? ` Or pause until ${clock(v.now + ms, v.meta)}.` : '')
+  if (f && f.level !== 'calm') {
+    const spending = f.ratePerHour !== null && f.evenPerHour !== null ? `Spending ${rate(f.ratePerHour)}; ${rate(f.evenPerHour)} would last to the reset.` : null
+    if (f.isFilling && f.fullAt !== null && f.resetInMs !== null)
+      leads.push({ level: 'act', rank: 0, sentence: 'Hold subagents: the 5h window runs short.', advice: [`${spending ?? `${pct0(f.pct)} used.`}${pause(f.resetInMs)}`] })
+    else if (f.pct >= 70)
+      leads.push({ level: f.level, rank: 0, sentence: `The 5h window is ${pct0(f.pct)} used.`, advice: [f.resetInMs !== null ? `It resets in ${span(f.resetInMs)}.` : 'Its reset is unknown.'] })
+    else leads.push({ level: f.level, rank: 0, sentence: 'The 5h pace is above its budget.', advice: [spending ?? `${pct0(f.pct)} used.`] })
+  }
+  const pm = partOf(v)
+  const plan = v.week?.plan ?? null
+  if (pm && plan && pm.share !== null) {
+    const level = higher(pm.level, pm.isOver ? 'watch' : 'calm')
+    const r = plan.reserve
+    const lead = leadOf(pm, plan)
+    if (level !== 'calm') {
+      if (plan.isAbove || pm.isOver)
+        leads.push({
+          level,
+          rank: 1,
+          sentence: 'This part is over its share.',
+          advice: [`${pts(pm.estimate ?? pm.spent)} of ${pts(pm.share)} points spent${lead !== null && lead > 0 ? `, ${pts(lead)} over` : ''}.${plan.mode === 'limit' ? ' Agent launches ask first.' : ''}`],
+        })
+      else if (r.kind === 'held' && r.isStop)
+        leads.push({ level, rank: 1, sentence: 'The reserve is held: agent launches ask first.', advice: [`The week is past ${pct0(100 - r.pct)}; the reserve opens ${clock(r.releaseAt, v.meta, true)}.`] })
+    }
+  }
+  const w = v.week
+  if (w && w.level !== 'calm')
+    leads.push({ level: w.level, rank: 2, sentence: `The week is ${pct0(w.pct)} used.`, advice: [`Save it for work that needs it${w.resetAt !== null ? `; it resets ${clock(w.resetAt, v.meta, true)}` : ''}.`] })
+  for (const b of v.scoped)
+    if (b.level !== 'calm') leads.push({ level: b.level, rank: 3, sentence: `${b.name} is ${pct0(b.percentUsed)} used this week.`, advice: [`Switch model for work that does not need ${b.name}.`] })
+  const k = v.cache
+  if (k.level !== 'calm') {
+    const rewrite = k.rewrite !== null ? `${kilo(k.rewrite)} tokens` : 'the whole context'
+    const ratio = `${k.isRatioFloor ? '≥' : '~'}${k.ratio}×`
+    if (k.state === 'cold') leads.push({ level: k.level, rank: 4, sentence: 'The cache is cold.', advice: [`The next turn writes ${rewrite} again (${ratio} a warm one).`] })
+    else if (k.state === 'warm' && k.leftMs !== null)
+      leads.push({
+        level: k.level,
+        rank: 4,
+        sentence: k.level === 'act' ? `The cache cools in ${mss(k.leftMs)}.` : `The cache has ${mss(k.leftMs)} left.`,
+        advice: [`Reply now to keep it; a cold turn writes ${rewrite} again (${ratio} a warm one).`],
+      })
+  }
+  const c = v.context
+  if (c && c.level !== 'calm')
+    leads.push({
+      level: c.level,
+      rank: 5,
+      sentence: `Context is at ${pct0(c.pct)}${c.isAuto ? '' : ' of the full window'}.`,
+      advice: [!c.isAuto ? 'Auto-compact is off: nothing compacts it by itself.' : c.turnsLeft !== null ? `About ${c.turnsLeft} ${c.turnsLeft === 1 ? 'turn' : 'turns'} to auto-compact.` : 'Auto-compact is near.'],
+    })
+  const fc = w?.forecast ?? null
+  const forecast =
+    !w || !fc
+      ? null
+      : fc.runsOutAt !== null
+        ? { level: 'act' as Level, text: `The week runs out at ${clock(fc.runsOutAt, v.meta, true)} at its average pace.` }
+        : {
+            level: (fc.atReset >= 80 ? 'watch' : 'calm') as Level,
+            text: `The week heads to ${fc.isApprox ? '≈' : '~'}${pct0(fc.atReset)}${w.resetAt !== null ? ` by ${clock(w.resetAt, v.meta, true)}` : ''} at its average pace.${fc.isApprox && w.resetAt !== null ? ` Rough until ${clock(w.resetAt - WEEK_MS + 48 * HOUR_MS, v.meta, true)}.` : ''}`,
+          }
+  const lead = leads.sort((a, b) => (a.level === b.level ? a.rank - b.rank : a.level === 'act' ? -1 : 1))[0]
+  if (lead) return { level: lead.level, sentence: lead.sentence, advice: lead.advice, forecast }
+  const advice: string[] = []
+  if (pm && plan && pm.share !== null) {
+    const lead = leadOf(pm, plan)
+    const spare = lead !== null && lead < 0 ? `, ${Math.round(-lead)} to spare` : ''
+    // A part with no share (off hours) has no plan to be on: say when the next share starts.
+    if (pm.share === 0) advice.push(`No share planned for this part; it ends at ${clock(plan.end, v.meta)}.`)
+    else advice.push(`This part is on plan: ${pm.isSpentUnderOne ? '<1' : pts(pm.estimate ?? pm.spent)} of ${pts(pm.share)} points spent${spare}.`)
+  } else {
+    // The week's figure is the Week card's own value, so the advice and the folded line agree.
+    const weekValue = w ? readings(v, 'pane').gauges.find(x => x.key === 'week')?.value : undefined
+    const figures = [f ? `5h at ${pct0(f.pct)}` : null, weekValue ? `week at ${weekValue}` : null].filter(x => x !== null)
+    if (figures.length) advice.push(`${figures.join(', ')}.`.replace(/^./, x => x.toUpperCase()))
+  }
+  return { level: 'calm', sentence: f || w ? 'Limits hold to their resets.' : 'Nothing needs you.', advice, forecast }
+}
+
+// One thing that happens next: a clock time, or a count (`~9 turns`) that has none.
+export type PaneEvent = { at: number | null; when: string; what: string; why: string; level: Level }
+
+// The events of the current 5h window in time order, every amber or red one wherever it falls, and at most
+// three grey ones; the count-based one follows the timed ones.
+export function paneNext(v: View): PaneEvent[] {
+  const events: PaneEvent[] = []
+  const f = v.five
+  const windowEnd = f && f.resetInMs !== null ? v.now + f.resetInMs : v.now + 5 * HOUR_MS
+  const add = (at: number, what: string, why: string, level: Level) => events.push({ at, when: at <= v.now ? 'now' : when(at, v), what, why, level })
+  const k = v.cache
+  const rewrite = k.rewrite !== null ? kilo(k.rewrite) : 'the whole context'
+  const ratio = `${k.isRatioFloor ? '≥' : '~'}${k.ratio}×`
+  if (k.state === 'warm' && k.leftMs !== null)
+    add(
+      v.now + k.leftMs,
+      k.level === 'calm' ? 'Cache cools' : `Cache cools in ${mss(k.leftMs)}`,
+      k.level === 'calm' ? `unless a reply comes first; a cold turn writes ${rewrite} again (${ratio})` : `a reply now keeps it; a cold turn writes ${rewrite} again (${ratio})`,
+      k.level,
+    )
+  else if (k.state === 'cold' && k.level !== 'calm') add(v.now, 'Cache is cold', `the next turn writes ${rewrite} again (${ratio})`, k.level)
+  if (f) {
+    const resetAt = f.resetInMs !== null ? v.now + f.resetInMs : null
+    if (f.isFilling && f.fullAt !== null && resetAt !== null)
+      add(f.fullAt, f.isPaceline ? `5h reaches ${pct0(f.targetPct)}` : '5h hits 100%', `at the current pace, ${span(resetAt - f.fullAt)} before the reset`, f.level)
+    if (resetAt !== null) {
+      const projected = f.ratePerHour !== null ? Math.min(100, Math.round(f.pct + f.ratePerHour * (f.resetInMs! / HOUR_MS))) : null
+      // An earlier entry that says the window fills before the reset leaves nothing to add here.
+      const isFilling = f.isFilling && f.fullAt !== null
+      add(resetAt, '5h window resets', !isFilling ? `at ~${projected ?? Math.round(f.pct)}% used` : '', 'calm')
+    }
+  }
+  const pm = partOf(v)
+  const plan = v.week?.plan
+  if (pm && plan && pm.share !== null) {
+    const level = higher(pm.level, pm.isOver ? 'watch' : 'calm')
+    const lead = leadOf(pm, plan)
+    const over = lead !== null && lead > 0
+    // Under one point the pane says "<1", as the card does.
+    const atEnd = pm.atEnd === null ? '' : pm.atEnd === 0 ? '0' : pm.atEnd < 1 ? '<1' : `~${pts(pm.atEnd)}`
+    add(
+      plan.end,
+      'This part ends',
+      pm.atEnd === null || (pm.share === 0 && level === 'calm')
+        ? ''
+        : level === 'calm'
+          ? `at ${atEnd} of its ${pts(pm.share)} points`
+          : `heading for ${atEnd} of ${pts(pm.share)} points${over ? `; already ${pts(lead!)} over` : ''}${plan.mode === 'limit' ? ', so agent launches ask first' : ''}`,
+      level,
+    )
+  }
+  const w = v.week
+  if (w && w.level !== 'calm' && w.resetAt !== null) add(w.resetAt, 'Week resets', `at ${pct0(w.pct)} used`, w.level)
+  for (const b of v.scoped) {
+    if (b.level === 'calm') continue
+    const own = b.resetsAt ? Date.parse(b.resetsAt) : NaN
+    const at = Number.isFinite(own) ? own : (w?.resetAt ?? null)
+    if (at !== null) add(at, `${b.name} limit resets`, `${pct0(b.percentUsed)} used; switch model for work that does not need ${b.name}`, b.level)
+  }
+  const inWindow = events.filter(e => e.level !== 'calm' || (e.at !== null && e.at <= windowEnd))
+  const grey = new Set(inWindow.filter(e => e.level === 'calm').sort((a, b) => (a.at ?? 0) - (b.at ?? 0)).slice(0, 3))
+  const kept = inWindow.filter(e => e.level !== 'calm' || grey.has(e)).sort((a, b) => (a.at ?? 0) - (b.at ?? 0))
+  const c = v.context
+  if (c && c.level !== 'calm' && c.isAuto)
+    kept.push({ at: null, when: c.turnsLeft !== null ? `~${c.turnsLeft} ${c.turnsLeft === 1 ? 'turn' : 'turns'}` : 'soon', what: 'Auto-compact', why: `context at ${pct0(c.pct)}`, level: c.level })
+  return kept
+}

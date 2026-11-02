@@ -45,6 +45,8 @@ export type StatusMeta = {
   version: string
   startedAt: number
   turns: number
+  // The signed-in account's e-mail, so two sessions on different accounts can be told apart; null when unknown.
+  account?: string | null
 }
 
 // One reading of a limit window (five-hour or weekly), for its burn rate.
@@ -136,6 +138,9 @@ declare module 'claude-code' {
       advisorPick: { value: string | null; before?: string | null } | null
       // True while the /pitboard pane is placed: the desktop row then leaves its cards to the pane.
       paneOpen: boolean
+      // The pane's unfolded cards and the cards whose explanations are open; both empty again when the pane closes.
+      paneUnfolded: string[]
+      paneHow: string[]
       // The buttons other plugins added, in the order added.
       buttons: PitboardButton[]
     }

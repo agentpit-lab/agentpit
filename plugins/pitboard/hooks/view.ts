@@ -48,6 +48,9 @@ export type FiveView = {
   targetPct: number
   // True when the rate, budget and time come from paceline's five-hour burn snapshot.
   isPaceline: boolean
+  // The window fills before its reset: the one test the level, the card, the verdict and Next share.
+  // On paceline's snapshot it is the snapshot's `limited`; otherwise the projection at the current pace.
+  isFilling: boolean
 }
 
 export type WeekView = {
@@ -497,7 +500,8 @@ function fiveView(limit: StatusLimit | undefined, isExact: boolean, samples: Sta
     age <= BURN_MAX_AGE_MS
   ) {
     const thresholdAt = burn.threshold_at ? Date.parse(burn.threshold_at) : NaN
-    const level: Level = limit.percentUsed >= 90 || burn.limited ? 'act' : limit.percentUsed >= 70 ? 'watch' : 'calm'
+    const isFilling = burn.limited
+    const level: Level = limit.percentUsed >= 90 || isFilling ? 'act' : limit.percentUsed >= 70 ? 'watch' : 'calm'
     return {
       pct: limit.percentUsed,
       resetInMs,
@@ -508,6 +512,7 @@ function fiveView(limit: StatusLimit | undefined, isExact: boolean, samples: Sta
       level,
       targetPct: burn.threshold_pct,
       isPaceline: true,
+      isFilling,
     }
   }
   const ratePerHour = burnRate(limit.percentUsed, limit.resetsAt, samples, now, 90 * 60_000, 10 * 60_000)
@@ -520,7 +525,7 @@ function fiveView(limit: StatusLimit | undefined, isExact: boolean, samples: Sta
       : limit.percentUsed >= 70 || (ratePerHour !== null && evenPerHour !== null && ratePerHour > evenPerHour)
         ? 'watch'
         : 'calm'
-  return { pct: limit.percentUsed, resetInMs, ratePerHour, evenPerHour, fullAt, isExact, level, targetPct: 100, isPaceline: false }
+  return { pct: limit.percentUsed, resetInMs, ratePerHour, evenPerHour, fullAt, isExact, level, targetPct: 100, isPaceline: false, isFilling: isBeforeReset }
 }
 
 // The weekly percentage moves in whole points, so its burn needs a longer look-back than the

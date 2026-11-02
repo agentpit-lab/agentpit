@@ -889,13 +889,13 @@ Spare or Overspent (points) = |spent - allowed|, Overspent when spent &gt; allow
           <tr><td><span class="sw on" data-text="skip" aria-hidden="true"></span>Green</td><td>A state that is on and fine: auto-compact on.</td></tr>
         </tbody>
       </table></div>
-      <p>Model and effort colours name a model or an effort level and carry no state. In the CLI detail line, the model name, the advisor&#x27;s model and the effort level take a theme colour by hue; the CLI row colours the advisor&#x27;s model the same way, and the pane colours the model name beside Session. Desktop colours only the advisor&#x27;s model name, in the row&#x27;s Advisor group, with fixed hex; its model and effort sit in Desktop&#x27;s own footer, which PitBoard does not colour. An advisor model of no known family is drawn in sand italics in Desktop, and an inactive advisor is dimmed and struck through in Desktop and in the terminal.</p>
+      <p>Model and effort colours name a model or an effort level and carry no state. In the CLI detail line, the model name, the advisor&#x27;s model and the effort level take a theme colour by hue; the CLI row colours the advisor&#x27;s model the same way, and the pane colours the model name that is the Session card&#x27;s label. Desktop colours only the advisor&#x27;s model name, in the row&#x27;s Advisor group, with fixed hex; its model and effort sit in Desktop&#x27;s own footer, which PitBoard does not colour. An advisor model of no known family is drawn in sand italics in Desktop, and an inactive advisor is dimmed and struck through in Desktop and in the terminal.</p>
       <p>A model name is matched against these families without regard to case, and the first family in table order wins. A name that matches none of them takes the last row.</p>
       <div class="table-wrap"><table><thead><tr><th scope="col">Model match</th><th scope="col">CLI theme key</th><th scope="col">Desktop</th></tr></thead><tbody><tr><td><code>opus</code></td><td><span class="sw" data-text="skip" aria-hidden="true" style="background:var(--term-autoAccept)"></span><code>autoAccept</code></td><td><span class="sw" data-text="skip" aria-hidden="true" style="background:#d787ff"></span><code>#d787ff</code></td></tr><tr><td><code>sonnet</code></td><td><span class="sw" data-text="skip" aria-hidden="true" style="background:var(--term-suggestion)"></span><code>suggestion</code></td><td><span class="sw" data-text="skip" aria-hidden="true" style="background:#5fafff"></span><code>#5fafff</code></td></tr><tr><td><code>fable</code></td><td><span class="sw" data-text="skip" aria-hidden="true" style="background:var(--term-bashBorder)"></span><code>bashBorder</code></td><td><span class="sw" data-text="skip" aria-hidden="true" style="background:#ff87d7"></span><code>#ff87d7</code></td></tr><tr><td><code>haiku</code></td><td><span class="sw" data-text="skip" aria-hidden="true" style="background:var(--term-success)"></span><code>success</code></td><td><span class="sw" data-text="skip" aria-hidden="true" style="background:#87d7af"></span><code>#87d7af</code></td></tr><tr><td>any other name</td><td><span class="sw" data-text="skip" aria-hidden="true" style="background:var(--term-text)"></span><code>text</code></td><td><span class="sw" data-text="skip" aria-hidden="true" style="background:#b8925a"></span><code>#b8925a</code></td></tr></tbody></table></div>
       <p>An effort level takes a theme colour in the terminal. Desktop does not colour it.</p>
       <div class="table-wrap"><table><thead><tr><th scope="col">Effort</th><th scope="col">CLI theme key</th></tr></thead><tbody><tr><td><code>low</code></td><td><span class="sw" data-text="skip" aria-hidden="true" style="background:var(--term-warning)"></span><code>warning</code></td></tr><tr><td><code>medium</code></td><td><span class="sw" data-text="skip" aria-hidden="true" style="background:var(--term-success)"></span><code>success</code></td></tr><tr><td><code>high</code></td><td><span class="sw" data-text="skip" aria-hidden="true" style="background:var(--term-suggestion)"></span><code>suggestion</code></td></tr><tr><td><code>xhigh</code></td><td><span class="sw" data-text="skip" aria-hidden="true" style="background:var(--term-autoAccept)"></span><code>autoAccept</code></td></tr><tr><td><code>max</code></td><td><span class="sw" data-text="skip" aria-hidden="true" style="background:var(--term-error)"></span><code>error</code></td></tr></tbody></table></div>
       <p>The terminal row, its detail line and the <code>/pitboard</code> pane draw in Claude Code&#x27;s theme colours, so they follow a light or a dark theme: values in the theme&#x27;s <code>text</code>, names, separators and rules in <code>inactive</code>, watch in <code>warning</code>, act in <code>error</code>, a cold cache in <code>planMode</code> (teal), and auto-compact on in <code>success</code>. Every text colour reaches a 4.5:1 contrast on Claude Code&#x27;s light and dark themes, except on the light theme Sonnet and effort high (<code>suggestion</code>, 4.4:1) and Fable (<code>bashBorder</code>, 3.7:1). The Desktop row and cards keep their own fixed colours.</p>
-      <p>The five-hour limit turns red when its Pace is above its Budget. Budget is the pace that lasts exactly to the reset, so a higher Pace reaches 100% before the reset: the same condition as Runs out. The row also turns red from 90% used and amber from 70%. With PaceLine&#x27;s projection (see <a href="#budget-at-reset-runs-out">Budget, At reset, Runs out</a>), the five-hour limit turns red when PaceLine reports that the window would reach its threshold before the reset, and Pace above Budget alone does not colour it.</p>
+      <p>The five-hour limit turns red when its Pace is above its Budget, and from 90% used; it turns amber from 70%. Budget is the pace that lasts exactly to the reset, so a higher Pace reaches 100% before the reset: the same condition as Runs out. With PaceLine&#x27;s projection (see <a href="#budget-at-reset-runs-out">Budget, At reset, Runs out</a>), the limit turns red from 90% used, or while PaceLine&#x27;s burn file marks the window <code>limited</code>: the window would reach PaceLine&#x27;s threshold before the reset, and PaceLine&#x27;s limit data is at most 30 minutes old. PitBoard reads the burn file only while it is at most 3 minutes old; an older file is ignored, and the pane uses its own Pace and Budget. The pane&#x27;s verdict, its Next entry and the card follow that same rule, so they turn red together, and never on stale data.</p>
       <p>The weekly limit and the model-scoped limits take their colour on the row from the percentage used only: amber from 80%, red from 95%. Inside the Week card, <code>At reset</code> is amber from 80% and <code>Runs out</code> is red.</p>
       <p>With PaceLine&#x27;s week plan the Part block is coloured by the plan. It is amber in <code>inform</code> mode and red in <code>limit</code> mode while the part is above its share, past the 1-point tolerance, and <code>Overspent</code> takes the same colour only then. <code>Pace</code> above <code>Budget</code> and <code>At part end</code> above the share are amber. <code>Reserve</code> turns red when the week&#x27;s usage reaches 100% minus the reserve before the release. The week&#x27;s gauge on the row and the Week card&#x27;s title take the highest level of the percentage, the part against its share and <code>Reserve</code>, so a red plan shows on the row without opening the card.</p>
       <p>Where each reading turns amber (watch) and red (act). The <a href="reference.html#levels">reference</a> lists the same values with the rules that add to them.</p>
@@ -904,9 +904,9 @@ Spare or Overspent (points) = |spent - allowed|, Overspent when spent &gt; allow
     </section>
   </main>
 </div>
-<script type="application/json" id="pb-strings">{"budget-at-reset-runs-out.heading":"Budget, At reset, Runs out","budget-at-reset-runs-out.li1":"Budget is the pace that spends exactly what is left by the reset.","budget-at-reset-runs-out.li2":"At reset is where the current Pace leaves the five-hour window at its reset.","budget-at-reset-runs-out.li3":"Runs out replaces At reset when the limit reaches 100% before the reset.","budget-at-reset-runs-out.li4":"Threshold replaces Runs out when PaceLine supplies its projection: it is the clock time the five-hour limit reaches PaceLine's threshold, 95% by default, in working hours and off-hours alike, at the current Pace.","budget-at-reset-runs-out.p1":"PitBoard takes the projection from PaceLine's five-hour burn file of the signed-in account, `five-hour-burn-<key>.json` (see [the file's format](root:plugins/paceline/docs/reference.html#the-five-hour-burn-file-for-readers)), only while all of these hold: the five-hour limit is below the file's threshold; the file is at most 3 minutes old; its account is the signed-in account; its reset is the window's reset; and its percentage used is the percentage on the row. Pace is then the file's rate, and Budget is the pace that reaches the threshold exactly at the reset. In every other case, including PaceLine off or pace off, PitBoard projects from its own readings to 100% and shows Runs out. Under 15 minutes to the reset the budget would be a rate of no use, so Budget reads `n/a (under 15 min left)` and the burn file carries `null` for it.","colours.cell1":"None (grey)","colours.cell10":"A state that is on and fine: auto-compact on.","colours.cell2":"Nothing to do. Good values stay grey too.","colours.cell3":"Amber","colours.cell4":"Watch: worth a glance.","colours.cell5":"Red","colours.cell6":"Act: changes what to do next.","colours.cell7":"Blue (teal in the terminal)","colours.cell8":"A cold cache: lost, and no longer urgent.","colours.cell9":"Green","colours.efforts":"An effort level takes a theme colour in the terminal. Desktop does not colour it.","colours.heading":"Colours","colours.levels":"Where each reading turns amber (watch) and red (act). The [reference](reference.html#levels) lists the same values with the rules that add to them.","colours.models":"A model name is matched against these families without regard to case, and the first family in table order wins. A name that matches none of them takes the last row.","colours.p1":"A colour means the same on every surface: the CLI row and detail line, the Desktop row and cards, and the `/pitboard` pane.","colours.p2":"Model and effort colours name a model or an effort level and carry no state. In the CLI detail line, the model name, the advisor's model and the effort level take a theme colour by hue; the CLI row colours the advisor's model the same way, and the pane colours the model name beside Session. Desktop colours only the advisor's model name, in the row's Advisor group, with fixed hex; its model and effort sit in Desktop's own footer, which PitBoard does not colour. An advisor model of no known family is drawn in sand italics in Desktop, and an inactive advisor is dimmed and struck through in Desktop and in the terminal.","colours.p3":"The terminal row, its detail line and the `/pitboard` pane draw in Claude Code's theme colours, so they follow a light or a dark theme: values in the theme's `text`, names, separators and rules in `inactive`, watch in `warning`, act in `error`, a cold cache in `planMode` (teal), and auto-compact on in `success`. Every text colour reaches a 4.5:1 contrast on Claude Code's light and dark themes, except on the light theme Sonnet and effort high (`suggestion`, 4.4:1) and Fable (`bashBorder`, 3.7:1). The Desktop row and cards keep their own fixed colours.","colours.p4":"The five-hour limit turns red when its Pace is above its Budget. Budget is the pace that lasts exactly to the reset, so a higher Pace reaches 100% before the reset: the same condition as Runs out. The row also turns red from 90% used and amber from 70%. With PaceLine's projection (see [Budget, At reset, Runs out](#budget-at-reset-runs-out)), the five-hour limit turns red when PaceLine reports that the window would reach its threshold before the reset, and Pace above Budget alone does not colour it.","colours.p5":"The weekly limit and the model-scoped limits take their colour on the row from the percentage used only: amber from 80%, red from 95%. Inside the Week card, `At reset` is amber from 80% and `Runs out` is red.","colours.p6":"With PaceLine's week plan the Part block is coloured by the plan. It is amber in `inform` mode and red in `limit` mode while the part is above its share, past the 1-point tolerance, and `Overspent` takes the same colour only then. `Pace` above `Budget` and `At part end` above the share are amber. `Reserve` turns red when the week's usage reaches 100% minus the reserve before the release. The week's gauge on the row and the Week card's title take the highest level of the percentage, the part against its share and `Reserve`, so a red plan shows on the row without opening the card.","colours.th1":"Colour","colours.th2":"Meaning","context-and-cache.heading":"Context and cache","context-and-cache.li1":"`Ctx` is the context's tokens divided by the compaction point while auto-compact is on, or by the full window while it is off, capped at 100%.","context-and-cache.li2":"`Turns left` divides what is left before compaction by the average growth of up to the last five turns that grew the context. It needs at least two of them. A drop in the context is a compaction and starts the series over.","context-and-cache.li3":"The cache countdown is the start of the last request plus the TTL, one hour or five minutes, less a 5-second margin. Until a cache write shows the TTL, PitBoard assumes five minutes. The hooks report how many tokens a request wrote to the cache but not their TTL, so after a request that writes the cache while the TTL is unknown, PitBoard reads the transcript again every 2 seconds, up to five times.","context-and-cache.li4":"`If cold` uses the price ratio of a cache write to a cache read. A write costs 1.25 times the input price with a five-minute TTL and 2 times with a one-hour TTL. A read costs 0.05 times on Opus 5.5 and Sonnet 5.5, 0.025 times on Fable 5.1 and Mythos 5.1, and 0.1 times on other models ([Anthropic's prices, prompt caching](https://platform.claude.com/docs/en/about-claude/pricing#prompt-caching), read 2026-10-15). With a one-hour TTL a cold turn therefore costs about 40 times a warm one on Opus 5.5 and Sonnet 5.5, and 80 times on Fable 5.1 and Mythos 5.1; with five minutes, 25 and 50 times. On another model PitBoard divides by the 0.1 read price and marks the result `≥`: at least 20 or 12.5 times.","context-and-cache.li5":"`Hit` is cache reads divided by reads plus writes.","context-and-cache.li6":"`/compact` sends a separate request with the same prefix as the conversation. While the cache is warm it reads that prefix from the cache; after a break longer than the TTL it processes the whole history as uncached input, so it costs the most when an old session is resumed ([Claude Code, prompt caching](https://code.claude.com/docs/en/prompt-caching#compacting-the-conversation), read 2026-10-15).","context-and-cache.li7":"Claude Code can compact a long idle conversation shortly before its one-hour cache expires, and the next message then sends a summary. By default it does so in an interactive terminal session when the context is at or above a threshold, 200,000 tokens unless `CLAUDE_CODE_IDLE_COMPACT_MIN_TOKENS` sets it (the minimum is 100,000), about 54 minutes after the last request ([Claude Code, settings reference](https://code.claude.com/docs/en/settings-reference#idlecompaction), read 2026-10-15). While that is expected, the row shows `ᶻ` after the `↻` mark in the terminal, and a drawn pair of z letters, the usual sleep sign, in Desktop. The setting `idleCompaction` (Claude Code v2.1.290 or later; an earlier version ignores it), the variable `DISABLE_AUTO_COMPACT` and turning auto-compact off turn it off. PitBoard checks the setting, the variable, auto-compact, the one-hour TTL and the context size. It cannot see the feature flag Claude Code also consults, and it does not check the surface. The mark therefore shows that idle compaction is expected.","context-and-cache.li8":"The `Idle compact` row of the Ctx card reads `on · from 200k` when every condition PitBoard can see holds (the figure is the threshold), `on · below 200k (156k)` when idle compaction is on but the context, here 156k, is under the threshold, `off` when the setting, the variable or auto-compact turns it off, and `n/a` when the cache is not on a one-hour TTL or the TTL is not known yet. The mark shows only for `on`.","explorer.five":"5h limit","explorer.h":"h","explorer.hours":"Hours to reset","explorer.kind":"Limit","explorer.pace":"Pace","explorer.result":"What the card shows","explorer.used":"Used","explorer.week":"Week","fig-fresh.axis":"seconds","fig-fresh.caption":"How often each part of the row refreshes, over one minute","fig-fresh.s1":"A model request arrives at no fixed time; each one refreshes context, the cache countdown, `Hit` and effort.","fig-fresh.s2":"A turn ends after one or more requests; each completed turn refreshes limits, cost, model, branch, the `/context` breakdown, the limits file and the transcript.","fig-fresh.s3":"Every 20 seconds PitBoard reads the limits file and `advisorModel` in `settings.json` again.","fig-fresh.s4":"Every second the clock behind countdowns, Pace and time to reset moves on.","fig-sources.caption":"Where the numbers come from","fig-sources.cc":"Claude Code: each request and each turn","fig-sources.cli":"CLI row","fig-sources.ctx":"/context breakdown","fig-sources.desk":"Desktop row and cards","fig-sources.file":"PaceLine limits file and history","fig-sources.pane":"/pitboard pane","fig-sources.s1":"Claude Code reports usage to the view with each request and each turn.","fig-sources.s2":"The view also reads the `/context` breakdown, the session transcript and `settings.json`.","fig-sources.s3":"It reads PaceLine's limits file and history too.","fig-sources.s4":"From these the view draws the CLI row, the Desktop row and cards, and the `/pitboard` pane.","fig-sources.set":"settings.json","fig-sources.tr":"Session transcript","fig-sources.view":"PitBoard view","how-fresh-the-numbers-are.cell1":"Each model request","how-fresh-the-numbers-are.cell2":"Context, the cache countdown, `Hit`, effort","how-fresh-the-numbers-are.cell3":"Each completed turn","how-fresh-the-numbers-are.cell4":"Limits, cost, model, branch, the `/context` breakdown, the limits file, the transcript","how-fresh-the-numbers-are.cell5":"Every 20 seconds","how-fresh-the-numbers-are.cell6":"The limits file and `advisorModel` in `settings.json`","how-fresh-the-numbers-are.cell7":"Every second","how-fresh-the-numbers-are.cell8":"The clock behind countdowns, Pace, and time to reset","how-fresh-the-numbers-are.heading":"How fresh the numbers are","how-fresh-the-numbers-are.p1":"A limit reading moves only while some session makes requests, because Claude Code reports limits after each one. With every session idle, the five-hour and weekly readings stand still, unless PaceLine's usage-watch is on. An idle session sees a reading from another session up to about 20 seconds after PaceLine has written it to the file. A model switch, or an auto-compact change in `/config`, shows after the next completed turn.","how-fresh-the-numbers-are.p2":"The Desktop row redraws only when what it shows changes. A card's paces and times are taken at the start of the minute, so a card can lag by up to a minute.","how-fresh-the-numbers-are.th1":"Event","how-fresh-the-numbers-are.th2":"What PitBoard refreshes","how-the-row-combines-the-file-with-its-own-session.heading":"How the row combines the file with its own session","how-the-row-combines-the-file-with-its-own-session.li1":"A later window wins, even with a lower reading.","how-the-row-combines-the-file-with-its-own-session.li2":"Within one window the higher reading wins, since a lower one can only be an older observation. On a tie the file's reading wins.","how-the-row-combines-the-file-with-its-own-session.li3":"A file reading observed more than 5 minutes ahead of the clock, or with a window that ends later than its length allows (5 hours or 7 days, plus 5 minutes), counts as absent.","how-the-row-combines-the-file-with-its-own-session.li4":"A window whose reset has passed reads 0%. The weekly window moves its reset forward by a week; the five-hour window has no known reset until a reading from the next window arrives.","how-the-row-combines-the-file-with-its-own-session.p1":"PitBoard groups readings by window, by the reset time rounded to the minute:","intro.p1":"Where PitBoard's numbers come from, how fresh they are, and how it computes Pace, Budget, and the rest. For the list of readings and thresholds, see the [reference](reference.html).","lang_en":"En","lang_label":"Language","lang_uk":"Uk","level_cache_1h_minutes_left":"Cache (1h), minutes left","level_cache_5m_minutes_left":"Cache (5m), minutes left","level_context_pct":"Context, % of the compaction point","level_five_hour_pct":"5h limit, % used","level_week_pct":"Week, % used","levels_act":"Act","levels_aria_down":"{name}: watch below {watch}, act below {act}","levels_aria_up":"{name}: watch from {watch}, act from {act}","levels_calm":"Calm","levels_unit_min":"min","levels_watch":"Watch","model-scoped-limits.heading":"Model-scoped limits","model-scoped-limits.li1":"The newest exact five-hour or weekly reading in the file is at most 15 minutes old.","model-scoped-limits.li2":"The week they were read in has not reset.","model-scoped-limits.p1":"The model-scoped weekly limits, such as `Fable`, exist only in the limits file. PaceLine's usage-watch writes them with each exact reading of the account's usage, tagged `\"source\": \"usage-endpoint\"`. PitBoard shows them while both hold:","model-scoped-limits.p2":"With usage-watch off, the file has no model-scoped limits and the row shows none.","nav_label":"Explanation","pace.cell1":"Five-hour","pace.cell2":"The last 90 minutes","pace.cell3":"10 minutes of readings in this window","pace.cell4":"Weekly","pace.cell5":"The last 6 hours","pace.cell6":"1 hour of readings in this window","pace.heading":"Pace","pace.p1":"Pace is how fast a limit is spent now, in percent per hour. PitBoard keeps a reading only when the percentage changes, so each reading holds until the next one. Pace runs from the value held at the start of a look-back span to the value now, and a flat stretch counts as time at zero. Pace is never negative.","pace.p2":"The weekly percentage moves in whole points, so its Pace needs a longer look-back. When the window started inside the look-back, Pace runs from the window's first reading. Until the minimum span has passed, Pace reads `n/a (needs 10 min)` or `n/a (needs 1 h)`.","pace.th1":"Limit","pace.th2":"Look-back","pace.th3":"Minimum span before Pace shows","series_label":"pages in this series","the-even-pace-tick-week-elapsed-spare-and-overspent.heading":"The even-pace tick, Week elapsed, Spare and Overspent","the-even-pace-tick-week-elapsed-spare-and-overspent.p1":"The tick on a limit's bar stands at the share of the window gone: `1 - time to reset / window length`, with a window of 5 hours or 7 days. For the week, the card calls this share Week elapsed.","the-even-pace-tick-week-elapsed-spare-and-overspent.p2":"The Week card compares nothing against an even pace: `Week elapsed` is the tick's share, `Pace` is the average rate since the reset, and `At reset` or `Runs out` is where that rate leads. `Spare` and `Overspent` belong to the Part card, which measures spending against the part's share; without a plan the week has neither.","the-even-pace-tick-week-elapsed-spare-and-overspent.p3":"With PaceLine's plan, the row gains the Part block, whose card measures the current part against its share. PitBoard uses PaceLine's week plan file only when all four hold: the file is readable and its version is one PitBoard knows; it is the signed-in account's and its week is the card's week (the reset within 10 minutes); PaceLine did not write it more than 5 minutes ahead of the clock; and its current part holds the present time. Otherwise there is no Part block, and so it is with pace off, with no file, or for about 40 seconds after a part ends, or after a weekly window that resets ahead of schedule or whose reset moves later, until PaceLine writes the next (see the limitation). A part with no share shows the block only once at least 1 point of the week was spent in it.","the-even-pace-tick-week-elapsed-spare-and-overspent.p4":"Spare, Overspent and the part's level follow PaceLine's own rule, on the part the file holds. `used` is the week's percentage, `share` the part's share of the week and `used at start` the week's usage when the part began:","the-even-pace-tick-week-elapsed-spare-and-overspent.p5":"The Part gauge's tick stands at the share of the part's time gone and its fill is the points spent over the share. The part is above its share only past the 1-point tolerance, so an overspend of up to 1 point shows no colour. A part with no share has no `Spare`, `Overspent`, tick or forecast: its gauge reads the points spent over `-`, with an empty bar.","the-even-pace-tick-week-elapsed-spare-and-overspent.p6":"`Pace` on the Part card is the part's average since its start, from 15 minutes into the part; before that the card reads `Forecast` with the time it starts. Under one point spent it reads as a bound with `<`. `Budget` is what is left of the part's share over the hours left in the part, at most what the five-hour limit can spend in an hour in weekly points. The effective mode is `limit` unless PaceLine's `inform_until` is still ahead, when it is `inform`.","the-formulas.heading":"The formulas","theme_dark":"Dark","theme_label":"Page theme","theme_light":"Light","theme_system":"System","title":"How PitBoard works","toc_label":"Sections","try-the-formulas.heading":"Try the formulas","try-the-formulas.p1":"With scripts on, the sliders below run PitBoard's own code on a limit and show what its card reads. They give the numbers the formulas above give.","try-the-formulas.p2":"For example, at 40% [**Used**](term:Used) with 3 hours to reset, a [**Pace**](term:Pace) of 10%/h gives a [**Budget**](term:Budget) of 20%/h and an [**At reset**](term:At reset) of about 70%, and a [**Pace**](term:Pace) of 20%/h gives an [**At reset**](term:At reset) of about 100%. The [**Pace**](term:Pace) slider stops at the fastest [**Pace**](term:Pace) the readings behind it can show: the used share spent over the minimum span, 10 minutes for the five-hour limit and 1 hour for the week, and never above 40%/h for the five-hour limit or 5%/h for the week. While a window has run for less than that minimum span (5 hours to reset on the five-hour limit, 168 hours on the week), PitBoard has no [**Pace**](term:Pace) to show and the card reads n/a. Clock times are in your time zone, counted from the moment you opened the page.","what-pitboard-cannot-see.heading":"What PitBoard cannot see","what-pitboard-cannot-see.p1":"The [limitations](limitations.html#data-pitboard-cannot-see) list what PitBoard cannot see, with every other limitation of PitBoard.","where-the-numbers-come-from.cell1":"Context","where-the-numbers-come-from.cell10":"The session's own requests. The countdown runs from the start of the last one.","where-the-numbers-come-from.cell11":"`Session` hits, the TTL","where-the-numbers-come-from.cell12":"The session transcript since the last compaction.","where-the-numbers-come-from.cell13":"Model, effort, Claude Code version, turns, session time","where-the-numbers-come-from.cell14":"Claude Code. Until a request reports the effort, it comes from `modelSettings` or `effortLevel` in the settings. `/effort` in this session shows at once.","where-the-numbers-come-from.cell15":"Advisor","where-the-numbers-come-from.cell16":"`advisorModel` in `settings.json`. `/advisor` in this session shows at once.","where-the-numbers-come-from.cell17":"Branch","where-the-numbers-come-from.cell18":"`git branch --show-current` in the start directory.","where-the-numbers-come-from.cell19":"Part block, Reserve","where-the-numbers-come-from.cell2":"The token counts of each model request in the main conversation. After a compaction, the compaction's own size until `/context` can estimate the whole window, then that estimate until the next request.","where-the-numbers-come-from.cell20":"PaceLine's week plan file, `week-plan-<key>.json`, for the signed-in account's key only, while pace is on: the current part with its share, the mode and the reserve. Without a usable file the row has no Part block.","where-the-numbers-come-from.cell3":"Auto-compact, the compaction point, the compaction window and who set it","where-the-numbers-come-from.cell4":"`/context`'s breakdown, read at session start, after each turn, and after each compaction.","where-the-numbers-come-from.cell5":"Five-hour and weekly limits, API cost","where-the-numbers-come-from.cell6":"Claude Code, once per turn, merged with the limits file when it exists.","where-the-numbers-come-from.cell7":"Readings other sessions saw, the history behind Pace, model-scoped limits","where-the-numbers-come-from.cell8":"PaceLine's limits file and its history, for the signed-in account only. The five-hour burn file adds PaceLine's threshold projection for the five-hour limit.","where-the-numbers-come-from.cell9":"Cache countdown, `Hit` for the last turn","where-the-numbers-come-from.heading":"Where the numbers come from","where-the-numbers-come-from.p1":"PitBoard computes nothing it cannot read. Claude Code reports usage to plugins with each reply, and PitBoard adds what PaceLine's limits file and the session's transcript hold.","where-the-numbers-come-from.p2":"`/clear`, and a resume inside a running session, drop the previous conversation's context, cache, and session readings at once. The limits stay, because they belong to the account. Subagents' requests and compactions leave the row alone; it describes the main conversation.","where-the-numbers-come-from.th1":"Reading","where-the-numbers-come-from.th2":"Source","where-the-row-sits.heading":"Where the row sits","where-the-row-sits.li1":"In the CLI, under the prompt input, below Claude Code's own mode and hint line. `ⓘ` and a `[ PitBoard ]` button end it.","where-the-row-sits.li2":"In Desktop, above the prompt input. Desktop offers a plugin no place under the input: it does not draw the hint line that holds the CLI row. Its footer under the input, between the mode selector and the model name, has room for a short label only, and holds a `[ PitBoard ]` button.","where-the-row-sits.p1":"The row sits where each surface lets a plugin draw:","where-the-row-sits.p2":"Either `PitBoard` button opens the same pane as `/pitboard`. Claude Code counts the click as your request, so the pane opens in a terminal of any width; a pane a plugin opens on its own waits for 144 columns. The next click on the button closes the pane. A pane hidden behind another pane's tab is brought to the front by closing and reopening it, and that reopen is not counted as your request, so a terminal narrower than 110 columns can need a second click.","why-the-row-can-differ-from-usage.heading":"Why the row can differ from `/usage`","why-the-row-can-differ-from-usage.li1":"`/usage` shows the account's figures at the moment you run it. The row shows the newest reading Claude Code reported to a session, or PaceLine recorded, and moves only when one arrives.","why-the-row-can-differ-from-usage.li2":"Within one window the row keeps the higher of its own reading and the file's.","why-the-row-can-differ-from-usage.li3":"The file holds the readings of each account apart. PitBoard finds the signed-in account in Claude Code's `.claude.json` and draws that account's partition only, so a `/login` to another account changes the figures within about 20 seconds. When PitBoard cannot tell the account, or the only readings have no account, it draws what the file has and shows `Account` `unknown` on the limit cards.","why-the-row-can-differ-from-usage.li4":"The row rounds percentages to whole numbers.","why-the-row-can-differ-from-usage.li5":"A Desktop card takes its paces and times at the start of the minute.","why-the-row-can-differ-from-usage.li6":"Desktop's own context ring counts the full window. `Ctx` counts toward the compaction point while auto-compact is on, so it reads higher."}</script>
+<script type="application/json" id="pb-strings">{"budget-at-reset-runs-out.heading":"Budget, At reset, Runs out","budget-at-reset-runs-out.li1":"Budget is the pace that spends exactly what is left by the reset.","budget-at-reset-runs-out.li2":"At reset is where the current Pace leaves the five-hour window at its reset.","budget-at-reset-runs-out.li3":"Runs out replaces At reset when the limit reaches 100% before the reset.","budget-at-reset-runs-out.li4":"Threshold replaces Runs out when PaceLine supplies its projection: it is the clock time the five-hour limit reaches PaceLine's threshold, 95% by default, in working hours and off-hours alike, at the current Pace.","budget-at-reset-runs-out.p1":"PitBoard takes the projection from PaceLine's five-hour burn file of the signed-in account, `five-hour-burn-<key>.json` (see [the file's format](root:plugins/paceline/docs/reference.html#the-five-hour-burn-file-for-readers)), only while all of these hold: the five-hour limit is below the file's threshold; the file is at most 3 minutes old; its account is the signed-in account; its reset is the window's reset; and its percentage used is the percentage on the row. Pace is then the file's rate, and Budget is the pace that reaches the threshold exactly at the reset. In every other case, including PaceLine off or pace off, PitBoard projects from its own readings to 100% and shows Runs out. Under 15 minutes to the reset the budget would be a rate of no use, so Budget reads `n/a (under 15 min left)` and the burn file carries `null` for it.","colours.cell1":"None (grey)","colours.cell10":"A state that is on and fine: auto-compact on.","colours.cell2":"Nothing to do. Good values stay grey too.","colours.cell3":"Amber","colours.cell4":"Watch: worth a glance.","colours.cell5":"Red","colours.cell6":"Act: changes what to do next.","colours.cell7":"Blue (teal in the terminal)","colours.cell8":"A cold cache: lost, and no longer urgent.","colours.cell9":"Green","colours.efforts":"An effort level takes a theme colour in the terminal. Desktop does not colour it.","colours.heading":"Colours","colours.levels":"Where each reading turns amber (watch) and red (act). The [reference](reference.html#levels) lists the same values with the rules that add to them.","colours.models":"A model name is matched against these families without regard to case, and the first family in table order wins. A name that matches none of them takes the last row.","colours.p1":"A colour means the same on every surface: the CLI row and detail line, the Desktop row and cards, and the `/pitboard` pane.","colours.p2":"Model and effort colours name a model or an effort level and carry no state. In the CLI detail line, the model name, the advisor's model and the effort level take a theme colour by hue; the CLI row colours the advisor's model the same way, and the pane colours the model name that is the Session card's label. Desktop colours only the advisor's model name, in the row's Advisor group, with fixed hex; its model and effort sit in Desktop's own footer, which PitBoard does not colour. An advisor model of no known family is drawn in sand italics in Desktop, and an inactive advisor is dimmed and struck through in Desktop and in the terminal.","colours.p3":"The terminal row, its detail line and the `/pitboard` pane draw in Claude Code's theme colours, so they follow a light or a dark theme: values in the theme's `text`, names, separators and rules in `inactive`, watch in `warning`, act in `error`, a cold cache in `planMode` (teal), and auto-compact on in `success`. Every text colour reaches a 4.5:1 contrast on Claude Code's light and dark themes, except on the light theme Sonnet and effort high (`suggestion`, 4.4:1) and Fable (`bashBorder`, 3.7:1). The Desktop row and cards keep their own fixed colours.","colours.p4":"The five-hour limit turns red when its Pace is above its Budget, and from 90% used; it turns amber from 70%. Budget is the pace that lasts exactly to the reset, so a higher Pace reaches 100% before the reset: the same condition as Runs out. With PaceLine's projection (see [Budget, At reset, Runs out](#budget-at-reset-runs-out)), the limit turns red from 90% used, or while PaceLine's burn file marks the window `limited`: the window would reach PaceLine's threshold before the reset, and PaceLine's limit data is at most 30 minutes old. PitBoard reads the burn file only while it is at most 3 minutes old; an older file is ignored, and the pane uses its own Pace and Budget. The pane's verdict, its Next entry and the card follow that same rule, so they turn red together, and never on stale data.","colours.p5":"The weekly limit and the model-scoped limits take their colour on the row from the percentage used only: amber from 80%, red from 95%. Inside the Week card, `At reset` is amber from 80% and `Runs out` is red.","colours.p6":"With PaceLine's week plan the Part block is coloured by the plan. It is amber in `inform` mode and red in `limit` mode while the part is above its share, past the 1-point tolerance, and `Overspent` takes the same colour only then. `Pace` above `Budget` and `At part end` above the share are amber. `Reserve` turns red when the week's usage reaches 100% minus the reserve before the release. The week's gauge on the row and the Week card's title take the highest level of the percentage, the part against its share and `Reserve`, so a red plan shows on the row without opening the card.","colours.th1":"Colour","colours.th2":"Meaning","context-and-cache.heading":"Context and cache","context-and-cache.li1":"`Ctx` is the context's tokens divided by the compaction point while auto-compact is on, or by the full window while it is off, capped at 100%.","context-and-cache.li2":"`Turns left` divides what is left before compaction by the average growth of up to the last five turns that grew the context. It needs at least two of them. A drop in the context is a compaction and starts the series over.","context-and-cache.li3":"The cache countdown is the start of the last request plus the TTL, one hour or five minutes, less a 5-second margin. Until a cache write shows the TTL, PitBoard assumes five minutes. The hooks report how many tokens a request wrote to the cache but not their TTL, so after a request that writes the cache while the TTL is unknown, PitBoard reads the transcript again every 2 seconds, up to five times.","context-and-cache.li4":"`If cold` uses the price ratio of a cache write to a cache read. A write costs 1.25 times the input price with a five-minute TTL and 2 times with a one-hour TTL. A read costs 0.05 times on Opus 5.5 and Sonnet 5.5, 0.025 times on Fable 5.1 and Mythos 5.1, and 0.1 times on other models ([Anthropic's prices, prompt caching](https://platform.claude.com/docs/en/about-claude/pricing#prompt-caching), read 2026-10-15). With a one-hour TTL a cold turn therefore costs about 40 times a warm one on Opus 5.5 and Sonnet 5.5, and 80 times on Fable 5.1 and Mythos 5.1; with five minutes, 25 and 50 times. On another model PitBoard divides by the 0.1 read price and marks the result `≥`: at least 20 or 12.5 times.","context-and-cache.li5":"`Hit` is cache reads divided by reads plus writes.","context-and-cache.li6":"`/compact` sends a separate request with the same prefix as the conversation. While the cache is warm it reads that prefix from the cache; after a break longer than the TTL it processes the whole history as uncached input, so it costs the most when an old session is resumed ([Claude Code, prompt caching](https://code.claude.com/docs/en/prompt-caching#compacting-the-conversation), read 2026-10-15).","context-and-cache.li7":"Claude Code can compact a long idle conversation shortly before its one-hour cache expires, and the next message then sends a summary. By default it does so in an interactive terminal session when the context is at or above a threshold, 200,000 tokens unless `CLAUDE_CODE_IDLE_COMPACT_MIN_TOKENS` sets it (the minimum is 100,000), about 54 minutes after the last request ([Claude Code, settings reference](https://code.claude.com/docs/en/settings-reference#idlecompaction), read 2026-10-15). While that is expected, the row shows `ᶻ` after the `↻` mark in the terminal, and a drawn pair of z letters, the usual sleep sign, in Desktop. The setting `idleCompaction` (Claude Code v2.1.290 or later; an earlier version ignores it), the variable `DISABLE_AUTO_COMPACT` and turning auto-compact off turn it off. PitBoard checks the setting, the variable, auto-compact, the one-hour TTL and the context size. It cannot see the feature flag Claude Code also consults, and it does not check the surface. The mark therefore shows that idle compaction is expected.","context-and-cache.li8":"The `Idle compact` row of the Ctx card reads `on · from 200k` when every condition PitBoard can see holds (the figure is the threshold), `on · below 200k (156k)` when idle compaction is on but the context, here 156k, is under the threshold, `off` when the setting, the variable or auto-compact turns it off, and `n/a` when the cache is not on a one-hour TTL or the TTL is not known yet. The mark shows only for `on`.","explorer.five":"5h limit","explorer.h":"h","explorer.hours":"Hours to reset","explorer.kind":"Limit","explorer.pace":"Pace","explorer.result":"What the card shows","explorer.used":"Used","explorer.week":"Week","fig-fresh.axis":"seconds","fig-fresh.caption":"How often each part of the row refreshes, over one minute","fig-fresh.s1":"A model request arrives at no fixed time; each one refreshes context, the cache countdown, `Hit` and effort.","fig-fresh.s2":"A turn ends after one or more requests; each completed turn refreshes limits, cost, model, branch, the `/context` breakdown, the limits file and the transcript.","fig-fresh.s3":"Every 20 seconds PitBoard reads the limits file and `advisorModel` in `settings.json` again.","fig-fresh.s4":"Every second the clock behind countdowns, Pace and time to reset moves on.","fig-sources.caption":"Where the numbers come from","fig-sources.cc":"Claude Code: each request and each turn","fig-sources.cli":"CLI row","fig-sources.ctx":"/context breakdown","fig-sources.desk":"Desktop row and cards","fig-sources.file":"PaceLine limits file and history","fig-sources.pane":"/pitboard pane","fig-sources.s1":"Claude Code reports usage to the view with each request and each turn.","fig-sources.s2":"The view also reads the `/context` breakdown, the session transcript and `settings.json`.","fig-sources.s3":"It reads PaceLine's limits file and history too.","fig-sources.s4":"From these the view draws the CLI row, the Desktop row and cards, and the `/pitboard` pane.","fig-sources.set":"settings.json","fig-sources.tr":"Session transcript","fig-sources.view":"PitBoard view","how-fresh-the-numbers-are.cell1":"Each model request","how-fresh-the-numbers-are.cell2":"Context, the cache countdown, `Hit`, effort","how-fresh-the-numbers-are.cell3":"Each completed turn","how-fresh-the-numbers-are.cell4":"Limits, cost, model, branch, the `/context` breakdown, the limits file, the transcript","how-fresh-the-numbers-are.cell5":"Every 20 seconds","how-fresh-the-numbers-are.cell6":"The limits file and `advisorModel` in `settings.json`","how-fresh-the-numbers-are.cell7":"Every second","how-fresh-the-numbers-are.cell8":"The clock behind countdowns, Pace, and time to reset","how-fresh-the-numbers-are.heading":"How fresh the numbers are","how-fresh-the-numbers-are.p1":"A limit reading moves only while some session makes requests, because Claude Code reports limits after each one. With every session idle, the five-hour and weekly readings stand still, unless PaceLine's usage-watch is on. An idle session sees a reading from another session up to about 20 seconds after PaceLine has written it to the file. A model switch, or an auto-compact change in `/config`, shows after the next completed turn.","how-fresh-the-numbers-are.p2":"The Desktop row redraws only when what it shows changes. A card's paces and times are taken at the start of the minute, so a card can lag by up to a minute.","how-fresh-the-numbers-are.th1":"Event","how-fresh-the-numbers-are.th2":"What PitBoard refreshes","how-the-row-combines-the-file-with-its-own-session.heading":"How the row combines the file with its own session","how-the-row-combines-the-file-with-its-own-session.li1":"A later window wins, even with a lower reading.","how-the-row-combines-the-file-with-its-own-session.li2":"Within one window the higher reading wins, since a lower one can only be an older observation. On a tie the file's reading wins.","how-the-row-combines-the-file-with-its-own-session.li3":"A file reading observed more than 5 minutes ahead of the clock, or with a window that ends later than its length allows (5 hours or 7 days, plus 5 minutes), counts as absent.","how-the-row-combines-the-file-with-its-own-session.li4":"A window whose reset has passed reads 0%. The weekly window moves its reset forward by a week; the five-hour window has no known reset until a reading from the next window arrives.","how-the-row-combines-the-file-with-its-own-session.p1":"PitBoard groups readings by window, by the reset time rounded to the minute:","intro.p1":"Where PitBoard's numbers come from, how fresh they are, and how it computes Pace, Budget, and the rest. For the list of readings and thresholds, see the [reference](reference.html).","lang_en":"En","lang_label":"Language","lang_uk":"Uk","level_cache_1h_minutes_left":"Cache (1h), minutes left","level_cache_5m_minutes_left":"Cache (5m), minutes left","level_context_pct":"Context, % of the compaction point","level_five_hour_pct":"5h limit, % used","level_week_pct":"Week, % used","levels_act":"Act","levels_aria_down":"{name}: watch below {watch}, act below {act}","levels_aria_up":"{name}: watch from {watch}, act from {act}","levels_calm":"Calm","levels_unit_min":"min","levels_watch":"Watch","model-scoped-limits.heading":"Model-scoped limits","model-scoped-limits.li1":"The newest exact five-hour or weekly reading in the file is at most 15 minutes old.","model-scoped-limits.li2":"The week they were read in has not reset.","model-scoped-limits.p1":"The model-scoped weekly limits, such as `Fable`, exist only in the limits file. PaceLine's usage-watch writes them with each exact reading of the account's usage, tagged `\"source\": \"usage-endpoint\"`. PitBoard shows them while both hold:","model-scoped-limits.p2":"With usage-watch off, the file has no model-scoped limits and the row shows none.","nav_label":"Explanation","pace.cell1":"Five-hour","pace.cell2":"The last 90 minutes","pace.cell3":"10 minutes of readings in this window","pace.cell4":"Weekly","pace.cell5":"The last 6 hours","pace.cell6":"1 hour of readings in this window","pace.heading":"Pace","pace.p1":"Pace is how fast a limit is spent now, in percent per hour. PitBoard keeps a reading only when the percentage changes, so each reading holds until the next one. Pace runs from the value held at the start of a look-back span to the value now, and a flat stretch counts as time at zero. Pace is never negative.","pace.p2":"The weekly percentage moves in whole points, so its Pace needs a longer look-back. When the window started inside the look-back, Pace runs from the window's first reading. Until the minimum span has passed, Pace reads `n/a (needs 10 min)` or `n/a (needs 1 h)`.","pace.th1":"Limit","pace.th2":"Look-back","pace.th3":"Minimum span before Pace shows","series_label":"pages in this series","the-even-pace-tick-week-elapsed-spare-and-overspent.heading":"The even-pace tick, Week elapsed, Spare and Overspent","the-even-pace-tick-week-elapsed-spare-and-overspent.p1":"The tick on a limit's bar stands at the share of the window gone: `1 - time to reset / window length`, with a window of 5 hours or 7 days. For the week, the card calls this share Week elapsed.","the-even-pace-tick-week-elapsed-spare-and-overspent.p2":"The Week card compares nothing against an even pace: `Week elapsed` is the tick's share, `Pace` is the average rate since the reset, and `At reset` or `Runs out` is where that rate leads. `Spare` and `Overspent` belong to the Part card, which measures spending against the part's share; without a plan the week has neither.","the-even-pace-tick-week-elapsed-spare-and-overspent.p3":"With PaceLine's plan, the row gains the Part block, whose card measures the current part against its share. PitBoard uses PaceLine's week plan file only when all four hold: the file is readable and its version is one PitBoard knows; it is the signed-in account's and its week is the card's week (the reset within 10 minutes); PaceLine did not write it more than 5 minutes ahead of the clock; and its current part holds the present time. Otherwise there is no Part block, and so it is with pace off, with no file, or for about 40 seconds after a part ends, or after a weekly window that resets ahead of schedule or whose reset moves later, until PaceLine writes the next (see the limitation). A part with no share shows the block only once at least 1 point of the week was spent in it.","the-even-pace-tick-week-elapsed-spare-and-overspent.p4":"Spare, Overspent and the part's level follow PaceLine's own rule, on the part the file holds. `used` is the week's percentage, `share` the part's share of the week and `used at start` the week's usage when the part began:","the-even-pace-tick-week-elapsed-spare-and-overspent.p5":"The Part gauge's tick stands at the share of the part's time gone and its fill is the points spent over the share. The part is above its share only past the 1-point tolerance, so an overspend of up to 1 point shows no colour. A part with no share has no `Spare`, `Overspent`, tick or forecast: its gauge reads the points spent over `-`, with an empty bar.","the-even-pace-tick-week-elapsed-spare-and-overspent.p6":"`Pace` on the Part card is the part's average since its start, from 15 minutes into the part; before that the card reads `Forecast` with the time it starts. Under one point spent it reads as a bound with `<`. `Budget` is what is left of the part's share over the hours left in the part, at most what the five-hour limit can spend in an hour in weekly points. The effective mode is `limit` unless PaceLine's `inform_until` is still ahead, when it is `inform`.","the-formulas.heading":"The formulas","theme_dark":"Dark","theme_label":"Page theme","theme_light":"Light","theme_system":"System","title":"How PitBoard works","toc_label":"Sections","try-the-formulas.heading":"Try the formulas","try-the-formulas.p1":"With scripts on, the sliders below run PitBoard's own code on a limit and show what its card reads. They give the numbers the formulas above give.","try-the-formulas.p2":"For example, at 40% [**Used**](term:Used) with 3 hours to reset, a [**Pace**](term:Pace) of 10%/h gives a [**Budget**](term:Budget) of 20%/h and an [**At reset**](term:At reset) of about 70%, and a [**Pace**](term:Pace) of 20%/h gives an [**At reset**](term:At reset) of about 100%. The [**Pace**](term:Pace) slider stops at the fastest [**Pace**](term:Pace) the readings behind it can show: the used share spent over the minimum span, 10 minutes for the five-hour limit and 1 hour for the week, and never above 40%/h for the five-hour limit or 5%/h for the week. While a window has run for less than that minimum span (5 hours to reset on the five-hour limit, 168 hours on the week), PitBoard has no [**Pace**](term:Pace) to show and the card reads n/a. Clock times are in your time zone, counted from the moment you opened the page.","what-pitboard-cannot-see.heading":"What PitBoard cannot see","what-pitboard-cannot-see.p1":"The [limitations](limitations.html#data-pitboard-cannot-see) list what PitBoard cannot see, with every other limitation of PitBoard.","where-the-numbers-come-from.cell1":"Context","where-the-numbers-come-from.cell10":"The session's own requests. The countdown runs from the start of the last one.","where-the-numbers-come-from.cell11":"`Session` hits, the TTL","where-the-numbers-come-from.cell12":"The session transcript since the last compaction.","where-the-numbers-come-from.cell13":"Model, effort, Claude Code version, turns, session time","where-the-numbers-come-from.cell14":"Claude Code. Until a request reports the effort, it comes from `modelSettings` or `effortLevel` in the settings. `/effort` in this session shows at once.","where-the-numbers-come-from.cell15":"Advisor","where-the-numbers-come-from.cell16":"`advisorModel` in `settings.json`. `/advisor` in this session shows at once.","where-the-numbers-come-from.cell17":"Branch","where-the-numbers-come-from.cell18":"`git branch --show-current` in the start directory.","where-the-numbers-come-from.cell19":"Part block, Reserve","where-the-numbers-come-from.cell2":"The token counts of each model request in the main conversation. After a compaction, the compaction's own size until `/context` can estimate the whole window, then that estimate until the next request.","where-the-numbers-come-from.cell20":"PaceLine's week plan file, `week-plan-<key>.json`, for the signed-in account's key only, while pace is on: the current part with its share, the mode and the reserve. Without a usable file the row has no Part block.","where-the-numbers-come-from.cell3":"Auto-compact, the compaction point, the compaction window and who set it","where-the-numbers-come-from.cell4":"`/context`'s breakdown, read at session start, after each turn, and after each compaction.","where-the-numbers-come-from.cell5":"Five-hour and weekly limits, API cost","where-the-numbers-come-from.cell6":"Claude Code, once per turn, merged with the limits file when it exists.","where-the-numbers-come-from.cell7":"Readings other sessions saw, the history behind Pace, model-scoped limits","where-the-numbers-come-from.cell8":"PaceLine's limits file and its history, for the signed-in account only. The five-hour burn file adds PaceLine's threshold projection for the five-hour limit.","where-the-numbers-come-from.cell9":"Cache countdown, `Hit` for the last turn","where-the-numbers-come-from.heading":"Where the numbers come from","where-the-numbers-come-from.p1":"PitBoard computes nothing it cannot read. Claude Code reports usage to plugins with each reply, and PitBoard adds what PaceLine's limits file and the session's transcript hold.","where-the-numbers-come-from.p2":"`/clear`, and a resume inside a running session, drop the previous conversation's context, cache, and session readings at once. The limits stay, because they belong to the account. Subagents' requests and compactions leave the row alone; it describes the main conversation.","where-the-numbers-come-from.th1":"Reading","where-the-numbers-come-from.th2":"Source","where-the-row-sits.heading":"Where the row sits","where-the-row-sits.li1":"In the CLI, under the prompt input, below Claude Code's own mode and hint line. `ⓘ` and a `[ PitBoard ]` button end it.","where-the-row-sits.li2":"In Desktop, above the prompt input. Desktop offers a plugin no place under the input: it does not draw the hint line that holds the CLI row. Its footer under the input, between the mode selector and the model name, has room for a short label only, and holds a `[ PitBoard ]` button.","where-the-row-sits.p1":"The row sits where each surface lets a plugin draw:","where-the-row-sits.p2":"Either `PitBoard` button opens the same pane as `/pitboard`. Claude Code counts the click as your request, so the pane opens in a terminal of any width; a pane a plugin opens on its own waits for 144 columns. The next click on the button closes the pane. A pane hidden behind another pane's tab is brought to the front by closing and reopening it, and that reopen is not counted as your request, so a terminal narrower than 110 columns can need a second click.","why-the-row-can-differ-from-usage.heading":"Why the row can differ from `/usage`","why-the-row-can-differ-from-usage.li1":"`/usage` shows the account's figures at the moment you run it. The row shows the newest reading Claude Code reported to a session, or PaceLine recorded, and moves only when one arrives.","why-the-row-can-differ-from-usage.li2":"Within one window the row keeps the higher of its own reading and the file's.","why-the-row-can-differ-from-usage.li3":"The file holds the readings of each account apart. PitBoard finds the signed-in account in Claude Code's `.claude.json` and draws that account's partition only, so a `/login` to another account changes the figures within about 20 seconds. When PitBoard cannot tell the account, or the only readings have no account, it draws what the file has and shows `Account` `unknown` on the limit cards.","why-the-row-can-differ-from-usage.li4":"The row rounds percentages to whole numbers.","why-the-row-can-differ-from-usage.li5":"A Desktop card takes its paces and times at the start of the minute.","why-the-row-can-differ-from-usage.li6":"Desktop's own context ring counts the full window. `Ctx` counts toward the compaction point while auto-compact is on, so it reads higher."}</script>
 <script type="application/json" id="pb-glossary">{"5h":{"name":"5h limit","react":"Amber from 70%: keep subagents for work that needs them. Red from 90%, or when it would run out before the reset, or reach PaceLine's five-hour stop before it: hold subagents.","short":"Use of the five-hour usage window, with a tick where an even pace to its reset would stand now."},"7d":{"name":"Weekly limit","react":"From 80% save it for work that needs it.","short":"Use of the weekly limit, with a tick where an even pace to its reset would stand now."},"API cost":{"name":"API cost","short":"What the session would cost at API prices. A subscription is not charged per token."},"Advisor":{"name":"Advisor","short":"The advisor model set with `/advisor`, and whether it is active. In Desktop its name is in sand italics when its model is of no known family, and dimmed and struck through when it is inactive."},"At part end":{"name":"At part end","react":"Amber above the share: slow down or expect the part to end over it.","short":"Where spending in the part lands at its end if the part's average pace holds, out of its share. Needs 15 minutes of the part and 1 point spent; before that it reads n/a."},"At reset":{"name":"At reset","short":"Where usage lands at the reset if the current Pace holds."},"Auto-compact":{"name":"Auto-compact","short":"Whether Claude Code compacts the context by itself, and who set a smaller compaction window."},"Branch":{"name":"Branch","short":"The git branch of that folder, when there is one."},"Budget":{"name":"Budget","react":"Pace above Budget means the limit runs out early if nothing changes.","short":"The pace that spends exactly what is left by the reset: remaining percent divided by hours to the reset. On the Part card, what is left of the part's share over the part's hours left, capped at the rate of a full five-hour window. Under 15 minutes to the 5h reset it reads n/a."},"Cache":{"name":"Cache","react":"Amber and red mark the time left before it expires. After that, the next turn writes the context again: `If cold` shows the tokens and how many times a warm turn that costs.","short":"Time left before the prompt cache expires. A reply restarts it. The gauge fills as the time runs out."},"Claude Code":{"name":"Claude Code","short":"The running Claude Code version."},"Countdown":{"name":"Countdown","short":"Time left before the prompt cache expires: whole minutes while calm, seconds once it warns."},"Ctx":{"name":"Ctx (context)","react":"Amber from 60%, red from 80% or when `Turns left` reaches about three. With auto-compact off, nothing compacts the context by itself.","short":"How full the context is, measured against the point where Claude Code compacts it, or against the full window when auto-compact is off."},"Effort":{"name":"Effort","short":"The reasoning effort level of the session's model."},"Forecast":{"name":"Forecast","short":"The time a forecast starts: 15 minutes into a part, one hour into the week. Shown only until then."},"Hit":{"name":"Hit","react":"Low right after a compaction is normal; the next turns rebuild it.","short":"Share of the last turn's input read from the cache: reads / (reads + writes)."},"Hit, last turn":{"name":"Hit, last turn","short":"Share of the last turn's input read from the cache: reads / (reads + writes). In the row it is part of the Cache card."},"Hit, session":{"name":"Hit, session","short":"The same share over the whole session, counted from the last compaction."},"Hours":{"name":"Hours","short":"Start and end of the current part, with `work` or `off`."},"Idle compact":{"name":"Idle compact","short":"Whether Claude Code is expected to compact a long idle conversation before its one-hour prompt cache expires: on from the threshold (200k unless `CLAUDE_CODE_IDLE_COMPACT_MIN_TOKENS` sets it), on but below it with the current size, off, or n/a with a five-minute cache or while the TTL is not yet known. PitBoard cannot see Claude Code's feature flag, so `on` means Claude Code is expected to compact."},"If cold":{"name":"If cold","short":"Tokens the next turn writes again once the cache expires, and how much dearer that turn is than a warm one."},"Last turn":{"name":"Last turn","short":"Cache hit rate of the last turn."},"Left":{"name":"Left","short":"Tokens left before auto-compact starts."},"Main":{"name":"Main","short":"The session's main model, which the advisor is compared with."},"Mode":{"name":"Mode","short":"The mode of PaceLine's week plan, inform or limit. In the row it shows only in limit mode, where it acts."},"Model":{"name":"Model","short":"The advisor's model, or off."},"Overspent":{"name":"Overspent","react":"Slow down until Week elapsed catches up.","short":"How far weekly usage is ahead of an even pace, or of the plan's share of the current part when PaceLine's plan is in use, in points and in hours. Yellow, red past a day ahead; with the plan it takes the part's level, and only past the 1-point tolerance."},"Pace":{"name":"Pace","react":"Compare it with Budget on the 5h and Part cards.","short":"How fast the limit is being spent, in percent per hour: over the last 90 minutes for 5h; for the week and for a part, the average since the reset or since the part's start (`week average`, `part average`). Under 1 point of use the part's Pace reads as a bound, `<` and a number."},"Reserve":{"name":"Reserve","react":"Red: launches ask before each agent until the reserve opens.","short":"The share of the week PaceLine keeps back until its release: the percent and when it is released, or released once it has passed. Red while the week is at 100 minus the reserve or more before the release."},"Resets":{"name":"Resets","short":"Day and time the weekly limit resets, in your locale."},"Resets in":{"name":"Resets in","short":"Time until the five-hour window resets and its usage starts again at 0%."},"Running":{"name":"Running","short":"Time since the session started."},"Runs out":{"name":"Runs out","react":"Hold subagents and heavy work until the reset or until Pace drops.","short":"The clock time the limit reaches 100% at the current Pace, shown instead of At reset when that comes before the reset."},"Session":{"name":"Session","short":"Cache hit rate since the last compaction."},"Share":{"name":"Share","short":"The part's share of the week in PaceLine's plan, in points, or `none (not planned)`, `unplanned part` or `unplanned week` where it has none."},"Spare":{"name":"Spare","short":"How far weekly usage is below an even pace, or below the plan's share of the current part when PaceLine's plan is in use, in points and in hours."},"Spent":{"name":"Spent","short":"Points of the week spent in the current part. `<1` while the account's whole percent has not moved but something was spent; `~` marks an estimate from the part's own rate."},"Started in":{"name":"Started in","short":"The last part of the folder the session started in."},"State":{"name":"State","short":"Whether the advisor is active; it is inactive when its model ranks below the main one."},"TTL":{"name":"TTL","short":"The cache lifetime the last write used: 1h or 5m."},"Threshold":{"name":"Threshold","react":"Hold subagents and heavy work until the reset or until Pace drops.","short":"The clock time the limit reaches PaceLine's five-hour stop (95% by default, in working hours and off-hours alike) at the current Pace, shown instead of At reset when that comes before the reset."},"Turns":{"name":"Turns","short":"Turns taken in this session."},"Turns left":{"name":"Turns left","short":"Turns left before auto-compact at the recent growth of the context per turn."},"Used":{"name":"Used","short":"Share of the limit or window already spent."},"Week elapsed":{"name":"Week elapsed","short":"Share of the week gone since the last weekly reset: where an even pace would stand now."},"Window":{"name":"Window","short":"The context window auto-compact measures against, and the model's full window when they differ."},"act":{"name":"Act","short":"Red. Changes what you do next."},"calm":{"name":"Calm","short":"Grey. Nothing to do."},"info":{"name":"Session (ⓘ)","short":"Model, effort, advisor, version, folder, running time, turns and API cost. Also the branch, when there is one. In the CLI it opens with a click, in Desktop on hover. The PitBoard button opens the `/pitboard` pane: in the CLI `[ PitBoard ]` follows ⓘ, in Desktop `[ PitBoard ]` sits in the footer under the input, between the mode and the model."},"projection":{"name":"Projection","short":"The paler part of a bar: where usage reaches by the reset at the current Pace (5h and 7d), or by the part's end at the part's average pace (Part). The 7d bar shows it from the week's first hour, the Part bar from the part's first 15 minutes."},"scoped":{"name":"Model limit","react":"From 80%, switch model for work that does not need this one.","short":"A weekly limit for one model family alone, shown next to 7d while PaceLine's usage-watch has read it in the last 15 minutes. Amber from 80%, red from 95%."},"tick":{"name":"Even-pace tick","short":"The mark on a limit bar where usage would stand now if it were spent evenly to the reset: the share of the window already gone."},"watch":{"name":"Watch","short":"Amber. Worth a glance, not a problem yet."},"☼":{"name":"☼ (work part)","react":"Amber once the part passes its share; red while the reserve stops launches.","short":"The Part block's gauge for a work part of PaceLine's week plan: points of the week spent in the part, over the part's share, with a tick at the share of the part's time gone."},"☾":{"name":"☾ (off part)","react":"Amber once the part passes its share; red while the reserve stops launches.","short":"The Part block's gauge for an off-hours part of PaceLine's week plan: the same figures as ☼, for the nights and days off."}}</script>
-<script type="application/json" id="pb-facts">{"colours":{"efforts":[{"level":"low","theme":"warning"},{"level":"medium","theme":"success"},{"level":"high","theme":"suggestion"},{"level":"xhigh","theme":"autoAccept"},{"level":"max","theme":"error"}],"models":[{"desktop":"#d787ff","italic":false,"match":"opus","name":"Opus","theme":"autoAccept"},{"desktop":"#5fafff","italic":false,"match":"sonnet","name":"Sonnet","theme":"suggestion"},{"desktop":"#ff87d7","italic":false,"match":"fable","name":"Fable","theme":"bashBorder"},{"desktop":"#87d7af","italic":false,"match":"haiku","name":"Haiku","theme":"success"},{"desktop":"#b8925a","italic":true,"match":null,"name":"Other","theme":"text"}]},"env":["CLAUDE_CODE_ACCOUNT_UUID","CLAUDE_CODE_IDLE_COMPACT_MIN_TOKENS","CLAUDE_CODE_ORGANIZATION_UUID","CLAUDE_CONFIG_DIR","DISABLE_AUTO_COMPACT","HOME","LANG","LC_ALL","LC_TIME","PACELINE_STATE_DIR","USERPROFILE"],"labels":["5h","7d","API cost","Advisor","At part end","At reset","Auto-compact","Branch","Budget","Cache","Claude Code","Countdown","Ctx","Effort","Forecast","Hit","Hit, last turn","Hit, session","Hours","Idle compact","If cold","Last turn","Left","Main","Mode","Model","Overspent","Pace","Reserve","Resets","Resets in","Running","Runs out","Session","Share","Spare","Spent","Started in","State","TTL","Threshold","Turns","Turns left","Used","Week elapsed","Window","☼","☾"],"levels":{"cache_1h_minutes_left":{"act":5,"watch":15},"cache_5m_minutes_left":{"act":1,"watch":2.5},"context_pct":{"act":80,"watch":60},"five_hour_pct":{"act":90,"watch":70},"week_pct":{"act":95,"watch":80}}}</script>
+<script type="application/json" id="pb-facts">{"colours":{"efforts":[{"level":"low","theme":"warning"},{"level":"medium","theme":"success"},{"level":"high","theme":"suggestion"},{"level":"xhigh","theme":"autoAccept"},{"level":"max","theme":"error"}],"models":[{"desktop":"#d787ff","italic":false,"match":"opus","name":"Opus","theme":"autoAccept"},{"desktop":"#5fafff","italic":false,"match":"sonnet","name":"Sonnet","theme":"suggestion"},{"desktop":"#ff87d7","italic":false,"match":"fable","name":"Fable","theme":"bashBorder"},{"desktop":"#87d7af","italic":false,"match":"haiku","name":"Haiku","theme":"success"},{"desktop":"#b8925a","italic":true,"match":null,"name":"Other","theme":"text"}]},"env":["CLAUDE_CODE_ACCOUNT_UUID","CLAUDE_CODE_IDLE_COMPACT_MIN_TOKENS","CLAUDE_CODE_ORGANIZATION_UUID","CLAUDE_CODE_USER_EMAIL","CLAUDE_CONFIG_DIR","DISABLE_AUTO_COMPACT","HOME","LANG","LC_ALL","LC_TIME","PACELINE_STATE_DIR","PITBOARD_SCENARIO","USERPROFILE"],"labels":["5h","7d","API cost","Advisor","At part end","At reset","Auto-compact","Branch","Budget","Cache","Claude Code","Countdown","Ctx","Effort","Forecast","Hit","Hit, last turn","Hit, session","Hours","Idle compact","If cold","Last turn","Left","Main","Mode","Model","Overspent","Pace","Reserve","Resets","Resets in","Running","Runs out","Session","Share","Spare","Spent","Started in","State","TTL","Threshold","Turns","Turns left","Used","Week elapsed","Window","☼","☾"],"levels":{"cache_1h_minutes_left":{"act":5,"watch":15},"cache_5m_minutes_left":{"act":1,"watch":2.5},"context_pct":{"act":80,"watch":60},"five_hour_pct":{"act":90,"watch":70},"week_pct":{"act":95,"watch":80}}}</script>
 <script type="application/json" id="pb-data">{}</script>
 <script>
 const __m = {}
@@ -961,6 +961,9 @@ __m['view'] = (function () {
                    
                                                                                       
                      
+                                                                                                     
+                                                                                                         
+                    
  
 
                         
@@ -1410,7 +1413,8 @@ function fiveView(limit                         , isExact         , samples     
     age <= BURN_MAX_AGE_MS
   ) {
     const thresholdAt = burn.threshold_at ? Date.parse(burn.threshold_at) : NaN
-    const level        = limit.percentUsed >= 90 || burn.limited ? 'act' : limit.percentUsed >= 70 ? 'watch' : 'calm'
+    const isFilling = burn.limited
+    const level        = limit.percentUsed >= 90 || isFilling ? 'act' : limit.percentUsed >= 70 ? 'watch' : 'calm'
     return {
       pct: limit.percentUsed,
       resetInMs,
@@ -1421,6 +1425,7 @@ function fiveView(limit                         , isExact         , samples     
       level,
       targetPct: burn.threshold_pct,
       isPaceline: true,
+      isFilling,
     }
   }
   const ratePerHour = burnRate(limit.percentUsed, limit.resetsAt, samples, now, 90 * 60_000, 10 * 60_000)
@@ -1433,7 +1438,7 @@ function fiveView(limit                         , isExact         , samples     
       : limit.percentUsed >= 70 || (ratePerHour !== null && evenPerHour !== null && ratePerHour > evenPerHour)
         ? 'watch'
         : 'calm'
-  return { pct: limit.percentUsed, resetInMs, ratePerHour, evenPerHour, fullAt, isExact, level, targetPct: 100, isPaceline: false }
+  return { pct: limit.percentUsed, resetInMs, ratePerHour, evenPerHour, fullAt, isExact, level, targetPct: 100, isPaceline: false, isFilling: isBeforeReset }
 }
 
 // The weekly percentage moves in whole points, so its burn needs a longer look-back than the
@@ -2054,8 +2059,6 @@ function advisorText(m            )         {
   return `advisor ${name}${isActive ? '' : ' (inactive)'}`
 }
 
-// What needs a decision now, most urgent first, with its advice; the detail cards quote it.
-
 // Until the first reply after a compaction no hit is counted, and the cached history is the old one.
 function rebuiltNote(k           )         {
   return k.hitAvg === null
@@ -2063,55 +2066,6 @@ function rebuiltNote(k           )         {
     : 'the last turn wrote the history to the cache again'
 }
 
-function alerts(v      )                                                   {
-  const out                                                   = []
-  const c = v.context
-  if (c && c.level !== 'calm') {
-    out.push({
-      level: c.level,
-      head: c.isAuto ? `Context ${pct0(c.pct)}` : `Context ${pct0(c.pct)} of the full window`,
-      advice: !c.isAuto
-        ? 'auto-compact is off'
-        : c.turnsLeft !== null
-          ? `~${c.turnsLeft} turns to auto-compact`
-          : 'auto-compact is near',
-    })
-  }
-  const k = v.cache
-  if (k.level !== 'calm') {
-    const rewrite = k.rewrite !== null ? `${kilo(k.rewrite)} tokens` : 'the whole context'
-    const ratio = `${k.isRatioFloor ? '≥' : '~'}${k.ratio}×`
-    if (k.state === 'cold') out.push({ level: k.level, head: 'Cache is cold', advice: `the next turn writes ${rewrite} again (${ratio} a warm one)` })
-    else if (k.state === 'warm' && k.leftMs !== null)
-      out.push({
-        level: k.level,
-        head: k.level === 'act' ? `Cache cools in ${mmss(k.leftMs)}` : `Cache ${mmss(k.leftMs)} left`,
-        advice: k.isRebuilt
-          ? rebuiltNote(k)
-          : `a reply now keeps it; a cold turn writes ${rewrite} again (${ratio} a warm one)`,
-      })
-  }
-  const f = v.five
-  if (f && f.level !== 'calm') {
-    const reset = f.resetInMs !== null ? `resets in ${span(f.resetInMs)}` : 'reset unknown'
-    if (f.fullAt !== null && f.resetInMs !== null && f.fullAt < v.now + f.resetInMs)
-      out.push({
-        level: 'act',
-        head: f.isPaceline ? `5h window reaches ${pct0(f.targetPct)} at ${clock(f.fullAt, v.meta)}` : `5h limit hits 100% at ${clock(f.fullAt, v.meta)}`,
-        advice: `${reset} · pace ${rate(f.ratePerHour)} vs budget ${rate(f.evenPerHour)} · hold subagents`,
-      })
-    else if (f.pct >= 70) out.push({ level: f.level, head: `5h limit ${pct0(f.pct)}`, advice: reset })
-    else out.push({ level: f.level, head: `5h pace ${rate(f.ratePerHour)}`, advice: `above the budget ${rate(f.evenPerHour)} · ${pct0(f.pct)} used, ${reset}` })
-  }
-  // A model-scoped weekly limit past calm, worded as the five-hour one; it resets on its own or the week's clock.
-  for (const b of v.scoped) {
-    if (b.level === 'calm') continue
-    const own = b.resetsAt ? Date.parse(b.resetsAt) : NaN
-    const resetAt = Number.isFinite(own) ? own : (v.week?.resetAt ?? null)
-    out.push({ level: b.level, head: `${b.name} limit ${pct0(b.percentUsed)}`, advice: resetAt !== null ? `resets in ${span(Math.max(0, resetAt - v.now))}` : 'reset unknown' })
-  }
-  return out.sort((a, b) => (a.level === b.level ? 0 : a.level === 'act' ? -1 : 1))
-}
 // Where readings run as one list (the pane, a CLI detail line) Budget follows Pace, as it stands
 // under Pace in the card's two columns.
 const listOrder = (rows              ) => {
@@ -2306,7 +2260,7 @@ const accountRows = (isUnknown         )       => (isUnknown ? [['Account', 'unk
 function fiveCard(v      , isRow = false)       {
   const f = v.five
   if (!f) return { title: '5h limit', rows: [], bullets: ['No reading yet.'] }
-  const isShort = f.fullAt !== null && f.resetInMs !== null && f.fullAt < v.now + f.resetInMs
+  const isShort = f.isFilling && f.fullAt !== null
   // Where the current pace leaves the window at its reset.
   const projected = f.ratePerHour !== null && f.resetInMs !== null ? f.pct + f.ratePerHour * (f.resetInMs / HOUR_MS) : null
   const forecast       =
@@ -2791,6 +2745,7 @@ function readings(v      , scope                 = 'row')                       
     ? {
         title: displayModel(m.model),
         rows: [
+          ...(scope === 'pane' && m.account ? ([['Account', m.account]]        ) : []),
           ['Effort', m.effort ?? 'n/a'],
           ['Advisor', advisorOn ? advisorOn.replace(/^advisor /, '') : 'off', isInactive ? 'watch' : undefined],
           ['Claude Code', m.version],
@@ -2922,7 +2877,404 @@ function rowFit(v      , columns        )                                       
 }
 
 const limitStyle = (v      , columns        )             => rowFit(v, columns).style
-return { LABEL, VALUE, DIM, RULE, LEVEL, COLD, ON, TRACK, CALM_FILL, IDLE_MARK, EFFORT_COLORS, TERMINAL_PALETTE, t, dim, label, BAR, displayModel, modelColor, DESKTOP_OTHER, COLOUR_FACTS, isKnownFamily, desktopModelColor, cacheFraction, alerts, listOrder, weekBarOf, weekEstimate, UNPLANNED_SPENT_MIN, earlyTick, PART_FORECAST_MIN_MS, partOf, pts, readings, GROUPS, cardFor, advisorView, desktopKey, textCells, desktopCells, rowFit, limitStyle }
+
+// The pane: a verdict, what happens next, and the cards folded into groups. Everything below is
+// plain data; draw.tsx lays it out.
+
+// Minutes and seconds without a leading zero, as the mockups show them (4:12).
+const mss = (ms        ) => mmss(ms).replace(/^0/, '')
+
+                         
+              
+                                                                                                           
+                      
+                
+ 
+
+                                                             
+const PANE_GROUPS                                     = [
+  { id: 'limits', title: 'Limits' },
+  { id: 'conversation', title: 'This conversation' },
+  { id: 'session', title: 'Session' },
+]
+
+                        
+             
+                  
+               
+                     
+                                                                             
+               
+                 
+              
+                                                                                   
+                     
+               
+                                                                                                
+                    
+                 
+                   
+ 
+
+const NOT_EXPLANATION = 'Full detail: /pitboard'
+
+// A clock time, with the weekday once it is more than 18 hours away.
+const when = (at        , v      ) => clock(at, v.meta, at - v.now > 18 * HOUR_MS)
+
+// The part's lead over what its share allows by now, as the Part card words it: from the estimate when there is one.
+const leadOf = (pm           , p          ) => (pm.estimate !== null && p.allowed !== null ? pm.estimate - p.allowed : p.lead)
+
+// A pane bar takes the colour of the value beside it, its forecast the paler shade of the same.
+const withLevel = (bar                     , level       )                      => (bar ? { ...bar, level } : undefined)
+
+function paneCards(v      , isRemote = false)             {
+  const { gauges, info, advisor } = readings(v, 'pane')
+  const m = v.meta
+  const out             = []
+  const g = (key        ) => gauges.find(x => x.key === key)
+  const explainOf = (card      , extra           = []) => [
+    ...card.bullets.filter(b => b !== card.advice && b !== NOT_EXPLANATION),
+    ...extra,
+    ...(isRemote ? (card.desktopBullets ?? []) : []),
+  ]
+  const f = v.five
+  const five = g('five')
+  if (five) {
+    const resetAt = f && f.resetInMs !== null ? v.now + f.resetInMs : null
+    out.push({
+      key: 'five',
+      group: 'limits',
+      label: '5h',
+      level: five.level,
+      values: f ? [{ text: pct0(f.pct), tone: five.level }, { text: resetAt !== null ? `resets ${when(resetAt, v)}` : 'reset unknown' }] : [{ text: 'no reading yet' }],
+      bar: withLevel(five.card.bar, five.level),
+      rows: five.card.rows,
+      advice: five.card.advice,
+      explain: explainOf(five.card),
+    })
+  }
+  const part = g('part')
+  const pm = partOf(v)
+  if (part && pm) {
+    const p = v.week .plan 
+    const spent = pm.isSpentUnderOne ? '<1' : pts(pm.estimate ?? pm.spent)
+    const level = higher(pm.level, pm.isOver ? 'watch' : 'calm')
+    out.push({
+      key: 'part',
+      group: 'limits',
+      label: 'Part',
+      mark: pm.glyph,
+      markTone: level,
+      level,
+      values: [
+        { text: pm.share === null ? `${spent} pts spent` : `${spent} of ${pts(pm.share)} pts`, tone: level },
+        { text: pm.share === null ? 'no share' : `ends ${when(p.end, v)}` },
+      ],
+      bar: withLevel(part.card.bar, level),
+      rows: part.card.rows,
+      advice: part.card.advice,
+      explain: explainOf(part.card),
+    })
+  }
+  const week = g('week')
+  const w = v.week
+  if (week && w) {
+    const fc = w.forecast
+    const forecast                   = fc
+      ? fc.runsOutAt !== null
+        ? { text: `runs out ${when(fc.runsOutAt, v)}`, tone: 'act' }
+        : { text: `${fc.isApprox ? '≈' : '~'}${pct0(fc.atReset)} at ${w.resetAt !== null ? when(w.resetAt, v) : 'the reset'}`, tone: fc.atReset >= 80 ? 'watch' : undefined }
+      : w.resetAt !== null
+        ? { text: `resets ${when(w.resetAt, v)}` }
+        : null
+    out.push({
+      key: 'week',
+      group: 'limits',
+      label: 'Week',
+      level: w.level,
+      values: [{ text: week.value ?? '', tone: w.level }, ...(forecast ? [forecast] : [])],
+      bar: withLevel(week.card.bar, w.level),
+      rows: week.card.rows,
+      advice: week.card.advice,
+      explain: explainOf(week.card),
+    })
+  }
+  for (const sg of gauges.filter(x => x.key.startsWith('scoped-'))) {
+    const b = v.scoped.find(x => `scoped-${x.name}` === sg.key)
+    const own = b?.resetsAt ? Date.parse(b.resetsAt) : NaN
+    const resetAt = Number.isFinite(own) ? own : (w?.resetAt ?? null)
+    out.push({
+      key: sg.key,
+      group: 'limits',
+      label: sg.label,
+      level: sg.level,
+      values: [{ text: sg.value ?? '', tone: sg.level }, ...(resetAt !== null ? [{ text: `resets ${when(resetAt, v)}` }] : [])],
+      bar: withLevel({ used: Math.round(sg.pct ?? 0), tick: null, level: sg.level }, sg.level),
+      rows: sg.card.rows,
+      advice: sg.card.advice,
+      explain: explainOf(sg.card),
+    })
+  }
+  const c = v.context
+  const ctx = g('context')
+  if (ctx) {
+    out.push({
+      key: 'context',
+      group: 'conversation',
+      label: 'Context',
+      ...(c?.isAuto ? { mark: AUTO_MARK, markTone: 'on'         } : {}),
+      level: ctx.level,
+      values: c
+        ? [
+            { text: pct0(c.pct), tone: c.level },
+            { text: c.isAuto ? `${kilo(Math.max(0, c.limit - c.used))} to auto-compact` : 'auto-compact off', tone: c.isAuto ? undefined : 'watch' },
+          ]
+        : [{ text: 'no response yet' }],
+      ...(c ? { bar: { used: Math.round(c.pct), tick: null, level: c.level } } : {}),
+      rows: ctx.card.rows,
+      advice: ctx.card.advice,
+      explain: explainOf(ctx.card),
+    })
+  }
+  if (advisor && m?.advisor) {
+    const view = advisorView(advisorText(m))
+    out.push({
+      key: 'advisor',
+      group: 'conversation',
+      label: 'Advisor',
+      level: 'calm',
+      values: [
+        { text: view.name ?? 'off', color: view.name ? modelColor(view.name) : undefined },
+        { text: view.isInactive ? 'inactive' : 'active', tone: view.isInactive ? 'watch' : undefined },
+      ],
+      rows: advisor.rows,
+      explain: explainOf(advisor),
+    })
+  }
+  const cacheG = g('cache')
+  if (cacheG) {
+    const k = v.cache
+    // Rounded down: "100%" claims no miss at all, so 99.6% reads 99%.
+    const hitPct = (n        ) => `${Math.floor(n)}%`
+    const hits = [k.hitLast !== null ? `${hitPct(k.hitLast)} now` : null, k.hitAvg !== null ? `${hitPct(k.hitAvg)} session` : null].filter(x => x !== null)
+    const state            =
+      k.state === 'hot'
+        ? { text: 'replying' }
+        : k.state === 'cold'
+          ? { text: 'cold', tone: 'cold' }
+          : k.state === 'warm' && k.leftMs !== null
+            ? k.level === 'calm'
+              ? { text: `warm ${Math.floor(k.leftMs / 60_000)} min left` }
+              : { text: `cools in ${mss(k.leftMs)}`, tone: k.level }
+            : { text: 'n/a' }
+    const hit = hitCard(v)
+    out.push({
+      key: 'cache',
+      group: 'conversation',
+      label: 'Cache',
+      level: k.state === 'cold' ? 'calm' : k.level,
+      values: [state, ...(hits.length ? [{ text: `hits ${hits.join(', ')}` }] : [])],
+      rows: [...cacheG.card.rows, ['Hit, last turn', hit.rows[0]?.[1] ?? 'n/a'], ['Hit, session', hit.rows[1]?.[1] ?? 'n/a']],
+      advice: cacheG.card.advice,
+      explain: explainOf(cacheG.card, hit.bullets),
+    })
+  }
+  if (m) {
+    const model = displayModel(m.model)
+    out.push({
+      key: 'info',
+      group: 'session',
+      label: model,
+      labelColor: modelColor(model),
+      level: 'calm',
+      values: [
+        { text: m.effort ?? 'n/a', color: m.effort ? (EFFORT_COLORS[m.effort] ?? DIM) : undefined },
+        ...(m.branch ? [{ text: m.branch }] : []),
+        ...(v.elapsedMs !== null ? [{ text: span(v.elapsedMs) }] : []),
+        ...(v.costUsd !== null ? [{ text: `$${v.costUsd.toFixed(2)} at API prices` }] : []),
+      ],
+      rows: info.rows,
+      explain: explainOf(info),
+    })
+  }
+  // A gauge added to `readings` and not listed above still shows: its label, value, rows and bar. The
+  // group follows the gauge's kind (context and cache gauges are the conversation's, the rest limits).
+  // `hit` is part of the Cache card.
+  const handled = new Set(['five', 'part', 'week', 'context', 'cache', 'hit'])
+  for (const x of gauges) {
+    if (handled.has(x.key) || x.key.startsWith('scoped-')) continue
+    out.push({
+      key: x.key,
+      group: x.group === 'context' || x.group === 'cache' ? 'conversation' : 'limits',
+      label: x.label,
+      level: x.level,
+      values: [{ text: x.value ?? 'n/a', tone: x.level }],
+      bar: withLevel(x.card.bar, x.level),
+      rows: x.card.rows,
+      advice: x.card.advice,
+      explain: explainOf(x.card),
+    })
+  }
+  return out
+}
+
+                                                                                                                           
+
+// The leading reading: the highest level, and among equals the limits first (5h, Part, the week, a
+// model-scoped limit), then the cache, then context.
+function paneVerdict(v      )          {
+                                                                                
+  const leads         = []
+  const f = v.five
+  const pause = (ms               ) => (ms !== null ? ` Or pause until ${clock(v.now + ms, v.meta)}.` : '')
+  if (f && f.level !== 'calm') {
+    const spending = f.ratePerHour !== null && f.evenPerHour !== null ? `Spending ${rate(f.ratePerHour)}; ${rate(f.evenPerHour)} would last to the reset.` : null
+    if (f.isFilling && f.fullAt !== null && f.resetInMs !== null)
+      leads.push({ level: 'act', rank: 0, sentence: 'Hold subagents: the 5h window runs short.', advice: [`${spending ?? `${pct0(f.pct)} used.`}${pause(f.resetInMs)}`] })
+    else if (f.pct >= 70)
+      leads.push({ level: f.level, rank: 0, sentence: `The 5h window is ${pct0(f.pct)} used.`, advice: [f.resetInMs !== null ? `It resets in ${span(f.resetInMs)}.` : 'Its reset is unknown.'] })
+    else leads.push({ level: f.level, rank: 0, sentence: 'The 5h pace is above its budget.', advice: [spending ?? `${pct0(f.pct)} used.`] })
+  }
+  const pm = partOf(v)
+  const plan = v.week?.plan ?? null
+  if (pm && plan && pm.share !== null) {
+    const level = higher(pm.level, pm.isOver ? 'watch' : 'calm')
+    const r = plan.reserve
+    const lead = leadOf(pm, plan)
+    if (level !== 'calm') {
+      if (plan.isAbove || pm.isOver)
+        leads.push({
+          level,
+          rank: 1,
+          sentence: 'This part is over its share.',
+          advice: [`${pts(pm.estimate ?? pm.spent)} of ${pts(pm.share)} points spent${lead !== null && lead > 0 ? `, ${pts(lead)} over` : ''}.${plan.mode === 'limit' ? ' Agent launches ask first.' : ''}`],
+        })
+      else if (r.kind === 'held' && r.isStop)
+        leads.push({ level, rank: 1, sentence: 'The reserve is held: agent launches ask first.', advice: [`The week is past ${pct0(100 - r.pct)}; the reserve opens ${clock(r.releaseAt, v.meta, true)}.`] })
+    }
+  }
+  const w = v.week
+  if (w && w.level !== 'calm')
+    leads.push({ level: w.level, rank: 2, sentence: `The week is ${pct0(w.pct)} used.`, advice: [`Save it for work that needs it${w.resetAt !== null ? `; it resets ${clock(w.resetAt, v.meta, true)}` : ''}.`] })
+  for (const b of v.scoped)
+    if (b.level !== 'calm') leads.push({ level: b.level, rank: 3, sentence: `${b.name} is ${pct0(b.percentUsed)} used this week.`, advice: [`Switch model for work that does not need ${b.name}.`] })
+  const k = v.cache
+  if (k.level !== 'calm') {
+    const rewrite = k.rewrite !== null ? `${kilo(k.rewrite)} tokens` : 'the whole context'
+    const ratio = `${k.isRatioFloor ? '≥' : '~'}${k.ratio}×`
+    if (k.state === 'cold') leads.push({ level: k.level, rank: 4, sentence: 'The cache is cold.', advice: [`The next turn writes ${rewrite} again (${ratio} a warm one).`] })
+    else if (k.state === 'warm' && k.leftMs !== null)
+      leads.push({
+        level: k.level,
+        rank: 4,
+        sentence: k.level === 'act' ? `The cache cools in ${mss(k.leftMs)}.` : `The cache has ${mss(k.leftMs)} left.`,
+        advice: [`Reply now to keep it; a cold turn writes ${rewrite} again (${ratio} a warm one).`],
+      })
+  }
+  const c = v.context
+  if (c && c.level !== 'calm')
+    leads.push({
+      level: c.level,
+      rank: 5,
+      sentence: `Context is at ${pct0(c.pct)}${c.isAuto ? '' : ' of the full window'}.`,
+      advice: [!c.isAuto ? 'Auto-compact is off: nothing compacts it by itself.' : c.turnsLeft !== null ? `About ${c.turnsLeft} ${c.turnsLeft === 1 ? 'turn' : 'turns'} to auto-compact.` : 'Auto-compact is near.'],
+    })
+  const fc = w?.forecast ?? null
+  const forecast =
+    !w || !fc
+      ? null
+      : fc.runsOutAt !== null
+        ? { level: 'act'         , text: `The week runs out at ${clock(fc.runsOutAt, v.meta, true)} at its average pace.` }
+        : {
+            level: (fc.atReset >= 80 ? 'watch' : 'calm')         ,
+            text: `The week heads to ${fc.isApprox ? '≈' : '~'}${pct0(fc.atReset)}${w.resetAt !== null ? ` by ${clock(w.resetAt, v.meta, true)}` : ''} at its average pace.${fc.isApprox && w.resetAt !== null ? ` Rough until ${clock(w.resetAt - WEEK_MS + 48 * HOUR_MS, v.meta, true)}.` : ''}`,
+          }
+  const lead = leads.sort((a, b) => (a.level === b.level ? a.rank - b.rank : a.level === 'act' ? -1 : 1))[0]
+  if (lead) return { level: lead.level, sentence: lead.sentence, advice: lead.advice, forecast }
+  const advice           = []
+  if (pm && plan && pm.share !== null) {
+    const lead = leadOf(pm, plan)
+    const spare = lead !== null && lead < 0 ? `, ${Math.round(-lead)} to spare` : ''
+    // A part with no share (off hours) has no plan to be on: say when the next share starts.
+    if (pm.share === 0) advice.push(`No share planned for this part; it ends at ${clock(plan.end, v.meta)}.`)
+    else advice.push(`This part is on plan: ${pm.isSpentUnderOne ? '<1' : pts(pm.estimate ?? pm.spent)} of ${pts(pm.share)} points spent${spare}.`)
+  } else {
+    // The week's figure is the Week card's own value, so the advice and the folded line agree.
+    const weekValue = w ? readings(v, 'pane').gauges.find(x => x.key === 'week')?.value : undefined
+    const figures = [f ? `5h at ${pct0(f.pct)}` : null, weekValue ? `week at ${weekValue}` : null].filter(x => x !== null)
+    if (figures.length) advice.push(`${figures.join(', ')}.`.replace(/^./, x => x.toUpperCase()))
+  }
+  return { level: 'calm', sentence: f || w ? 'Limits hold to their resets.' : 'Nothing needs you.', advice, forecast }
+}
+
+// One thing that happens next: a clock time, or a count (`~9 turns`) that has none.
+                                                                                                    
+
+// The events of the current 5h window in time order, every amber or red one wherever it falls, and at most
+// three grey ones; the count-based one follows the timed ones.
+function paneNext(v      )              {
+  const events              = []
+  const f = v.five
+  const windowEnd = f && f.resetInMs !== null ? v.now + f.resetInMs : v.now + 5 * HOUR_MS
+  const add = (at        , what        , why        , level       ) => events.push({ at, when: at <= v.now ? 'now' : when(at, v), what, why, level })
+  const k = v.cache
+  const rewrite = k.rewrite !== null ? kilo(k.rewrite) : 'the whole context'
+  const ratio = `${k.isRatioFloor ? '≥' : '~'}${k.ratio}×`
+  if (k.state === 'warm' && k.leftMs !== null)
+    add(
+      v.now + k.leftMs,
+      k.level === 'calm' ? 'Cache cools' : `Cache cools in ${mss(k.leftMs)}`,
+      k.level === 'calm' ? `unless a reply comes first; a cold turn writes ${rewrite} again (${ratio})` : `a reply now keeps it; a cold turn writes ${rewrite} again (${ratio})`,
+      k.level,
+    )
+  else if (k.state === 'cold' && k.level !== 'calm') add(v.now, 'Cache is cold', `the next turn writes ${rewrite} again (${ratio})`, k.level)
+  if (f) {
+    const resetAt = f.resetInMs !== null ? v.now + f.resetInMs : null
+    if (f.isFilling && f.fullAt !== null && resetAt !== null)
+      add(f.fullAt, f.isPaceline ? `5h reaches ${pct0(f.targetPct)}` : '5h hits 100%', `at the current pace, ${span(resetAt - f.fullAt)} before the reset`, f.level)
+    if (resetAt !== null) {
+      const projected = f.ratePerHour !== null ? Math.min(100, Math.round(f.pct + f.ratePerHour * (f.resetInMs  / HOUR_MS))) : null
+      // An earlier entry that says the window fills before the reset leaves nothing to add here.
+      const isFilling = f.isFilling && f.fullAt !== null
+      add(resetAt, '5h window resets', !isFilling ? `at ~${projected ?? Math.round(f.pct)}% used` : '', 'calm')
+    }
+  }
+  const pm = partOf(v)
+  const plan = v.week?.plan
+  if (pm && plan && pm.share !== null) {
+    const level = higher(pm.level, pm.isOver ? 'watch' : 'calm')
+    const lead = leadOf(pm, plan)
+    const over = lead !== null && lead > 0
+    // Under one point the pane says "<1", as the card does.
+    const atEnd = pm.atEnd === null ? '' : pm.atEnd === 0 ? '0' : pm.atEnd < 1 ? '<1' : `~${pts(pm.atEnd)}`
+    add(
+      plan.end,
+      'This part ends',
+      pm.atEnd === null || (pm.share === 0 && level === 'calm')
+        ? ''
+        : level === 'calm'
+          ? `at ${atEnd} of its ${pts(pm.share)} points`
+          : `heading for ${atEnd} of ${pts(pm.share)} points${over ? `; already ${pts(lead )} over` : ''}${plan.mode === 'limit' ? ', so agent launches ask first' : ''}`,
+      level,
+    )
+  }
+  const w = v.week
+  if (w && w.level !== 'calm' && w.resetAt !== null) add(w.resetAt, 'Week resets', `at ${pct0(w.pct)} used`, w.level)
+  for (const b of v.scoped) {
+    if (b.level === 'calm') continue
+    const own = b.resetsAt ? Date.parse(b.resetsAt) : NaN
+    const at = Number.isFinite(own) ? own : (w?.resetAt ?? null)
+    if (at !== null) add(at, `${b.name} limit resets`, `${pct0(b.percentUsed)} used; switch model for work that does not need ${b.name}`, b.level)
+  }
+  const inWindow = events.filter(e => e.level !== 'calm' || (e.at !== null && e.at <= windowEnd))
+  const grey = new Set(inWindow.filter(e => e.level === 'calm').sort((a, b) => (a.at ?? 0) - (b.at ?? 0)).slice(0, 3))
+  const kept = inWindow.filter(e => e.level !== 'calm' || grey.has(e)).sort((a, b) => (a.at ?? 0) - (b.at ?? 0))
+  const c = v.context
+  if (c && c.level !== 'calm' && c.isAuto)
+    kept.push({ at: null, when: c.turnsLeft !== null ? `~${c.turnsLeft} ${c.turnsLeft === 1 ? 'turn' : 'turns'}` : 'soon', what: 'Auto-compact', why: `context at ${pct0(c.pct)}`, level: c.level })
+  return kept
+}
+return { LABEL, VALUE, DIM, RULE, LEVEL, COLD, ON, TRACK, CALM_FILL, IDLE_MARK, EFFORT_COLORS, TERMINAL_PALETTE, t, dim, label, BAR, displayModel, modelColor, DESKTOP_OTHER, COLOUR_FACTS, isKnownFamily, desktopModelColor, cacheFraction, listOrder, weekBarOf, weekEstimate, UNPLANNED_SPENT_MIN, earlyTick, PART_FORECAST_MIN_MS, partOf, pts, readings, GROUPS, cardFor, advisorView, desktopKey, textCells, desktopCells, rowFit, limitStyle, PANE_GROUPS, paneCards, paneVerdict, paneNext }
 })()
 // Shared page behaviour: strings, glossary popovers, segmented switches, chips and the theme switch.
 // Pages read their data from the JSON script elements the build writes and call PB.* helpers.

@@ -85,8 +85,8 @@ click `[ PitBoard ]` in the footer under the prompt, or run `/pitboard`.
 
 ## A Desktop reading shows no card
 
-**Cause:** the `PitBoard` pane is open. The pane holds every card, so while it is open the row shows
-none; the shading under the pointer stays.
+**Cause:** the `PitBoard` pane is open. The pane holds every card, folded, so while it is open the
+row shows none; the shading under the pointer stays.
 
 **Check:** look for the `PitBoard` side pane at the right of the conversation.
 

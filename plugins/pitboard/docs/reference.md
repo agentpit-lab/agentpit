@@ -74,7 +74,7 @@ Desktop the buttons are not in the row; they sit in the footer.
 |---|---|---|
 | `Ctx` | Two-cell gauge; `↻` after it while auto-compact is on, then `ᶻ` while idle compaction is expected; the percentage once it leaves calm | Pie; a drawn circular double arrow while auto-compact is on, then a drawn pair of z letters (the sleep sign) while idle compaction is expected; the percentage once it leaves calm |
 | `Cache` | Two-cell gauge that fills as the cache's time to live (TTL) runs out; a flame while a reply runs; a snowflake once the cache has expired; the countdown once it leaves calm | Pie, flame, or snowflake, as in the CLI; the countdown once it leaves calm |
-| `Hit` | Not in the row: the `Cache` card carries `Hit, last turn` and `Hit, session`, and the `/pitboard` pane keeps the `Hit` gauge | The same |
+| `Hit` | Not in the row: the `Cache` card carries `Hit, last turn` and `Hit, session`, and the `/pitboard` pane's Cache card keeps them too | The same |
 | `5h`, `7d` | Two-cell gauge; the percentage once it leaves calm | Bar with a tick (the share of the window gone) and a paler forecast at the reset, the percentage and the time to reset at every level; see [Desktop limit styles](#desktop-limit-styles) |
 | `☼` `☾` | Two-cell gauge and `<spent>/<share>`, in points of the week, before `7d`; `☼` for a working-hours part, `☾` for off-hours; only while PaceLine's week plan is usable and the part has a share, or at least 1 point was spent in a part without one | Bar and `<spent>/<share>`, with a tick at the share of the part's time gone and a paler forecast at its end |
 | Model-scoped limit (`Fable`, ...), after `7d`, only while it is amber or red; a calm one is in the `/pitboard` pane | Two-cell gauge; the percentage once it leaves calm | Pie; the percentage once it leaves calm |
@@ -186,7 +186,10 @@ cell](limitations.md#the-desktop-row-can-wrap-within-about-a-third-of-a-cell)):
   [Colours](explanation.md#colours) gives the rule.
 - `ⓘ`: `Branch` shows only when the branch could be read; see [The Branch row is
   missing](troubleshooting.md#the-branch-row-is-missing). `API cost` is the session at API prices; a
-  subscription is not charged per token.
+  subscription is not charged per token. The pane's Session card, and only that card, starts with an
+  `Account` row holding the signed-in account's e-mail address when it is known: from
+  `CLAUDE_CODE_USER_EMAIL` in a Desktop session, else from `oauthAccount.emailAddress` in
+  `.claude.json`. The row, its `ⓘ` card and the CLI detail line do not show it.
 - A row reads `n/a` while its number is unknown, for example `Pace` before it has enough readings.
 
 The Desktop card shows the rows, the bar of a limit, and advice when the reading needs a decision.
@@ -194,9 +197,11 @@ In the row the cards are short: the reset joins the title (`5h limit · resets i
 resets Fri 09:00`), the Part card's hours join its title, `Pace` reads `3.2 of 4.1%/h`, and the
 Cache card adds `Hit, last turn` and `Hit, session`. The pane keeps every row. While the `/pitboard`
 pane is open, the Desktop row shows no cards. The `/pitboard` pane, which either `PitBoard` button
-also opens, shows every card in the row's order with its explanations; see [Open every card with
-`/pitboard`](how-to.md#open-every-card-with-pitboard), and the pane itself in the CLI and in Desktop
-in [Getting started, step
+also opens, opens with a verdict and a Next list, then folds every card into one line under
+`Limits`, `This conversation` and `Session`, in the row's order; pressing a line unfolds all the
+card's rows, its advice and, one press further, its explanations. The Cache card carries the `Hit`
+rows. See [Open every card with `/pitboard`](how-to.md#open-every-card-with-pitboard), and the pane
+itself in the CLI and in Desktop in [Getting started, step
 3](https://agentpit-lab.github.io/agentpit/plugins/pitboard/docs/getting-started.html#install).
 
 ## Levels
@@ -225,7 +230,9 @@ one-hour and a five-minute TTL.
 - Context also turns act at three turns left or fewer, while auto-compact is on.
 - The five-hour limit also turns act when its Pace is above its Budget, because at that pace it runs
   out before the reset. With PaceLine's projection, it turns act when PaceLine reports that the
-  window would reach its threshold before the reset. See [Colours](explanation.md#colours).
+  window would reach its threshold before the reset and its limit data is at most 30 minutes old.
+  PitBoard reads the burn file only while it is at most 3 minutes old; an older file is ignored. See
+  [Colours](explanation.md#colours).
 - The weekly limit and each model-scoped limit use the same levels, from the percentage used only.
   With PaceLine's week plan, the week's gauge on the row and the Week card's title take the highest
   level of the percentage, the part against its share (amber above it in `inform` mode, red in
@@ -234,7 +241,8 @@ one-hour and a five-minute TTL.
 - The cache levels follow from the TTL: watch below the lesser of 15 minutes and half the TTL, act
   below the lesser of 5 minutes and a fifth of the TTL. The countdown ends 5 seconds before the TTL.
 - An expired cache is blue in Desktop and teal in the terminal, apart from the levels.
-- `Hit` (in the pane) and the session card have no levels.
+- `Hit, last turn` and `Hit, session` (in the Cache card in the pane) and the Session card have no
+  levels.
 
 Inside the cards, some rows have colours of their own:
 
@@ -258,10 +266,11 @@ Inside the cards, some rows have colours of their own:
 | `CLAUDE_CONFIG_DIR` | The Claude Code configuration directory; `~/.claude` when unset. |
 | `USERPROFILE`, `HOME` | The home directory for `~/.claude`, `USERPROFILE` first. |
 | `PACELINE_STATE_DIR` | PaceLine's state directory, where the limits file lies. |
-| `CLAUDE_CODE_ACCOUNT_UUID`, `CLAUDE_CODE_ORGANIZATION_UUID` | The signed-in account, which the Claude Code Desktop host passes to its session. When both are set and the account variable is a UUID, the row shows that account's partition of the limits file; otherwise the account comes from `.claude.json`. |
+| `CLAUDE_CODE_ACCOUNT_UUID`, `CLAUDE_CODE_ORGANIZATION_UUID`, `CLAUDE_CODE_USER_EMAIL` | The signed-in account, which the Claude Code Desktop host passes to its session. When both are set and the account variable is a UUID, the row shows that account's partition of the limits file; otherwise the account comes from `.claude.json`. `CLAUDE_CODE_USER_EMAIL` is the account's e-mail address, which the host passes with them; the pane's Session card shows it. |
 | `LC_ALL`, `LC_TIME`, `LANG` | The locale for weekday names, read in this order on every OS; `C` and `POSIX` are skipped. When none gives a locale, PitBoard asks `pwsh`. |
 | `CLAUDE_CODE_IDLE_COMPACT_MIN_TOKENS` | The context size from which idle compaction applies, for the Idle compact row. Claude Code's minimum is 100,000 and its default 200,000; a positive whole number below 100,000 counts as 100,000, and any other value gives the default. |
 | `DISABLE_AUTO_COMPACT` | When set to `1`, `true`, `yes` or `on`, auto-compact and idle compaction are off, and the Idle compact row reads off. |
+| `PITBOARD_SCENARIO` | For plugin development: draws the pane from a scenario file (a JSON `ViewInput` with a fixed time) instead of live readings. Unset in normal use; it reads nothing and writes nothing. |
 
 PitBoard reads these variables from the environment Claude Code started in.
 
@@ -275,7 +284,7 @@ set and not empty, else `<config>/state/paceline`, the rule PaceLine uses.
 | `<config>/settings.json` | `advisorModel`; the effort level for `/effort` | At session start, after each turn, every 20 seconds, and after `/advisor` and `/effort` |
 | `<state>/rate-limits.json` | Five-hour and weekly readings and model-scoped limits, from the partition of the signed-in account | At session start, after each turn, and every 20 seconds |
 | `<state>/rate-limits.history.jsonl` and its rotated `.1` | Earlier readings of the signed-in account, for Pace | At session start |
-| `<config>/.claude.json`, else `~/.claude.json` | The signed-in account, as a 16-hex-digit SHA-256 key of `oauthAccount.accountUuid` and `organizationUuid`; nothing else in the file | With the limits file |
+| `<config>/.claude.json`, else `~/.claude.json` | The signed-in account, as a 16-hex-digit SHA-256 key of `oauthAccount.accountUuid` and `organizationUuid`; and `oauthAccount.emailAddress`, held in memory for the pane's Session card; nothing else in the file | With the limits file |
 | `<state>/five-hour-burn-<key>.json` | PaceLine's projection of the five-hour limit to its threshold: the account, window and percentage it was computed for, the rate, the budget rate, the threshold and the time it is reached, and whether the burn is limited | With the limits file |
 | `<state>/week-plan-<key>.json` | PaceLine's week plan: the current part with its share, the mode, the reserve and the later parts | With the limits file, for the signed-in account's key only |
 | `<state>/last-request-<key>.json` | The time of the account's newest request, for the signed-in account's key only: whether anything was spent in a period that began after the last whole-percent step | With the limits file |

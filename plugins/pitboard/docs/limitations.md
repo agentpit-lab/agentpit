@@ -48,7 +48,12 @@ account unknown until the session restarts. Some gaps remain:
 
 **What you see:** the `5h limit`, `Week` and model-scoped limit cards show an `Account` row with
 `unknown` whenever a figure of the limit comes from a file whose account is not known. The row shows
-no mark while the figures are the account's own.
+no mark while the figures are the account's own. The pane's Session card, unfolded, shows the
+signed-in account's e-mail address in an `Account` row, from `CLAUDE_CODE_USER_EMAIL` in a Desktop
+session, else from `oauthAccount.emailAddress` in `.claude.json`. It is the only place PitBoard
+shows the address, so a screenshot of an unfolded Session card carries it. The row is absent when
+the address cannot be read, and after a `/login` or `/logout` in a session that has the account
+variables.
 
 **What still works:** a Desktop session and a terminal session on different accounts need no second
 directory. To run two terminal sessions on different accounts, give each account its own
@@ -76,8 +81,8 @@ The row draws only in the CLI and in Desktop. The Claude mobile app has no row.
 
 **What you see:** no row in the Claude mobile app.
 
-**What still works:** `/pitboard` opens a pane with every card on any surface. See [Open every card
-with `/pitboard`](how-to.md#open-every-card-with-pitboard).
+**What still works:** `/pitboard` opens a pane with a verdict, what happens next and every card on
+any surface. See [Open every card with `/pitboard`](how-to.md#open-every-card-with-pitboard).
 
 ### Some readings need git, pwsh, or node
 
@@ -101,7 +106,7 @@ row while the inline survey shows.
 
 **What you see:** in Desktop before 2.37337.1, no row above the prompt while the survey shows.
 
-**What still works:** `/pitboard` shows every card meanwhile.
+**What still works:** `/pitboard` shows every reading meanwhile.
 
 ### The Desktop row can wrap within about a third of a cell
 

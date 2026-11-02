@@ -3,7 +3,7 @@ import type { EngineInterface, Register } from 'claude-code'
 
 import type { PitboardButton, StatusBurn, StatusCache, StatusLimit, StatusMeasure, StatusSample, StatusScoped, StatusWeekPlan } from '../types'
 import { accountFileOf, accountKeyOf, accountKeyOfIds } from './account'
-import { desktopKey } from './cards'
+import { desktopKey, paneCards } from './cards'
 import { drawDesktop, drawPane, drawTerminal } from './draw'
 import type { Els } from './draw'
 import {
@@ -21,6 +21,7 @@ import {
   settingsEffort,
   stateDirOf,
 } from './view'
+import type { View, ViewInput } from './view'
 
 // Every function that takes $, and every atom it reads, lives in this file: the engine follows $
 // and state references only within the file that declares them.
@@ -55,6 +56,10 @@ const advisorPick = atom({ plugin: 'pitboard', key: 'advisorPick' } as const, nu
 // the file come from readings of unknown account.
 const account = atom({ plugin: 'pitboard', key: 'account' } as const, null)
 const paneOpen = atom({ plugin: 'pitboard', key: 'paneOpen' } as const, false)
+// What the person unfolded in the pane: folded on every open, kept while the pane stays open, never
+// unfolded by itself.
+const paneUnfolded = atom({ plugin: 'pitboard', key: 'paneUnfolded' } as const, [] as string[])
+const paneHow = atom({ plugin: 'pitboard', key: 'paneHow' } as const, [] as string[])
 // The buttons other plugins added through $.pitboard.addButton, in the order added.
 const buttons = atom({ plugin: 'pitboard', key: 'buttons' } as const, [] as PitboardButton[])
 const BUTTON_KEY = /^[a-z][a-z0-9-]{0,31}$/
@@ -70,6 +75,37 @@ let timersStarted = false
 async function setPaneOpen($: EngineInterface, value: boolean) {
   paneOpenNow = value
   await update($, paneOpen, () => value)
+  if (!value) {
+    await update($, paneUnfolded, () => [])
+    await update($, paneHow, () => [])
+  }
+}
+
+const toggled = (keys: string[], key: string) => (keys.includes(key) ? keys.filter(k => k !== key) : [...keys, key])
+
+// The pane's presses, from a Button of the hooks module's own tree.
+async function toggleCard($: EngineInterface, key: string) {
+  await update($, paneUnfolded, keys => toggled(keys, key))
+}
+async function toggleHow($: EngineInterface, key: string) {
+  await update($, paneHow, keys => toggled(keys, key))
+  // An explanation sits inside its card, so opening one opens the card.
+  if (!(await read($, paneUnfolded)).includes(key)) await update($, paneUnfolded, keys => [...keys, key])
+}
+async function unfoldAll($: EngineInterface, isRemote: boolean) {
+  const keys = paneCards((await paneView($)).view, isRemote).map(c => c.key)
+  const open = await read($, paneUnfolded)
+  const isAllOpen = keys.every(k => open.includes(k))
+  await update($, paneUnfolded, () => (isAllOpen ? [] : keys))
+  if (isAllOpen) await update($, paneHow, () => [])
+}
+async function howAll($: EngineInterface, isRemote: boolean) {
+  const cards = paneCards((await paneView($)).view, isRemote)
+  const withHow = cards.filter(c => c.explain.length).map(c => c.key)
+  const [open, how] = await Promise.all([read($, paneUnfolded), read($, paneHow)])
+  const isAllHow = withHow.every(k => how.includes(k)) && cards.every(c => open.includes(c.key))
+  await update($, paneUnfolded, () => (isAllHow ? open : cards.map(c => c.key)))
+  await update($, paneHow, () => (isAllHow ? [] : withHow))
 }
 
 const toLimit = (l: StatusLimit): StatusLimit => ({ kind: l.kind, percentUsed: l.percentUsed, resetsAt: l.resetsAt })
@@ -97,34 +133,59 @@ async function envAccountOf($: EngineInterface): Promise<string | null> {
 // the file may now name another one, so the session's account is unknown until the process restarts.
 let accountLost = false
 
-// The key of the account signed in now, null when it cannot be told: the session's own variables
-// first, else Claude Code's state file. The file is read at every use, and Claude Code rewrites it
-// often, so a read that fails is tried once more after 50 ms. Nothing from the file is kept.
-async function accountOf($: EngineInterface): Promise<string | null> {
-  if (accountLost) return null
-  const own = await envAccountOf($)
-  if (own !== null) return own
-  try {
-    const file = accountFileOf({
-      configDir: await $.env.get('CLAUDE_CONFIG_DIR'),
-      home: (await $.env.get('USERPROFILE')) ?? (await $.env.get('HOME')),
-    })
-    if (!(await $.fs.exists(file))) return null
-    for (let attempt = 0; attempt < 2; attempt++) {
-      let text: string | null = null
-      try {
-        text = await $.fs.read(file)
-      } catch {
-        text = null
-      }
-      const found = accountKeyOf(text)
-      if (found.reason !== 'unreadable') return found.key
-      if (attempt === 0) await new Promise<void>(resolve => $.clock.after(50, () => resolve()))
+// What names the account signed in now: its key, which picks paceline's per-account files, and its
+// e-mail, which the Session card shows. Null when it cannot be told.
+type Who = { key: string | null; email: string | null }
+
+// The text of Claude Code's state file, null when it is absent or cannot be read. Claude Code rewrites
+// the file often, so a read that fails is tried once more after 50 ms.
+async function accountText($: EngineInterface): Promise<string | null> {
+  const file = accountFileOf({
+    configDir: await $.env.get('CLAUDE_CONFIG_DIR'),
+    home: (await $.env.get('USERPROFILE')) ?? (await $.env.get('HOME')),
+  })
+  if (!(await $.fs.exists(file))) return null
+  for (let attempt = 0; attempt < 2; attempt++) {
+    let text: string | null = null
+    try {
+      text = await $.fs.read(file)
+    } catch {
+      text = null
     }
-  } catch {
-    // Whatever failed, the account is unknown.
+    if (accountKeyOf(text).reason !== 'unreadable') return text
+    if (attempt === 0) await new Promise<void>(resolve => $.clock.after(50, () => resolve()))
   }
   return null
+}
+
+// The state file's oauthAccount e-mail, null when the text has none.
+function emailOfText(text: string | null): string | null {
+  if (text === null) return null
+  try {
+    const oauth = (JSON.parse(text) as { oauthAccount?: { emailAddress?: unknown } }).oauthAccount
+    return typeof oauth?.emailAddress === 'string' && oauth.emailAddress ? oauth.emailAddress : null
+  } catch {
+    return null
+  }
+}
+
+// The account signed in now, from one read of the state file: the session's own variables first, else
+// the file's oauthAccount. A Desktop host that sets CLAUDE_CODE_ACCOUNT_UUID also names the e-mail, so
+// the file does not supply it then. The file is read at every use and the text is not kept; only the
+// e-mail reaches the `meta` atom, for the Session card, and the key the `account` atom.
+async function accountNow($: EngineInterface): Promise<Who> {
+  if (accountLost) return { key: null, email: null }
+  try {
+    const isOwn = !!(await $.env.get('CLAUDE_CODE_ACCOUNT_UUID'))
+    const ownEmail = isOwn ? (await $.env.get('CLAUDE_CODE_USER_EMAIL')) || null : null
+    const ownKey = await envAccountOf($)
+    if (ownKey !== null) return { key: ownKey, email: ownEmail }
+    const text = await accountText($)
+    return { key: accountKeyOf(text).key, email: isOwn ? ownEmail : emailOfText(text) }
+  } catch {
+    // Whatever failed, the account is unknown.
+    return { key: null, email: null }
+  }
 }
 
 // paceline's <state>, found by paceline's own rule, so the row reads the files paceline writes.
@@ -155,7 +216,8 @@ let localeTried = false
 // The main-loop model, as $.session.model() spells it, the last request reported its effort on.
 let effortModel: string | null = null
 
-async function refreshMeta($: EngineInterface) {
+// `who` is a read the caller already made, so one turn reads the state file once.
+async function refreshMeta($: EngineInterface, who?: Who) {
   const [model, cwd, version, usage, turns] = await Promise.all([
     $.session.model(),
     $.session.cwd(),
@@ -175,6 +237,7 @@ async function refreshMeta($: EngineInterface) {
   const leaf = `${sep}${cwd.split(/[\\/]/).filter(Boolean).pop() ?? cwd}`
   const settings = (await $.settings.read()) as Record<string, unknown>
   const advisor = await currentAdvisor($)
+  const accountEmail = (who ?? (await accountNow($))).email
   const known = await read($, meta)
   // Looked up once: on a host with neither a locale variable nor pwsh every try fails alike.
   const locale = known?.locale ?? (localeTried ? null : await osLocale($))
@@ -190,6 +253,7 @@ async function refreshMeta($: EngineInterface) {
     version: version.version,
     startedAt: usage.startedAt,
     turns,
+    account: accountEmail,
   }))
 }
 
@@ -269,9 +333,9 @@ let sharedRound = 0
 
 // The limits file holds what every session that reports to it saw, and alone holds the
 // model-scoped weekly buckets, when a writer adds them.
-async function refreshShared($: EngineInterface) {
+async function refreshShared($: EngineInterface, who?: Who) {
   const round = ++sharedRound
-  const key = await accountOf($)
+  const key = (who ?? (await accountNow($))).key
   const dir = await stateDir($)
   const path = `${dir}/rate-limits.json`
   let file: unknown = null
@@ -696,6 +760,42 @@ async function currentView($: EngineInterface, at?: number) {
   })
 }
 
+// PITBOARD_SCENARIO names a JSON file holding a ViewInput with a fixed `now`; the pane then draws from it
+// instead of the live state, and nothing is written or changed. Unset, or a host that cannot answer for the
+// variable, reads nothing. The engine reads the variable's name off the source, so the call names it.
+async function scenarioPath($: EngineInterface) {
+  try {
+    return (await $.env.get('PITBOARD_SCENARIO')) || undefined
+  } catch {
+    return undefined
+  }
+}
+
+// The paths whose file could not be read, so a pane redrawn every few seconds logs each once.
+const loggedScenarios = new Set<string>()
+
+async function scenarioView($: EngineInterface): Promise<{ view: View; path: string } | null> {
+  const path = await scenarioPath($)
+  if (!path) return null
+  try {
+    return { view: buildView(JSON.parse(await $.fs.read(path)) as ViewInput), path }
+  } catch (err) {
+    if (!loggedScenarios.has(path)) {
+      loggedScenarios.add(path)
+      // The path and the error's name only: the message of a parse error can quote the file.
+      $.ui.log(`pitboard: the scenario file ${path} could not be read (${err instanceof Error ? err.name : 'error'})`)
+    }
+    return null
+  }
+}
+
+// The view the pane draws and, for a scenario, the file's name to say so.
+async function paneView($: EngineInterface): Promise<{ view: View; scenario?: string }> {
+  const scenario = await scenarioView($)
+  if (scenario) return { view: scenario.view, scenario: scenario.path.split(/[\\/]/).pop() }
+  return { view: await currentView($) }
+}
+
 export const register: Register = on => {
   // The noun other plugins call; the work is in the pitboard.addButton hook below, which has its own $.
   on('engine.create', async ($, e, next) => ({ ...(await next(e)), pitboard: { addButton: async () => undefined } }))
@@ -730,13 +830,14 @@ export const register: Register = on => {
     } catch {
       // The atom keeps its value: closed, unless this module placed the pane.
     }
-    const key = await accountOf($)
+    const who = await accountNow($)
+    const key = who.key
     await update($, account, () => ({ key, isFileUnknown: false }))
     await restoreSamples($, key)
-    await refreshMeta($)
+    await refreshMeta($, who)
     // The shared file first: the session's own reading can be a turn old at start and would
     // enter the samples as a false step.
-    await refreshShared($)
+    await refreshShared($, who)
     await refreshThreshold($)
     await refreshTranscript($)
     await recordContext($)
@@ -807,10 +908,12 @@ export const register: Register = on => {
   for (const command of ['login', 'logout']) {
     on('command.run', { command }, async ($, e, next) => {
       const result = await next(e)
-      if ((await envAccountOf($)) !== null) {
-        accountLost = true
-        await refreshShared($)
-      }
+      if ((await envAccountOf($)) !== null) accountLost = true
+      // One read for both: the Session card follows the login at once instead of at the next refresh,
+      // the file's new account without the variables, no account with them.
+      const who = await accountNow($)
+      await refreshMeta($, who)
+      await refreshShared($, who)
       return result
     })
   }
@@ -920,8 +1023,9 @@ export const register: Register = on => {
     // A subagent's run is a turn of its own loop; the row describes the main conversation.
     if (e.agentId) return result
     await update($, cache, c => (c.isInFlight ? { ...c, isInFlight: false } : c))
-    await refreshMeta($)
-    await refreshShared($)
+    const who = await accountNow($)
+    await refreshMeta($, who)
+    await refreshShared($, who)
     // /model and /config change the compaction trigger without a compaction.
     await refreshThreshold($)
     await refreshTranscript($)
@@ -1008,6 +1112,22 @@ export const register: Register = on => {
   })
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
-    return drawPane($.ui.resolve(e) as Els, await currentView($), e.surface !== 'terminal')
+    const { view, scenario } = await paneView($)
+    const [open, how] = await Promise.all([read($, paneUnfolded), read($, paneHow)])
+    // One path on every surface: the body is drawn here, in the pane's own width, so Desktop gets its bars as images.
+    // The terminal has no images: without Svg the bars are drawn in cells.
+    const els = $.ui.resolve(e) as Els
+    const isRemote = e.surface !== 'terminal'
+    return drawPane(e.surface === 'terminal' ? { ...els, Svg: undefined } : els, view, {
+      columns: e.props.bodyColumns ?? e.viewport?.columns ?? 80,
+      isRemote,
+      ...(scenario ? { scenario } : {}),
+      open,
+      how,
+      onToggle: key => void toggleCard($, key),
+      onHow: key => void toggleHow($, key),
+      onUnfoldAll: () => void unfoldAll($, isRemote),
+      onHowAll: () => void howAll($, isRemote),
+    })
   })
 }

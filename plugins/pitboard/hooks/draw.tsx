@@ -1,186 +1,338 @@
-import { advisorView, alerts, BAR, CALM_FILL, cardFor, COLD, desktopModelColor, DIM, dim, displayModel, EFFORT_COLORS, type Gauge, GROUPS, IDLE_MARK, isKnownFamily, LABEL, label, LEVEL, listOrder, modelColor, ON, type Part, readings, rowFit, type Row, RULE, t, TRACK, VALUE } from './cards'
+import { advisorView, CALM_FILL, cardFor, COLD, desktopModelColor, DIM, displayModel, EFFORT_COLORS, type Gauge, GROUPS, IDLE_MARK, isKnownFamily, LABEL, LEVEL, listOrder, modelColor, ON, PANE_GROUPS, type PaneCard, paneCards, paneNext, paneVerdict, readings, rowFit, RULE, TRACK, VALUE } from './cards'
 import { barSvg, cacheIconSvg, type Card, type CardBar, DESKTOP_COLD, DESKTOP_LEVEL, DESKTOP_ON, pieSvg, ringMarksSvg, ruleSvg, type Tone, wideBarSvg } from './desktop'
 import type { View } from './view'
 import type { PitboardButton } from '../types'
 
 // The element tables differ per surface; these trees use only what all of them share,
-// plus Svg where `isRemote` says the surface has it.
+// plus Svg where the surface has it.
 type Ctor = (props: any) => any
 export type Els = { Box: Ctor; Text: Ctor; Svg?: Ctor; Button?: Ctor }
 
-function drawRow(els: Els, row: Row, isRemote: boolean, key: string) {
+// The pane: a verdict, what happens next, then the cards folded into groups. A press unfolds a card,
+// and its explanations one level further. The mobile app's only view.
+
+// Widths in cells of the pane's own body. Under PANE_NARROW the folded lines drop their bars and the
+// Next consequences go under their time; Desktop puts the verdict and Next beside the groups from
+// PANE_WIDE_DESKTOP, about 880 px. One bar width serves the whole pane.
+export const PANE_NARROW = 60
+export const PANE_WIDE_DESKTOP = 120
+// Under this many cells the folded lines put their values under the label instead of beside it.
+export const PANE_STACK = 44
+const BAR_MIN = 10
+const BAR_MAX = 20
+// Cells between a card's label and its value, and after a bar.
+const LABEL_GAP = 2
+const BAR_GAP = 2
+const STACK_INDENT = 2
+
+export type PaneOptions = {
+  // Cells across the pane's body, from the region the body is drawn in, else from the pane's own props.
+  columns: number
+  isRemote: boolean
+  // The file name of the scenario the view is drawn from (PITBOARD_SCENARIO): the pane says so on its first line.
+  scenario?: string
+  // The keys of the unfolded cards, and of the cards whose explanations are open.
+  open: string[]
+  how: string[]
+  onToggle: (key: string) => void
+  onHow: (key: string) => void
+  onUnfoldAll: () => void
+  onHowAll: () => void
+}
+
+export const paneBarCells = (columns: number) => Math.max(BAR_MIN, Math.min(BAR_MAX, Math.floor(columns * 0.2)))
+
+const toneColor = (tone?: Tone | 'cold') => (tone === 'on' ? ON : tone === 'cold' ? COLD : tone && tone !== 'calm' ? LEVEL[tone] : VALUE)
+// Spaces a surface keeps at the edge of a run: a flex item's trailing blank would collapse.
+const NBSP = '\u00a0'
+const NBSP_DOT = `${NBSP}·${NBSP}`
+// Values filled into lines of at most `width` cells, a value never split; a lone long value keeps its line.
+function valueLines<T extends { text: string }>(values: T[], width: number): T[][] {
+  const lines: T[][] = []
+  let used = 0
+  for (const v of values) {
+    const w = [...v.text].length
+    const last = lines[lines.length - 1]
+    if (last && used + 3 + w <= width) {
+      last.push(v)
+      used += 3 + w
+    } else {
+      lines.push([v])
+      used = w
+    }
+  }
+  return lines
+}
+const caret = (isOpen: boolean) => (isOpen ? '⌄' : '›')
+
+// A bar in cells: used █ in the level's colour, the forecast ▒, the time tick │ in a cell of its own,
+// the rest ░. Where the surface has Svg the same bar is an image.
+function paneBar(els: Els, b: CardBar, cells: number, key: string) {
   const { Box, Text, Svg } = els
-  if (!isRemote || !Svg) {
-    return (
-      <Text key={key} wrap="truncate-end">
-        {row.map((p, i) =>
-          'wide' in p ? (
-            <Text key={String(i)}>{wideCells(Text, p.wide, p.cells)}</Text>
-          ) : (
-            <Text key={String(i)} color={p.color} bold={p.bold}>
-              {p.text}
-            </Text>
-          ),
-        )}
-      </Text>
-    )
+  if (Svg) {
+    const bar = wideBarSvg(b, cells * 8)
+    return <Svg key={key} source={bar.source} alt={bar.alt} width={bar.width} height={bar.height} />
   }
-  // Remote surfaces lay a row out in flex boxes, where each text run would wrap on its own.
-  // A row is split at its `│` rules into groups that never break inside; only the gaps wrap.
-  const groups: Part[][] = [[]]
-  for (const p of row) {
-    if (p === BAR) groups.push([])
-    else groups[groups.length - 1]?.push(p)
-  }
-  const group = (parts: Part[], gk: string) => {
-    const items: any[] = []
-    let run: Part[] = []
-    const flush = () => {
-      if (!run.length) return
-      items.push(
-        <Text key={`t${items.length}`} wrap="truncate-end">
-          {run.map((p, i) =>
-            'text' in p ? (
-              <Text key={String(i)} color={p.color} bold={p.bold}>
-                {p.text}
-              </Text>
-            ) : null,
-          )}
-        </Text>,
-      )
-      run = []
-    }
-    for (const p of parts) {
-      if ('wide' in p) {
-        flush()
-        const bar = wideBarSvg(p.wide, p.cells * 8)
-        items.push(<Svg key={`w${items.length}`} source={bar.source} alt={bar.alt} width={bar.width} height={bar.height} />)
-      } else run.push(p)
-    }
-    flush()
-    return (
-      <Box key={gk} flexDirection="row" alignItems="center" flexShrink={0} columnGap={1}>
-        {items}
-      </Box>
-    )
+  const at = (pct: number) => Math.round((Math.max(0, Math.min(100, pct)) / 100) * cells)
+  // A value above zero keeps at least one cell, so 2% of 16 cells still shows; so does a forecast above the use.
+  const used = b.used > 0 ? Math.max(1, at(b.used)) : 0
+  const projected = b.projected !== undefined && b.projected > b.used ? Math.max(used + 1, at(b.projected)) : used
+  const tick = b.tick === null ? -1 : Math.min(cells - 1, at(b.tick))
+  const usedColor = b.level === 'calm' ? VALUE : LEVEL[b.level]
+  const runs: { glyph: string; color: string; n: number }[] = []
+  for (let i = 0; i < cells; i++) {
+    const [glyph, color] = i === tick ? ['│', VALUE] : i < used ? ['█', usedColor] : i < projected ? ['▒', DIM] : ['░', TRACK]
+    const last = runs[runs.length - 1]
+    if (last && last.glyph === glyph && last.color === color) last.n++
+    else runs.push({ glyph: glyph!, color: color!, n: 1 })
   }
   return (
-    <Box key={key} flexDirection="row" flexWrap="wrap" alignItems="center" columnGap={3}>
-      {groups.filter(g => g.length).map((g, i) => group(g, `${key}-${i}`))}
+    <Box key={key} flexShrink={0}>
+      <Text>
+        {runs.map((r, i) => (
+          <Text key={String(i)} color={r.color}>
+            {r.glyph.repeat(r.n)}
+          </Text>
+        ))}
+      </Text>
     </Box>
   )
 }
 
-// The wide bar in cells: used in the level's colour, the projection dim, the rest on the gauges'
-// track, the even-pace tick as ┃. A calm share takes the value colour, since the calm grey is the
-// projection's.
-function wideCells(Text: Ctor, b: CardBar, cells: number) {
-  const at = (pct: number) => Math.round((Math.max(0, Math.min(100, pct)) / 100) * cells)
-  const used = at(b.used)
-  const projected = Math.max(used, b.projected !== undefined ? at(b.projected) : used)
-  const tick = b.tick === null ? -1 : Math.min(cells - 1, at(b.tick))
-  const usedColor = b.level === 'calm' ? VALUE : LEVEL[b.level]
-  return Array.from({ length: cells }, (_, i) => {
-    const color = i === tick ? VALUE : i < used ? usedColor : i < projected ? DIM : TRACK
-    const glyph = i === tick ? '┃' : i < projected ? '━' : '─'
-    return (
-      <Text key={String(i)} color={color}>
-        {glyph}
+export function drawPane(els: Els, v: View, o: PaneOptions) {
+  const { Box, Text, Button } = els
+  const cards = paneCards(v, o.isRemote)
+  const verdict = paneVerdict(v)
+  const next = paneNext(v)
+  const isNarrow = o.columns < PANE_NARROW
+  const isWide = o.isRemote && o.columns >= PANE_WIDE_DESKTOP
+  const barCells = paneBarCells(o.columns)
+  // The groups' own width: in the wide layout they stand beside the verdict and Next.
+  const groupColumns = isWide ? o.columns - Math.floor(o.columns * 0.4) - 4 : o.columns
+  // A label with a colour of its own (the Session card's model) keeps the caret dim and draws the name in it;
+  // without Button the plain Text takes the colour whole.
+  const press = (label: string, key: string, onPress: () => void, name?: { caret: string; text: string; color: string }) =>
+    Button ? (
+      name ? (
+        <Button key={key} label={label} plain dimColor onPress={onPress}>
+          {name.caret} <Text color={name.color}>{name.text}</Text>
+        </Button>
+      ) : (
+        <Button key={key} label={label} plain dimColor onPress={onPress} />
+      )
+    ) : (
+      <Text key={key} color={name?.color ?? DIM}>
+        {label}
       </Text>
     )
-  })
-}
 
-// The pane: every card of the row, unfolded in the row's order, with all of its explanation; the
-// mobile app's only view. What needs a decision leads, and only while something does.
-
-// A pane bar spans the readings column, labels and values, within these bounds.
-const PANE_BAR_MIN = 20
-const PANE_BAR_MAX = 40
-// Cells between a reading's label and its value.
-const PANE_LABEL_GAP = 2
-
-
-const toneColor = (tone?: Tone) => (tone === 'on' ? ON : tone && tone !== 'calm' ? LEVEL[tone] : VALUE)
-
-export function drawPane(els: Els, v: View, isRemote: boolean) {
-  const { Box, Text } = els
-  const { gauges, info, advisor } = readings(v, 'pane')
-  const m = v.meta
-  // A section's lines: a Row drawn as text runs, or a node laid out on its own (the readings grid).
-  const sections: { key: string; rows: (Row | { node: any })[] }[] = []
-  const urgent = alerts(v)
-  const extras = (card: Card) => [...card.bullets, ...(isRemote ? (card.desktopBullets ?? []) : [])].filter(b => b !== 'Full detail: /pitboard')
-  // One reading to a line, every card's labels in one column as wide as the longest, values left
-  // after it: the pane reads top to bottom as one list, aligned in any font and at any width.
-  const cards = [...gauges.map(g => g.card), ...(advisor ? [advisor] : []), info]
-  const labelWidth = Math.max(0, ...cards.flatMap(c => c.rows.map(([l]) => l.length))) + PANE_LABEL_GAP
-  const valueWidth = Math.max(0, ...cards.flatMap(c => c.rows.map(([, val]) => val.length)))
-  const barCells = Math.min(PANE_BAR_MAX, Math.max(PANE_BAR_MIN, labelWidth + valueWidth))
-  const grid = (key: string, card: Card) =>
-    listOrder(card.rows)
-      .map(([l, val, tone], i) => ({
-        node: (
-          <Box key={`${key}-r${i}`} flexDirection="row" paddingLeft={2}>
-            <Box width={labelWidth} flexShrink={0}>
-              <Text color={LABEL}>{l}</Text>
-            </Box>
-            <Text color={toneColor(tone)}>{val}</Text>
-          </Box>
-        ),
-      }))
-  // Bullets wrap under their own indent; the pane is read, not glanced at.
-  const bullet = (key: string, text: string) => ({
-    node: (
-      <Box key={key} flexDirection="row" alignItems="flex-start" paddingLeft={2}>
-        <Text color={DIM}>{'• '}</Text>
-        <Text color={DIM} wrap="wrap">
-          {text}
+  const verdictBlock = (
+    <Box key="verdict" flexDirection="column" marginBottom={1}>
+      <Text bold color={verdict.level === 'calm' ? VALUE : LEVEL[verdict.level]} wrap="wrap">
+        {verdict.sentence}
+      </Text>
+      {verdict.advice.map((a, i) => (
+        <Text key={`advice-${i}`} color={VALUE} wrap="wrap">
+          {a}
         </Text>
-      </Box>
-    ),
-  })
-  // What needs a decision leads: each warning's head on its own line, its advice wrapped under it.
-  if (urgent.length)
-    sections.push({
-      key: 'attention',
-      rows: [
-        [t('Needs attention', LEVEL[urgent[0]?.level ?? 'watch'], true)],
-        ...urgent.flatMap((a, i): (Row | { node: any })[] => [
-          [t(a.head, LEVEL[a.level], true)],
-          {
-            node: (
-              <Box key={`attention-${i}`} paddingLeft={2}>
-                <Text color={VALUE} wrap="wrap">
-                  {a.advice}
+      ))}
+      {verdict.forecast && verdict.forecast.level !== 'calm' ? (
+        <Text key="forecast" color={LEVEL[verdict.forecast.level]} wrap="wrap">
+          {verdict.forecast.text}
+        </Text>
+      ) : null}
+    </Box>
+  )
+
+  const whenWidth = Math.max(0, ...next.map(e => e.when.length)) + 2
+  const nextBlock = next.length ? (
+    <Box key="next" flexDirection="column" marginBottom={1}>
+      <Text bold color={LABEL}>
+        Next
+      </Text>
+      {next.map((e, i) => (
+        <Box key={`next-${i}`} flexDirection="row">
+          <Box width={whenWidth} flexShrink={0}>
+            <Text color={LEVEL[e.level]}>{e.when}</Text>
+          </Box>
+          {isNarrow ? (
+            <Box flexDirection="column" flexGrow={1} flexShrink={1}>
+              <Text bold color={e.level === 'calm' ? VALUE : LEVEL[e.level]} wrap="wrap">
+                {e.what}
+              </Text>
+              {e.why ? (
+                <Text color={DIM} wrap="wrap">
+                  {e.why}
                 </Text>
-              </Box>
-            ),
-          },
-        ]),
-      ],
-    })
-  const unfold = (key: string, card: Card, head: Row) => {
-    const rows: (Row | { node: any })[] = [[t(card.title, card.level && card.level !== 'calm' ? LEVEL[card.level] : VALUE, true), ...head], ...grid(key, card)]
-    if (card.bar) rows.push([dim('  '), { wide: card.bar, cells: barCells }])
-    extras(card).forEach((b, i) => rows.push(bullet(`${key}-b${i}`, b)))
-    sections.push({ key, rows })
-  }
-  for (const g of gauges) {
-    const head: Row = g.icon ? [t(` ${g.icon === 'hot' ? '🔥' : '❄'}`, g.icon === 'cold' ? COLD : LEVEL.act)] : g.mark ? [t(` ${markText(g)}`, ON)] : []
-    unfold(g.key, g.card, head)
-    if (g.key === 'context' && advisor && m?.advisor) unfold('advisor', advisor, [])
-  }
-  // ⓘ's card is titled by the model; the pane names the section and keeps the model beside it.
-  if (m) unfold('info', { ...info, title: 'Session' }, [t(` ${info.title}`, modelColor(info.title))])
-  return (
-    <Box flexDirection="column">
-      {sections.map(s => (
-        <Box key={s.key} flexDirection="column" marginBottom={1}>
-          {s.rows.map((row, i) => ('node' in row ? row.node : drawRow(els, row, isRemote, `${s.key}-${i}`)))}
+              ) : null}
+            </Box>
+          ) : (
+            <Box flexGrow={1} flexShrink={1}>
+              <Text wrap="wrap">
+                <Text bold color={e.level === 'calm' ? VALUE : LEVEL[e.level]}>
+                  {e.what}
+                </Text>
+                {e.why ? <Text color={DIM}>{`${NBSP}${NBSP}${e.why}`}</Text> : null}
+              </Text>
+            </Box>
+          )}
         </Box>
       ))}
     </Box>
+  ) : null
+
+  // The label column holds the caret, the label and the mark; one width for every card.
+  const labelWidth = Math.max(0, ...cards.map(c => caret(true).length + 1 + c.label.length + (c.mark ? 2 : 0))) + LABEL_GAP
+  const hasBars = !isNarrow && cards.some(c => c.bar)
+  // Unfolded rows of every card share one value column, so cards opened together line up; at least the
+  // folded value column, and per card only when the shared one would take more than half a narrow pane.
+  const rowWidth = (c: PaneCard) => Math.max(0, ...listOrder(c.rows).map(([l]) => l.length)) + LABEL_GAP
+  const sharedRowLabel = Math.max(labelWidth - 2, ...cards.map(rowWidth))
+  const unfolded = (c: PaneCard) => {
+    const rows = listOrder(c.rows)
+    const rowLabel = sharedRowLabel <= groupColumns / 2 ? sharedRowLabel : rowWidth(c)
+    const isHow = o.how.includes(c.key)
+    return (
+      <Box key={`${c.key}-open`} flexDirection="column" paddingLeft={2} marginBottom={1}>
+        {rows.map(([l, val, tone], i) => (
+          <Box key={`${c.key}-r${i}`} flexDirection="row">
+            <Box width={rowLabel} flexShrink={0}>
+              <Text color={LABEL}>{l}</Text>
+            </Box>
+            <Box flexGrow={1} flexShrink={1}>
+              <Text color={toneColor(tone)} wrap="wrap">
+                {val}
+              </Text>
+            </Box>
+          </Box>
+        ))}
+        {/* The folded line already shows the bar unless the pane is narrow; here it sits in the value column. */}
+        {c.bar && !hasBars ? (
+          <Box key={`${c.key}-bar`} paddingLeft={rowLabel}>
+            {paneBar(els, c.bar, barCells, `${c.key}-barimg`)}
+          </Box>
+        ) : null}
+        {c.advice ? (
+          <Text key={`${c.key}-advice`} color={VALUE} wrap="wrap">
+            {c.advice}
+          </Text>
+        ) : null}
+        {c.explain.length ? press(`${caret(isHow)} How it is computed`, `how-${c.key}`, () => o.onHow(c.key)) : null}
+        {isHow
+          ? c.explain.map((b, i) => (
+              <Box key={`${c.key}-b${i}`} flexDirection="row" alignItems="flex-start" paddingLeft={2}>
+                <Text color={DIM}>{'• '}</Text>
+                <Box flexShrink={1}>
+                  <Text color={DIM} wrap="wrap">
+                    {b}
+                  </Text>
+                </Box>
+              </Box>
+            ))
+          : null}
+      </Box>
+    )
+  }
+  const folded = (c: PaneCard) => {
+    const isOpen = o.open.includes(c.key)
+    const isStacked = o.columns < PANE_STACK
+    const markColor = c.markTone === 'on' ? ON : c.markTone ? LEVEL[c.markTone] : DIM
+    const label = (
+      <Box key={`${c.key}-label`} width={isStacked ? undefined : labelWidth} flexShrink={0} flexDirection="row" columnGap={1}>
+        <Box flexShrink={0}>{press(`${caret(isOpen)} ${c.label}`, `card-${c.key}`, () => o.onToggle(c.key), c.labelColor ? { caret: caret(isOpen), text: c.label, color: c.labelColor } : undefined)}</Box>
+        {c.mark ? <Text color={markColor}>{c.mark}</Text> : null}
+      </Box>
+    )
+    // A line with no bar starts its values where the bars start. Two cells stay free at the right edge.
+    const barBox = hasBars && c.bar
+    const used = isStacked ? STACK_INDENT : labelWidth + (barBox ? barCells + BAR_GAP : 0)
+    const width = Math.max(8, groupColumns - used - 2)
+    // A line breaks only between its values: the lines are filled here, the separator stays inside a
+    // line, and a continuation stands under the first value. A value alone wider than the line wraps on its words.
+    const valuesBlock = (
+      <Box key={`${c.key}-values`} flexDirection="column" flexGrow={1} flexShrink={1}>
+        {valueLines(c.values, width).map((line, li) => (
+          <Box key={`${c.key}-l${li}`} flexDirection="row">
+            {line.map((val, i) => (
+              <Box key={`${c.key}-v${li}-${i}`} flexShrink={line.length === 1 ? 1 : 0}>
+                {i > 0 ? <Text color={RULE}>{NBSP_DOT}</Text> : null}
+                <Text color={val.color ?? toneColor(val.tone)} wrap="wrap">
+                  {val.text}
+                </Text>
+              </Box>
+            ))}
+          </Box>
+        ))}
+      </Box>
+    )
+    return (
+      <Box key={c.key} flexDirection="column">
+        {isStacked ? (
+          <Box flexDirection="column">
+            {label}
+            <Box paddingLeft={STACK_INDENT}>{valuesBlock}</Box>
+          </Box>
+        ) : (
+          <Box flexDirection="row">
+            {label}
+            {barBox && c.bar ? <Box width={barCells + BAR_GAP} flexShrink={0}>{paneBar(els, c.bar, barCells, `${c.key}-fold-bar`)}</Box> : null}
+            {valuesBlock}
+          </Box>
+        )}
+        {isOpen ? unfolded(c) : null}
+      </Box>
+    )
+  }
+  const groupBlocks = PANE_GROUPS.map(g => ({ g, cs: cards.filter(c => c.group === g.id) }))
+    .filter(x => x.cs.length)
+    .map(({ g, cs }) => (
+      <Box key={g.id} flexDirection="column" marginBottom={1}>
+        <Text bold color={LABEL}>
+          {g.title}
+        </Text>
+        {cs.map(folded)}
+      </Box>
+    ))
+  const isAllOpen = cards.every(c => o.open.includes(c.key))
+  const isAllHow = cards.every(c => o.how.includes(c.key) || c.explain.length === 0)
+  const buttons = (
+    <Box key="buttons" flexDirection="row" flexWrap="wrap" columnGap={2}>
+      {press(isAllOpen ? 'Fold all' : 'Unfold all', 'unfold-all', o.onUnfoldAll)}
+      {press(isAllOpen && isAllHow ? 'Hide the explanations' : 'How the numbers work', 'how-all', o.onHowAll)}
+    </Box>
+  )
+  const banner = o.scenario ? (
+    <Text key="scenario" color={toneColor('watch')} wrap="wrap">
+      Scenario: {o.scenario}
+    </Text>
+  ) : null
+  const body = isWide ? (
+    <Box flexDirection="row" columnGap={4}>
+      <Box flexDirection="column" width={Math.floor(o.columns * 0.4)} flexShrink={0}>
+        {verdictBlock}
+        {nextBlock}
+      </Box>
+      <Box flexDirection="column" flexGrow={1} flexShrink={1}>
+        {groupBlocks}
+        {buttons}
+      </Box>
+    </Box>
+  ) : (
+    <Box flexDirection="column">
+      {verdictBlock}
+      {nextBlock}
+      {groupBlocks}
+      {buttons}
+    </Box>
+  )
+  // The scenario line stands above whichever layout is drawn; without a scenario the body is the whole pane.
+  return banner ? (
+    <Box flexDirection="column">
+      {banner}
+      {body}
+    </Box>
+  ) : (
+    body
   )
 }
 

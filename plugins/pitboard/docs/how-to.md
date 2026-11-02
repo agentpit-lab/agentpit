@@ -55,7 +55,8 @@ them. PitBoard reads that file when it exists; it needs no setting for it.
   any level. If it does not, see [A model-scoped limit
   disappears](troubleshooting.md#a-model-scoped-limit-disappears).
 - When PaceLine's pace is on and the five-hour window would reach PaceLine's threshold before the
-  reset, the `5h limit` card shows a `Threshold` row with the threshold and the clock time, for
+  reset, and PaceLine's limit data is at most 30 minutes old, and the burn file is at most 3 minutes
+  old, the `5h limit` card shows a `Threshold` row with the threshold and the clock time, for
   example `95% at 19:40`, instead of `Runs out`, and the limit turns red. Without a fresh burn file,
   the card projects to 100% and shows `Runs out`.
 - With pace on, the Part block appears, and its card shows `Mode` (in the row, only in `limit` mode)
@@ -165,8 +166,8 @@ A second click on the same name closes it.
 
 ## Open every card with `/pitboard`
 
-**When you need it:** you want every reading with its explanation at once, a card cut short in a
-narrow terminal, or the readings in the Claude mobile app, which has no row.
+**When you need it:** you want a verdict and what happens next, every reading with its explanation,
+or the readings in the Claude mobile app, which has no row.
 
 1. Run:
 
@@ -178,12 +179,31 @@ narrow terminal, or the readings in the Claude mobile app, which has no row.
    PitBoard ]` in the footer under the prompt, between the mode and the model name. The mobile app
    has the command only.
 2. Read the pane, titled `PitBoard`, from the top:
-   - **Needs attention**, only while something needs a decision: each warning with its advice, the most
-     urgent first.
-   - Every card in the row's order, with all its rows and its explanations. The advisor's card follows
-     the context's while an advisor is set; the session card comes last.
-   - Under `5h limit`, `Week` and `Part`, a bar with the used share, the tick of the time gone and,
-     paler, where the current pace leads by the end of the period.
+   - **The verdict**, one bold sentence in the colour of the leading reading, the highest level among
+     the 5h, Part, week, model-limit, cache and context readings (the limits first among equals), with
+     its advice under it, for example `Hold subagents: the 5h window runs short.` While the week's
+     forecast is amber or red, a line under the advice gives it in its own colour. When nothing is past
+     calm, the verdict reads `Limits hold to their resets.` or, with no limit reading, `Nothing needs
+     you.`
+   - **Next**: what happens next, each event with its time and its consequence, in time order: the
+     cache cooling, the 5h window filling and resetting, the part's end, the week's reset and the
+     resets of the model-scoped limits once they are amber or red, and auto-compact. It holds the
+     events of the current 5h window, every amber or red event, and at most three calm ones. A pane
+     with nothing to list has no Next.
+   - Three groups, `Limits`, `This conversation` and `Session`, each reading folded into one line: its
+     label, a bar for a limit, and the values that matter. The advisor's card follows the context's
+     while an advisor is set; the cache's line carries the cache hit rates. The values wrap to the
+     pane's width, and below 44 columns they go under the label.
+   - A limit's bar shows the used share, the tick of the time gone and, where the current pace leads by
+     the end of the period, the forecast: paler on Desktop, dim grey cells in the terminal. Below 60
+     columns the bar moves into the unfolded card.
+   - Every card starts folded when the pane opens. Press a label to unfold the card: every row, its
+     advice and, one press further on `How it is computed`, its explanations; in a terminal, Tab moves
+     between the presses. `Unfold all` unfolds every card and then reads `Fold all`; `How the numbers
+     work` opens every card with every explanation and then reads `Hide the explanations`, which closes
+     the explanations and leaves the cards open. The cards stay as you leave them while the pane is
+     open and never unfold by themselves, not even when a reading turns red; closing the pane folds
+     them all.
 3. Click `PitBoard` again to close the pane, or use its close mark or Escape. If another pane is in
    front of it, the click brings it to the front first; in a terminal narrower than 110 columns that
    can take a second click.
